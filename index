@@ -1,0 +1,3985 @@
+<!DOCTYPE html>
+<html lang="es" data-tema="oscuro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <title>Estación de Refrigeración — Monitor térmico + Diagrama de Mollier (p-h)</title>
+
+  <!-- CDNs: Plotly para las dos gráficas (monitor temporal y Mollier) y html2pdf para el reporte -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script type="module">
+    /*
+     * Motor termodinámico principal: CoolProp 6.6.0 WebAssembly.
+     * Si no carga, la aplicación conserva las tablas locales de respaldo.
+     */
+    (async () => {
+      try {
+        const CoolPropModule = await import('https://unpkg.com/coolprop-wasm@6.6.0/coolprop.js');
+        window.CoolProp = await CoolPropModule.default();
+        window.dispatchEvent(new Event('coolprop-ready'));
+        console.info('CoolProp WASM listo:', window.CoolProp.get_global_param_string('version'));
+      } catch (e) {
+        console.warn('CoolProp WASM no disponible; se utilizará el respaldo local.', e);
+        window.dispatchEvent(new Event('coolprop-failed'));
+      }
+    })();
+  </script>
+
+  <style>
+    /* =====================================================================
+       PALETA. Todo el tema se controla desde estas variables, de modo que
+       el botón claro/oscuro no obliga a duplicar ninguna regla.
+       ===================================================================== */
+    :root,
+    html[data-tema="oscuro"] {
+      --bg:        #0f172a;
+      --panel:     #1e293b;
+      --panel2:    #0b1220;
+      --borde:     #334155;
+      --borde2:    #475569;
+      --texto:     #f8fafc;
+      --sutil:     #94a3b8;
+      --acento:    #38bdf8;
+      --acento-bg: #0284c7;
+      --ok:        #10b981;
+      --alerta:    #f59e0b;
+      --peligro:   #ef4444;
+      --sombra:    0 4px 6px -1px rgba(0,0,0,.30);
+      --grafico-bg:#1e293b;
+      --grafico-pl:#0f172a;
+      --grafico-gr:#334155;
+    }
+    html[data-tema="claro"] {
+      --bg:        #eef2f7;
+      --panel:     #ffffff;
+      --panel2:    #f8fafc;
+      --borde:     #cbd5e1;
+      --borde2:    #94a3b8;
+      --texto:     #0f172a;
+      --sutil:     #5b6b80;
+      --acento:    #0369a1;
+      --acento-bg: #0284c7;
+      --ok:        #047857;
+      --alerta:    #b45309;
+      --peligro:   #b91c1c;
+      --sombra:    0 2px 5px -1px rgba(15,23,42,.18);
+      --grafico-bg:#ffffff;
+      --grafico-pl:#f8fafc;
+      --grafico-gr:#cbd5e1;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--texto);
+      -webkit-text-size-adjust: 100%;
+    }
+    body { padding-bottom: 6px; }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 100vw;
+      min-height: 100dvh;
+      padding: 4px;
+      gap: 4px;
+    }
+
+    /* ------------------------------ Barra superior ---------------------- */
+    .top-info-bar {
+      background: var(--panel);
+      border: 1px solid var(--acento);
+      border-radius: 6px;
+      padding: 3px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: .70rem;
+      color: var(--acento);
+      font-weight: bold;
+    }
+    .date-time-box { color: var(--texto); font-size: .68rem; }
+    .barra-estado { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+    .badge {
+      font-size: .56rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--borde);
+      background: var(--panel2);
+      color: var(--sutil);
+      white-space: nowrap;
+    }
+    .badge-ok   { border-color: var(--ok);      color: var(--ok); }
+    .badge-warn { border-color: var(--alerta);  color: var(--alerta); }
+    .badge-off  { border-color: var(--peligro); color: var(--peligro); }
+    .badge-acento { border-color: var(--acento); color: var(--acento); }
+
+    /* ------------------------------ Tarjetas ---------------------------- */
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--borde);
+      border-radius: 6px;
+      padding: 5px 6px;
+      box-shadow: var(--sombra);
+      width: 100%;
+    }
+    .card > h2, .card > summary {
+      font-size: .72rem;
+      text-transform: uppercase;
+      color: var(--acento);
+      letter-spacing: .5px;
+      font-weight: 700;
+    }
+    .card > h2 {
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .h2-acciones { display: flex; align-items: center; gap: 5px; font-size: .58rem; text-transform: none; letter-spacing: 0; }
+    .sutil { color: var(--sutil); font-weight: 600; font-size: .58rem; }
+
+    details.card > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1px 0;
+    }
+    details.card > summary::-webkit-details-marker { display: none; }
+    details.card > summary::after { content: "▾"; color: var(--sutil); font-size: .7rem; }
+    details.card[open] > summary::after { content: "▴"; }
+    details.card > summary + * { margin-top: 5px; }
+
+    /* --------------------------- Formularios ---------------------------- */
+    .prof-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+      gap: 3px;
+    }
+    .input-group { display: flex; flex-direction: column; border-radius: 4px; }
+    .input-group label {
+      font-size: .52rem;
+      color: var(--acento);
+      font-weight: 700;
+      margin-bottom: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    input[type="number"], input[type="text"], select {
+      padding: 2px 4px;
+      border: 1px solid var(--borde2);
+      border-radius: 4px;
+      font-size: .70rem;
+      background: var(--bg);
+      color: var(--texto);
+      width: 100%;
+      height: 24px;
+      outline: none;
+      font-family: inherit;
+    }
+    select { cursor: pointer; border-color: var(--acento); font-weight: 600; }
+    select optgroup { background: var(--panel); color: var(--acento); font-weight: bold; }
+    select option { background: var(--bg); color: var(--texto); }
+    input:focus, select:focus { border-color: var(--acento); }
+
+    /* Fila de capacidad con selector de unidad */
+    .cap-input-row { display: flex; gap: 4px; align-items: center; }
+    .cap-input-row input { flex: 2; }
+    .cap-input-row select { flex: 1; }
+
+    /* Configuración del ciclo: refrigerante / aplicación / expansión / unidades */
+    .config-row { display: flex; gap: 4px; margin-bottom: 3px; width: 100%; }
+    .config-row .input-group-ref { flex: 2; min-width: 0; }
+    .config-row .input-group-app { flex: 1; min-width: 0; }
+    .config-row .input-group-exp { flex: 1.25; min-width: 0; }
+    .config-row .input-group-unit { flex: .8; min-width: 0; }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+      gap: 3px;
+    }
+
+    /* Marca de origen del dato (auto desde sonda / manual) */
+    .marca-origen {
+      font-size: .46rem;
+      font-weight: 800;
+      border-radius: 3px;
+      padding: 0 3px;
+      margin-left: 3px;
+      border: 1px solid var(--borde2);
+      color: var(--sutil);
+      background: var(--panel2);
+      cursor: pointer;
+    }
+    .marca-origen.auto { color: var(--ok); border-color: var(--ok); }
+    .etiqueta-campo { display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+
+    /* ------------------------------ Botones ----------------------------- */
+    .btn {
+      flex: 1;
+      padding: 3px 6px;
+      border: none;
+      border-radius: 4px;
+      font-size: .66rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 27px;
+      font-family: inherit;
+    }
+    .btn-toggle { background: var(--borde); color: var(--texto); }
+    .btn-toggle.active { background: var(--acento-bg); color: #fff; box-shadow: 0 0 6px rgba(2,132,199,.45); }
+    .btn-reporte { background: var(--ok); color: #fff; }
+    .btn-reporte:hover { filter: brightness(.92); }
+    .btn-accion { background: var(--acento-bg); color: #fff; }
+    .btn-mini {
+      border: 1px solid var(--borde2);
+      background: var(--panel2);
+      color: var(--texto);
+      border-radius: 4px;
+      font-size: .58rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      cursor: pointer;
+      min-height: 22px;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .btn-mini:hover { border-color: var(--acento); color: var(--acento); }
+
+    .action-bar { display: flex; gap: 4px; width: 100%; flex-wrap: wrap; }
+
+    /* --------------------------- Monitor en vivo ------------------------ */
+    .monitor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 4px;
+    }
+    .probe-card {
+      background: var(--panel2);
+      border: 1px solid var(--borde);
+      border-radius: 6px;
+      padding: 4px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      transition: border-color .2s ease, background .2s ease;
+    }
+    .probe-card.alarma {
+      border: 2px solid var(--peligro);
+      background: rgba(239,68,68,.12);
+      animation: parpadeo-alarma .8s infinite alternate;
+    }
+    @keyframes parpadeo-alarma {
+      0%   { box-shadow: 0 0 10px rgba(239,68,68,.75); }
+      100% { box-shadow: 0 0 2px rgba(239,68,68,.20); }
+    }
+    .probe-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; flex-wrap: wrap; }
+    .probe-nombre { font-size: .56rem; font-weight: 800; color: var(--acento); letter-spacing: .3px; }
+    .probe-alarma { font-size: .50rem; color: var(--sutil); font-weight: 700; display: flex; align-items: center; gap: 3px; }
+    .probe-alarma input { width: 52px; height: 19px; font-size: .62rem; padding: 1px 3px; }
+    .probe-valor { font-size: 1.30rem; font-weight: 800; line-height: 1.1; color: var(--texto); }
+    .probe-valor.pequeno { font-size: 1.05rem; }
+    .probe-minmax { font-size: .56rem; color: var(--sutil); }
+    .probe-minmax b { color: var(--texto); }
+    .probe-estado { font-size: .52rem; color: var(--sutil); min-height: 12px; }
+    .probe-estado.alarma { color: var(--peligro); font-weight: 800; }
+    .probe-map { font-size: .50rem; color: var(--sutil); font-weight: 700; display: flex; align-items: center; gap: 3px; }
+    .probe-map select { height: 20px; font-size: .56rem; }
+    .presion-row { display: flex; align-items: center; gap: 4px; }
+    .presion-row input { font-size: 1.05rem; font-weight: 800; height: 30px; }
+    .unidad-presion { font-size: .58rem; font-weight: 800; color: var(--acento); min-width: 26px; }
+
+    .ventana-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin: 5px 0 3px;
+    }
+    .btn-ventana {
+      border: 1px solid var(--borde2);
+      background: var(--panel2);
+      color: var(--texto);
+      border-radius: 4px;
+      font-size: .58rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-ventana.activo { background: var(--acento-bg); border-color: var(--acento-bg); color: #fff; }
+    .nav-ventana { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+
+    .chart-monitor { width: 100%; height: 240px; }
+
+    .banner-alerta {
+      border-radius: 5px;
+      padding: 4px 7px;
+      font-size: .58rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      border: 1px solid var(--alerta);
+      background: rgba(245,158,11,.12);
+      color: var(--alerta);
+    }
+    .banner-alerta.peligro { border-color: var(--peligro); background: rgba(239,68,68,.14); color: var(--peligro); }
+    .banner-alerta.info    { border-color: var(--acento);  background: rgba(56,189,248,.10); color: var(--acento); }
+    .oculto { display: none !important; }
+
+    /* --------------------------- KPIs y diagnóstico --------------------- */
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+      gap: 3px;
+      margin-bottom: 4px;
+    }
+    .kpi-box { background: var(--panel2); border-left: 3px solid var(--acento); padding: 2px 4px; border-radius: 4px; }
+    .kpi-box .label { font-size: .48rem; color: var(--sutil); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kpi-box .value { font-size: .70rem; font-weight: 700; color: var(--texto); }
+
+    .diag-container { background: var(--panel2); border: 1px solid var(--borde); border-radius: 6px; padding: 4px 6px; width: 100%; }
+    .diag-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--borde); border-radius: 5px; background: var(--panel2); }
+    .diag-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .57rem; line-height: 1.15; }
+    .diag-table th {
+      padding: 3px 4px; text-align: left; color: var(--acento); background: var(--panel);
+      border-bottom: 1px solid var(--borde); font-size: .52rem; text-transform: uppercase; letter-spacing: .25px;
+    }
+    .diag-table td { padding: 3px 4px; vertical-align: top; border-bottom: 1px solid var(--borde); color: var(--texto); overflow-wrap: anywhere; }
+    .diag-table tr:last-child td { border-bottom: none; }
+    .diag-table .diag-status { width: 30px; text-align: center; font-size: .70rem; }
+    .diag-table .diag-title { width: 31%; color: var(--texto); font-weight: 700; }
+    .diag-table .diag-text { width: auto; color: var(--sutil); }
+    .diag-table .diag-info td { background: rgba(56,189,248,.05); color: #93c5fd; }
+    .diag-table .diag-system td { color: var(--sutil); font-size: .48rem; }
+    .diag-table .diag-compression td { color: #c4b5fd; background: rgba(167,139,250,.05); }
+    .diag-table .diag-conflict td { background: rgba(245,158,11,.05); }
+    .diag-table .diag-monitor td { background: rgba(16,185,129,.05); color: var(--ok); }
+    .diag-table .diag-monitor-alarma td { background: rgba(239,68,68,.08); color: var(--peligro); }
+
+    /* Campos que el motor marca en condición crítica (T. descarga / T. líquido) */
+    .alarm-field-active {
+      animation: blink-field .8s infinite alternate !important;
+      border-radius: 6px;
+      padding: 2px 4px !important;
+    }
+    .alarm-field-active input { background: #7f1d1d !important; color: #fff !important; border-color: var(--peligro) !important; font-weight: bold; }
+    .alarm-field-active label { color: #fca5a5 !important; font-weight: bold; }
+    @keyframes blink-field {
+      0%   { background-color: rgba(239,68,68,.9);  box-shadow: 0 0 10px rgba(239,68,68,.8); }
+      100% { background-color: rgba(127,29,29,.3);  box-shadow: 0 0 2px rgba(239,68,68,.2); }
+    }
+
+    /* --------------------------- Prueba de hermeticidad ---------------- */
+    .ph-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 5px; }
+    .ph-medida { background: var(--panel2); border: 1px solid var(--borde); border-radius: 5px; padding: 3px 5px; }
+    .ph-medida .label { font-size: .48rem; color: var(--sutil); font-weight: 700; display: block; }
+    .ph-medida .valor { font-size: .74rem; font-weight: 800; color: var(--texto); }
+    .ph-barra { height: 8px; border-radius: 6px; overflow: hidden; display: flex; background: var(--panel2); border: 1px solid var(--borde); }
+    .ph-barra .evap { background: var(--acento); }
+    .ph-barra .cond { background: var(--alerta); }
+    .ph-msg { font-size: .52rem; font-weight: 700; color: var(--sutil); margin-top: 2px; }
+    .ph-msg.err { color: var(--peligro); }
+    .ph-msg.warn { color: var(--alerta); }
+    .deslizador { width: 100%; accent-color: var(--acento); }
+
+    /* --------------------------- Pantalla completa Mollier ------------ */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: var(--bg);
+      flex-direction: column;
+      padding: 4px;
+      gap: 4px;
+    }
+    .overlay.abierto { display: flex; }
+    body.con-overlay { overflow: hidden; }
+    .overlay-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: .70rem;
+      font-weight: 800;
+      color: var(--acento);
+      background: var(--panel);
+      border: 1px solid var(--borde);
+      border-radius: 6px;
+      padding: 3px 7px;
+    }
+    .overlay-acciones { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+    .mollier-full { flex: 1 1 auto; width: 100%; min-height: 60vh; }
+    #mollierPlot { touch-action: none; }
+
+    /* ------------------------------ Historial ------------------------- */
+    .tabla-historial { width: 100%; border-collapse: collapse; font-size: .55rem; }
+    .tabla-historial th, .tabla-historial td { border-bottom: 1px solid var(--borde); padding: 2px 4px; text-align: left; }
+    .tabla-historial th { color: var(--acento); font-size: .50rem; text-transform: uppercase; }
+    .scroll-x { width: 100%; overflow-x: auto; }
+
+    /* -------------------- Ajustes para el PDF (html2pdf) ------------- */
+    /* Bloques que solo aparecen en el PDF: las gráficas se sustituyen por
+       imágenes PNG antes de capturar, porque html2canvas no reproduce bien
+       los gráficos vectoriales de Plotly. */
+    .solo-pdf { display: none; }
+    body.generating-pdf .solo-pdf { display: block !important; }
+    body.generating-pdf #chartMonitor { display: none !important; }
+
+    body.generating-pdf { background: #fff !important; color: #000 !important; }
+    body.generating-pdf .card,
+    body.generating-pdf .probe-card,
+    body.generating-pdf .top-info-bar,
+    body.generating-pdf .diag-container,
+    body.generating-pdf .kpi-box,
+    body.generating-pdf .ph-medida,
+    body.generating-pdf .overlay-head {
+      background: #fff !important; border-color: #ccc !important; color: #000 !important;
+    }
+    body.generating-pdf input,
+    body.generating-pdf select { background: #fff !important; color: #000 !important; border-color: #999 !important; }
+    body.generating-pdf .action-bar,
+    body.generating-pdf .h2-acciones,
+    body.generating-pdf .ventana-bar,
+    body.generating-pdf .marca-origen { display: none !important; }
+    body.generating-pdf .overlay { display: none !important; }
+    body.generating-pdf .sutil, body.generating-pdf .probe-estado { color: #444 !important; }
+    body.generating-pdf .diag-table td, body.generating-pdf .diag-table th { color: #000 !important; }
+    body.generating-pdf .diag-table .diag-text span[style] { color: #000 !important; }
+
+    /* En tema claro los avisos del motor (que traen color en línea pensado
+       para fondo oscuro) se neutralizan para que sigan siendo legibles. */
+    html[data-tema="claro"] .diag-table .diag-text span[style] { color: #334155 !important; }
+  </style>
+</head>
+<body>
+  <div class="app-container" id="reporteArea">
+
+    <!-- ============================ BARRA SUPERIOR ============================ -->
+    <div class="top-info-bar">
+      <div class="date-time-box">
+        📅 <span id="txtFechaHora">Cargando fecha y hora...</span>
+      </div>
+      <div class="barra-estado">
+        <span id="estadoDispositivo" class="badge badge-off" title="Estado del ESP32 según la antigüedad de la última lectura">ESP32: verificando…</span>
+        <span class="badge" id="badgeBateria" title="Batería del ESP32">🔋 --%</span>
+        <span class="sutil" id="wifiValor" title="Red del ESP32">Wifi: "—"</span>
+        <span>📍 Punto Fijo: <span id="txtTempAmb">Cargando...</span></span>
+        <button class="btn-mini" id="btnTema" onclick="alternarTema()" title="Alternar tema claro / oscuro">🌙 Claro</button>
+        <button class="btn-mini" onclick="abrirMollier()" title="Abrir el diagrama de Mollier en pantalla completa">⛶ p-h</button>
+      </div>
+    </div>
+
+    <!-- Avisos del sistema (batería baja, datos congelados, API caída) -->
+    <div id="bannerSistema" class="banner-alerta oculto"></div>
+
+    <!-- ======================= IDENTIFICACIÓN (colapsable) ==================== -->
+    <details class="card" id="cardIdentificacion">
+      <summary>Identificación del equipo y del técnico</summary>
+      <div class="prof-grid">
+        <div class="input-group">
+          <label for="empresaNombre">Empresa</label>
+          <input type="text" id="empresaNombre" value="Servicios Técnicos" oninput="guardarYActualizar()">
+        </div>
+        <div class="input-group">
+          <label for="empresaRif">RIF / ID Fiscal</label>
+          <input type="text" id="empresaRif" value="J-00000000-0" oninput="guardarYActualizar()">
+        </div>
+        <div class="input-group">
+          <label for="tecnicoNombre">Técnico Evaluante</label>
+          <input type="text" id="tecnicoNombre" value="Téc. Especialista" oninput="guardarYActualizar()">
+        </div>
+        <div class="input-group">
+          <label for="equipoMarca">Marca del Equipo</label>
+          <input type="text" id="equipoMarca" value="Daikin" oninput="guardarYActualizar()">
+        </div>
+        <div class="input-group">
+          <label for="equipoModelo">Modelo</label>
+          <input type="text" id="equipoModelo" value="XL10-2026" oninput="guardarYActualizar()">
+        </div>
+        <div class="input-group">
+          <label for="capFrigValue">Cap. Frigorífica</label>
+          <div class="cap-input-row">
+            <input type="number" id="capFrigValue" value="36000" step="1" oninput="guardarYActualizar()">
+            <select id="capUnitSelect" onchange="guardarYActualizar()">
+              <option value="BTU/h" selected>BTU/h</option>
+              <option value="kW">kW</option>
+              <option value="Ton">Ton</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ========================== MONITOR EN VIVO ============================ -->
+    <section class="card" id="cardMonitor">
+      <h2>
+        <span>Monitor térmico en vivo</span>
+        <span class="h2-acciones">
+          <span class="sutil" id="txtUltimaLectura">Última lectura: —</span>
+          <button class="btn-mini" onclick="exportarCSV()" title="Descargar el histórico de sondas en CSV">⬇ CSV</button>
+        </span>
+      </h2>
+
+      <div class="monitor-grid">
+        <!-- Sonda 1 -->
+        <div class="probe-card" id="cardS1">
+          <div class="probe-head">
+            <span class="probe-nombre">SONDA 1</span>
+            <label class="probe-alarma" for="alarmaS1">Alarma ≥
+              <input type="number" id="alarmaS1" step="0.5" value="8" oninput="guardarAlarmasMonitor()"> °C
+            </label>
+          </div>
+          <div class="probe-valor" id="valS1">--.- °C</div>
+          <div class="probe-minmax">Mín: <b id="minS1">--.-</b> · Máx: <b id="maxS1">--.-</b></div>
+          <div class="probe-estado" id="estadoS1">Esperando…</div>
+          <label class="probe-map" for="mapS1">Enviar a
+            <select id="mapS1" onchange="cambiarMapeoSondas()">
+              <option value="">— sin uso —</option>
+              <option value="tEvapOut" selected>T. Salida Evap</option>
+              <option value="tSuct">T. Temp Succión</option>
+              <option value="tLiq">T. Tubería Líquido</option>
+              <option value="tDescReal">T. Descarga</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- Sonda 2 -->
+        <div class="probe-card" id="cardS2">
+          <div class="probe-head">
+            <span class="probe-nombre">SONDA 2</span>
+            <label class="probe-alarma" for="alarmaS2">Alarma ≥
+              <input type="number" id="alarmaS2" step="0.5" value="8" oninput="guardarAlarmasMonitor()"> °C
+            </label>
+          </div>
+          <div class="probe-valor" id="valS2">--.- °C</div>
+          <div class="probe-minmax">Mín: <b id="minS2">--.-</b> · Máx: <b id="maxS2">--.-</b></div>
+          <div class="probe-estado" id="estadoS2">Esperando…</div>
+          <label class="probe-map" for="mapS2">Enviar a
+            <select id="mapS2" onchange="cambiarMapeoSondas()">
+              <option value="">— sin uso —</option>
+              <option value="tEvapOut">T. Salida Evap</option>
+              <option value="tSuct" selected>T. Temp Succión</option>
+              <option value="tLiq">T. Tubería Líquido</option>
+              <option value="tDescReal">T. Descarga</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- Diferencial de temperatura -->
+        <div class="probe-card" id="cardDT">
+          <div class="probe-head">
+            <span class="probe-nombre">ΔT (S1 − S2)</span>
+            <label class="probe-alarma" for="alarmaDT">Alarma ≤
+              <input type="number" id="alarmaDT" step="0.5" value="2" oninput="guardarAlarmasMonitor()"> °C
+            </label>
+          </div>
+          <div class="probe-valor" id="valDT">--.- °C</div>
+          <div class="probe-minmax">Mín: <b id="minDT">--.-</b> · Máx: <b id="maxDT">--.-</b></div>
+          <div class="probe-estado" id="estadoDT">Esperando datos…</div>
+        </div>
+
+        <!-- Presión de succión (entrada del motor Mollier, alimentada por API o manual) -->
+        <div class="probe-card" id="grpPSuct">
+          <div class="probe-head">
+            <label class="probe-nombre" for="pSuct" id="lblPSuct">P. Succión (PSI)</label>
+            <span class="badge" id="origenPSuct">manual</span>
+          </div>
+          <div class="presion-row">
+            <input type="number" id="pSuct" value="25" step="1" oninput="marcarPresionManual('pSuct')">
+            <span class="unidad-presion" id="unidadPSuct">PSI</span>
+          </div>
+          <div class="probe-estado" id="tsatPSuct">Tsat: —</div>
+        </div>
+
+        <!-- Presión de descarga -->
+        <div class="probe-card" id="grpPDesc">
+          <div class="probe-head">
+            <label class="probe-nombre" for="pDesc" id="lblPDesc">P. Descarga (PSI)</label>
+            <span class="badge" id="origenPDesc">manual</span>
+          </div>
+          <div class="presion-row">
+            <input type="number" id="pDesc" value="290" step="1" oninput="marcarPresionManual('pDesc')">
+            <span class="unidad-presion" id="unidadPDesc">PSI</span>
+          </div>
+          <div class="probe-estado" id="tsatPDesc">Tsat: —</div>
+        </div>
+      </div>
+
+      <!-- Ventana temporal y navegación del histórico -->
+      <div class="ventana-bar">
+        <span class="sutil">Ventana:</span>
+        <button class="btn-ventana activo" data-horas="2" onclick="cambiarVentanaHoras(2)">2 h</button>
+        <button class="btn-ventana" data-horas="4" onclick="cambiarVentanaHoras(4)">4 h</button>
+        <button class="btn-ventana" data-horas="8" onclick="cambiarVentanaHoras(8)">8 h</button>
+        <button class="btn-ventana" data-horas="12" onclick="cambiarVentanaHoras(12)">12 h</button>
+        <button class="btn-ventana" data-horas="24" onclick="cambiarVentanaHoras(24)">24 h</button>
+        <label class="sutil" for="tipoSensorP" style="margin-left:6px;">Presión del sensor:
+          <select id="tipoSensorP" onchange="cambiarTipoSensorPresion()" style="width:auto;display:inline-block;height:20px;font-size:.56rem;">
+            <option value="manometrica" selected>manométrica</option>
+            <option value="absoluta">absoluta</option>
+          </select>
+        </label>
+        <span class="nav-ventana">
+          <button class="btn-mini" onclick="desplazarVentana(-1)" title="Ventana anterior">‹</button>
+          <span class="sutil" id="txtVentana">Calculando…</span>
+          <button class="btn-mini" onclick="desplazarVentana(1)" title="Ventana siguiente">›</button>
+          <button class="btn-mini" onclick="volverEnVivo()">Actual</button>
+        </span>
+      </div>
+
+      <div id="chartMonitor" class="chart-monitor"></div>
+      <div class="sutil" id="notaVentana" style="margin-top:2px;"></div>
+      <div class="solo-pdf" style="margin-top:5px;">
+        <div class="sutil" style="margin-bottom:2px;">Histórico de sondas de la ventana visible</div>
+        <div id="printMonitor"></div>
+      </div>
+    </section>
+
+    <!-- ===================== INDICADORES Y DIAGNÓSTICO ======================= -->
+    <section class="card" id="cardIndicadores">
+      <h2>
+        <span>Indicadores y diagnóstico</span>
+        <span class="sutil" id="txtFuenteTermo">Motor: —</span>
+      </h2>
+
+      <div class="results-grid">
+        <div class="kpi-box" style="border-left-color:#38bdf8;">
+          <span class="label">SH Útil (Evap)</span>
+          <span class="value" id="kpiSHUtil">0.0 K</span>
+        </div>
+        <div class="kpi-box" style="border-left-color:#0284c7;">
+          <span class="label">SH Total (Succ)</span>
+          <span class="value" id="kpiSHTotal">0.0 K</span>
+        </div>
+        <div class="kpi-box" style="border-left-color:#10b981;">
+          <span class="label">Subenfriam. (SC)</span>
+          <span class="value" id="kpiSC">0.0 K</span>
+        </div>
+        <div class="kpi-box" style="border-left-color:#f59e0b;">
+          <span class="label">Potencia Elec.</span>
+          <span class="value" id="kpiKW">0.00 kW</span>
+        </div>
+        <div class="kpi-box" style="border-left-color:#a855f7;">
+          <span class="label">Cap. Frig. (qn)</span>
+          <span class="value" id="kpiqn">0 kJ/kg</span>
+        </div>
+        <div class="kpi-box" style="border-left-color:#ef4444;">
+          <span class="label">Trabajo Comp (w)</span>
+          <span class="value" id="kpiw">0 kJ/kg</span>
+        </div>
+        <div class="kpi-box" style="border-left-color:#ec4899;">
+          <span class="label">COP Estimado</span>
+          <span class="value" id="kpicop">0.0</span>
+        </div>
+        <div class="kpi-box" style="border-left-color:#64748b;">
+          <span class="label">ΔT Cond - Amb</span>
+          <span class="value" id="kpiDeltaAmb">0.0 K</span>
+        </div>
+      </div>
+
+      <div class="diag-container" id="panelAlertas"></div>
+
+      <div id="confiabilidadDiagnostico" style="margin-top:4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.56rem;color:var(--sutil);">
+          <span>Confiabilidad del análisis</span>
+          <b id="txtConfiabilidad" style="color:var(--texto);">0%</b>
+        </div>
+        <div style="height:5px;background:var(--borde);border-radius:5px;overflow:hidden;margin-top:2px;">
+          <div id="barraConfiabilidad" style="height:100%;width:0%;background:#64748b;border-radius:5px;transition:width .25s ease,background .25s ease;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== DATOS DE CAMPO ============================== -->
+    <details class="card" id="cardDatosCampo" open>
+      <summary>Datos de campo del ciclo</summary>
+
+      <div class="config-row">
+        <div class="input-group input-group-ref">
+          <label for="refSelect">Refrigerante</label>
+          <select id="refSelect" onchange="guardarYActualizar()">
+            <optgroup label="Puros y Tradicionales">
+              <option value="R134a">R-134a</option>
+              <option value="R22">R-22</option>
+              <option value="R410A">R-410A</option>
+              <option value="R32">R-32</option>
+              <option value="R717">R-717 (Amoníaco)</option>
+              <option value="R744">R-744 (CO₂)</option>
+            </optgroup>
+            <optgroup label="Hidrocarburos (HC)">
+              <option value="R290">R-290 (Propano)</option>
+              <option value="R600a">R-600a (Isobutano)</option>
+            </optgroup>
+            <optgroup label="Mezclas HFC / HFO de uso frecuente">
+              <option value="R404A" selected>R-404A</option>
+              <option value="R507A">R-507A</option>
+              <option value="R407C">R-407C</option>
+              <option value="R407F">R-407F</option>
+              <option value="R448A">R-448A</option>
+              <option value="R449A">R-449A</option>
+              <option value="R513A">R-513A</option>
+            </optgroup>
+            <optgroup label="Alternativas / reemplazos de R-22">
+              <option value="R422D">R-422D (reemplazo R-22)</option>
+              <option value="R427A">R-427A (reemplazo R-22)</option>
+              <option value="R438A">R-438A (reemplazo R-22)</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="input-group input-group-app">
+          <label for="modoEvapSelect">Aplicación Evap.</label>
+          <select id="modoEvapSelect" onchange="cambiarModoEvaporacion()">
+            <option value="LBP">LBP — Baja</option>
+            <option value="MBP" selected>MBP — Media</option>
+            <option value="HBP">HBP — Alta</option>
+            <option value="CBP">CBP — Comercial</option>
+          </select>
+        </div>
+
+        <div class="input-group input-group-exp">
+          <label for="expansionSelect">Expansión</label>
+          <select id="expansionSelect" onchange="cambiarExpansion()">
+            <optgroup label="Dispositivos de orificio fijo">
+              <option value="CAPILAR">Capilar</option>
+              <option value="ORIFICIO">Orificio fijo</option>
+              <option value="PISTON">Pistón calibrado</option>
+              <option value="SHORT_TUBE">Short-Tube / Restrictor</option>
+            </optgroup>
+            <optgroup label="Válvulas de expansión">
+              <option value="TXV" selected>VET / TXV</option>
+              <option value="AEV">Válvula automática (AEV)</option>
+              <option value="MANUAL">Válvula manual</option>
+              <option value="EEV">Válvula electrónica (EEV)</option>
+            </optgroup>
+            <optgroup label="Control por nivel">
+              <option value="FLOAT_H">Flotador alta presión</option>
+              <option value="FLOAT_L">Flotador baja presión</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="input-group input-group-unit">
+          <label for="pUnitSelect">U. Presión</label>
+          <select id="pUnitSelect" onchange="cambiarUnidades()">
+            <option value="psi" selected>PSI</option>
+            <option value="bar">Bar</option>
+            <option value="kpa">kPa</option>
+          </select>
+        </div>
+
+        <div class="input-group input-group-unit">
+          <label for="tUnitSelect">U. Temp</label>
+          <select id="tUnitSelect" onchange="cambiarUnidades()">
+            <option value="C" selected>°C</option>
+            <option value="F">°F</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="controls-grid">
+        <div class="input-group" id="grpTEvapOut">
+          <div class="etiqueta-campo">
+            <label for="tEvapOut" id="lblTEvapOut">T. Salida Evap</label>
+            <span class="marca-origen" id="autoTEvapOut" onclick="alternarAuto('tEvapOut')" title="Alternar entre sonda en vivo y edición manual">M</span>
+          </div>
+          <input type="number" id="tEvapOut" value="-12" step="0.5" oninput="marcarTemperaturaManual('tEvapOut')">
+        </div>
+
+        <div class="input-group" id="grpTSuct">
+          <div class="etiqueta-campo">
+            <label for="tSuct" id="lblTSuct">T. Temp Succión</label>
+            <span class="marca-origen" id="autoTSuct" onclick="alternarAuto('tSuct')" title="Alternar entre sonda en vivo y edición manual">M</span>
+          </div>
+          <input type="number" id="tSuct" value="-10" step="0.5" oninput="marcarTemperaturaManual('tSuct')">
+        </div>
+
+        <div class="input-group" id="grpTLiq">
+          <div class="etiqueta-campo">
+            <label for="tLiq" id="lblTLiq">T. Tubería Liq</label>
+            <span class="marca-origen" id="autoTLiq" onclick="alternarAuto('tLiq')" title="Alternar entre sonda en vivo y edición manual">M</span>
+          </div>
+          <input type="number" id="tLiq" value="45" step="0.5" oninput="marcarTemperaturaManual('tLiq')">
+        </div>
+
+        <div class="input-group" id="grpTDescReal">
+          <div class="etiqueta-campo">
+            <label for="tDescReal" id="lblTDescReal">T. Descarga</label>
+            <span class="marca-origen" id="autoTDescReal" onclick="alternarAuto('tDescReal')" title="Alternar entre sonda en vivo y edición manual">M</span>
+          </div>
+          <input type="number" id="tDescReal" value="90" step="1" oninput="marcarTemperaturaManual('tDescReal')">
+        </div>
+
+        <div class="input-group">
+          <label for="vVolt">Voltaje (V)</label>
+          <input type="number" id="vVolt" value="220" step="1" oninput="guardarYActualizar()">
+        </div>
+
+        <div class="input-group">
+          <label for="iAmp">Amperaje (A)</label>
+          <input type="number" id="iAmp" value="22" step="0.1" oninput="guardarYActualizar()">
+        </div>
+      </div>
+      <div class="sutil" style="margin-top:3px;">
+        Las temperaturas marcadas <b>A</b> se rellenan solas desde las sondas; al escribir a mano pasan a <b>M</b> y puede volver a <b>A</b> tocando la marca.
+      </div>
+    </details>
+
+    <!-- ====================== PRUEBA DE HERMETICIDAD ======================== -->
+    <details class="card" id="cardHermeticidad" open>
+      <summary>Prueba de hermeticidad (presión compensada por temperatura)</summary>
+
+      <div class="ph-grid">
+        <div class="ph-medida">
+          <span class="label">Gas de prueba</span>
+          <select id="phGas" onchange="guardarPH()">
+            <option value="Nitrogen" selected>Nitrógeno (N₂)</option>
+            <option value="Air">Aire</option>
+            <option value="R134a">Vapor R-134a</option>
+            <option value="R22">Vapor R-22</option>
+            <option value="R410A">Vapor R-410A</option>
+            <option value="R404A">Vapor R-404A</option>
+          </select>
+        </div>
+        <div class="ph-medida">
+          <span class="label">Presión medida (PSI man.)</span>
+          <div class="presion-row">
+            <input type="number" id="phPresionInicial" step="1" value="0">
+            <button class="btn-mini" onclick="aceptarMedidaPH()" title="Fija la referencia o registra una nueva medición">Aceptar</button>
+          </div>
+        </div>
+        <div class="ph-medida">
+          <span class="label">Referencia fijada</span>
+          <span class="valor" id="phPref">---.- PSI</span>
+          <span class="sutil" id="phTref">T ref: --.- °C</span>
+        </div>
+        <div class="ph-medida">
+          <span class="label">Presión esperada ahora</span>
+          <span class="valor" id="phPcalc">---.- PSI</span>
+          <span class="sutil" id="phPcalcT">T efectiva: --.- °C</span>
+        </div>
+        <div class="ph-medida">
+          <span class="label">Última medida aceptada</span>
+          <span class="valor" id="phPlast">---.- PSI</span>
+          <span class="sutil" id="phModeloCalc">modelo: —</span>
+        </div>
+        <div class="ph-medida">
+          <span class="label">Δ real (medida − esperada)</span>
+          <span class="valor" id="phDiff">--.- PSI</span>
+          <span class="sutil" id="phVeredicto">—</span>
+        </div>
+        <div class="ph-medida">
+          <span class="label">Tiempo transcurrido</span>
+          <span class="valor" id="phTiempo">--</span>
+          <span class="sutil" id="phMediciones">0 mediciones</span>
+        </div>
+      </div>
+
+      <div style="margin-top:6px;">
+        <div class="sutil">Balance de temperatura Evap/Cond — peso de cada sonda en la temperatura efectiva del gas</div>
+        <input type="range" id="phPeso1" class="deslizador" min="0" max="100" value="60" oninput="cambiarPesoPH(this.value)">
+        <div class="ph-barra">
+          <div class="evap" id="phBarraEvap" style="width:60%"></div>
+          <div class="cond" id="phBarraCond" style="width:40%"></div>
+        </div>
+        <div class="sutil">Evap <b id="phPeso1val">60 %</b> · Cond <b id="phPeso2val">40 %</b> · modelo <b id="phModelo">60/40</b></div>
+      </div>
+
+      <div class="ph-msg" id="phMsg">Sin referencia: la primera medición que acepte fija la referencia de la prueba.</div>
+
+      <div class="action-bar" style="margin-top:5px;">
+        <button class="btn btn-mini" onclick="usarPresionEnVivoPH()" title="Copia la última presión de succión leída del API al casillero de la prueba">↧ Usar presión en vivo</button>
+        <button class="btn btn-mini" onclick="reiniciarPH()">🗑 Nueva prueba (borrar referencia)</button>
+      </div>
+    </details>
+
+    <!-- ============================ ACCIONES ================================ -->
+    <div class="solo-pdf card" style="margin-top:5px;">
+      <h2>Diagrama de Mollier (p-h) del ciclo operativo</h2>
+      <div id="pdfMollier"></div>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-accion" onclick="abrirMollier()">📈 Diagrama de Mollier (pantalla completa)</button>
+      <button class="btn btn-toggle" onclick="exportarCSV()">⬇ Histórico CSV</button>
+      <button class="btn btn-reporte" onclick="descargarPDFReporte()">📄 Reporte PDF</button>
+    </div>
+  </div>
+
+  <!-- ================= DIAGRAMA DE MOLLIER EN PANTALLA COMPLETA ============= -->
+  <div class="overlay" id="overlayMollier">
+    <div class="overlay-head">
+      <span>Diagrama de Mollier (p-h) — pantalla completa</span>
+      <span class="overlay-acciones">
+        <button class="btn-mini" id="btnCompresionIdeal" onclick="toggleCompresionIdeal()">⚙ Compresión ideal: OFF</button>
+        <button class="btn-mini" id="btnZonaActiva" onclick="toggleZonaActiva()">🔍 Zoom Zona Activa: OFF</button>
+        <button class="btn-mini" onclick="pantallaCompletaNativa()">⛶ Pantalla completa</button>
+        <button class="btn-mini" onclick="cerrarMollier()">✕ Cerrar</button>
+      </span>
+    </div>
+    <div id="mollierPlot" class="mollier-full"></div>
+    <div class="sutil" style="text-align:center;">Un dedo desplaza · dos dedos hacen zoom · rueda del mouse acerca</div>
+  </div>
+
+  <script>
+    let zonaActivaHabilitada = false;
+    let compresionIdealVisible = false;
+    let modoEvapActual = 'MBP';
+    let expansionActual = 'TXV';
+    let pUnitActual = 'psi';
+    let tUnitActual = 'C';
+    let tempAmbientePuntoFijoC = 30.0;
+
+    const P_ATM_BAR = 1.01325;
+    const P_ATM_PSI = 14.696;
+    const P_ATM_KPA = 101.325;
+
+    const pUnits = {
+      bar: { factor: 1.0, label: 'Bar', atm: P_ATM_BAR },
+      psi: { factor: 14.5038, label: 'PSI', atm: P_ATM_PSI },
+      kpa: { factor: 100.0, label: 'kPa', atm: P_ATM_KPA }
+    };
+
+    // Clasificación de aplicación por temperatura de evaporación.
+    // Son envolventes de referencia: el rango exacto depende del compresor/modelo.
+    // LBP/MBP/HBP: referencias de fabricantes; CBP es especialmente dependiente del modelo.
+    const MODOS_EVAP = {
+      LBP: {label:'LBP — Low Back Pressure', tMin:-35, tMax:-10, color:'#38bdf8', desc:'Baja temperatura de evaporación; congeladores, vitrinas y conservación.'},
+      MBP: {label:'MBP — Medium Back Pressure', tMin:-20, tMax:0, color:'#22c55e', desc:'Temperatura media; refrigeración de alimentos y bebidas.'},
+      HBP: {label:'HBP — High Back Pressure', tMin:-5, tMax:15, color:'#f59e0b', desc:'Temperatura alta; enfriadores, deshumidificación y aplicaciones similares.'},
+      CBP: {label:'CBP — Commercial Back Pressure', tMin:-18, tMax:10, color:'#a78bfa', desc:'Aplicación comercial; rango orientativo, verificar ficha del compresor.'}
+    };
+
+    const refrigerantes = {
+      R134a: {
+        nombre: "R-134a", criticalP: 40.59, xRange: [150, 480],
+        cpL: 1.42, cpV: 0.95, glide: 0.0, tDescMax: 100, shOptimo: [5, 9], scOptimo: [3, 7], rPMax: 8.0, esZeotropico: false,
+        dome: [
+          {p: 0.5, hL: 140.0, hV: 383.0, tSat: -40}, {p: 1.0, hL: 161.0, hV: 389.5, tSat: -26.4},
+          {p: 2.0, hL: 186.5, hV: 397.0, tSat: -10.1}, {p: 4.0, hL: 213.0, hV: 404.5, tSat: 8.9},
+          {p: 8.0, hL: 244.0, hV: 412.0, tSat: 31.3},  {p: 15.0, hL: 278.0, hV: 415.5, tSat: 55.2},
+          {p: 25.0, hL: 318.0, hV: 410.0, tSat: 77.6}, {p: 40.59, hL: 380.0, hV: 380.0, tSat: 101.1}
+        ]
+      },
+      R22: {
+        nombre: "R-22", criticalP: 49.9, xRange: [140, 470],
+        cpL: 1.28, cpV: 0.76, glide: 0.0, tDescMax: 115, shOptimo: [5, 10], scOptimo: [3, 6], rPMax: 7.5, esZeotropico: false,
+        dome: [
+          {p: 1.0, hL: 158.0, hV: 397.0, tSat: -40.8}, {p: 2.5, hL: 185.0, hV: 403.5, tSat: -20.5},
+          {p: 5.0, hL: 210.0, hV: 409.0, tSat: -2.3},  {p: 10.0, hL: 238.0, hV: 414.0, tSat: 23.3},
+          {p: 20.0, hL: 275.0, hV: 415.0, tSat: 52.2}, {p: 35.0, hL: 320.0, hV: 405.0, tSat: 78.4},
+          {p: 49.9, hL: 392.0, hV: 392.0, tSat: 96.2}
+        ]
+      },
+      R404A: {
+        nombre: "R-404A", criticalP: 36.8, xRange: [100, 410],
+        cpL: 1.54, cpV: 0.88, glide: 0.8, tDescMax: 90, shOptimo: [4, 8], scOptimo: [4, 8], rPMax: 9.0, esZeotropico: true,
+        dome: [
+          {p: 1.0, hL: 128.0, hV: 358.0, tSat: -45.5}, {p: 2.5, hL: 155.0, hV: 365.0, tSat: -26.0},
+          {p: 6.0, hL: 190.0, hV: 373.0, tSat: 1.0},   {p: 12.0, hL: 222.0, hV: 376.0, tSat: 24.3},
+          {p: 22.0, hL: 262.0, hV: 368.0, tSat: 49.7}, {p: 36.8, hL: 325.0, hV: 325.0, tSat: 72.1}
+        ]
+      },
+      R410A: {
+        nombre: "R-410A", criticalP: 49.0, xRange: [120, 460],
+        cpL: 1.68, cpV: 1.12, glide: 0.2, tDescMax: 105, shOptimo: [4, 8], scOptimo: [4, 8], rPMax: 6.0, esZeotropico: true,
+        dome: [
+          {p: 1.5, hL: 135.0, hV: 415.0, tSat: -42.0}, {p: 4.0, hL: 175.0, hV: 422.0, tSat: -22.5},
+          {p: 10.0, hL: 222.0, hV: 426.0, tSat: 4.2},  {p: 20.0, hL: 268.0, hV: 422.0, tSat: 32.1},
+          {p: 35.0, hL: 320.0, hV: 405.0, tSat: 57.8}, {p: 49.0, hL: 395.0, hV: 395.0, tSat: 72.1}
+        ]
+      },
+      R32: {
+        nombre: "R-32", criticalP: 57.8, xRange: [140, 560],
+        cpL: 1.90, cpV: 1.25, glide: 0.0, tDescMax: 110, shOptimo: [4, 8], scOptimo: [3, 7], rPMax: 6.5, esZeotropico: false,
+        dome: [
+          {p: 1.5, hL: 145.0, hV: 502.0, tSat: -43.0}, {p: 5.0, hL: 202.0, hV: 515.0, tSat: -16.0},
+          {p: 12.0, hL: 255.0, hV: 522.0, tSat: 11.5}, {p: 25.0, hL: 315.0, hV: 518.0, tSat: 41.2},
+          {p: 45.0, hL: 398.0, hV: 492.0, tSat: 66.8}, {p: 57.8, hL: 470.0, hV: 470.0, tSat: 78.1}
+        ]
+      },
+      R290: {
+        nombre: "R-290", criticalP: 42.5, xRange: [160, 620],
+        cpL: 2.45, cpV: 1.68, glide: 0.0, tDescMax: 85, shOptimo: [3, 7], scOptimo: [2, 5], rPMax: 8.0, esZeotropico: false,
+        dome: [
+          {p: 1.0, hL: 190.0, hV: 558.0, tSat: -42.1}, {p: 3.0, hL: 242.0, hV: 572.0, tSat: -21.3},
+          {p: 7.0, hL: 298.0, hV: 585.0, tSat: 12.8},  {p: 15.0, hL: 362.0, hV: 588.0, tSat: 42.1},
+          {p: 30.0, hL: 450.0, hV: 565.0, tSat: 76.5}, {p: 42.5, hL: 560.0, hV: 560.0, tSat: 96.7}
+        ]
+      },
+      R600a: {
+        nombre: "R-600a", criticalP: 36.5, xRange: [180, 610],
+        cpL: 2.38, cpV: 1.52, glide: 0.0, tDescMax: 85, shOptimo: [3, 7], scOptimo: [2, 5], rPMax: 8.5, esZeotropico: false,
+        dome: [
+          {p: 0.8, hL: 195.0, hV: 540.0, tSat: -19.5}, {p: 2.0, hL: 240.0, hV: 558.0, tSat: 8.2},
+          {p: 5.0, hL: 295.0, hV: 575.0, tSat: 38.0},  {p: 12.0, hL: 368.0, hV: 580.0, tSat: 71.3},
+          {p: 25.0, hL: 460.0, hV: 552.0, tSat: 110.1},{p: 36.5, hL: 540.0, hV: 540.0, tSat: 134.7}
+        ]
+      },
+      R507A: {
+        nombre: "R-507A", criticalP: 37.1, xRange: [100, 410],
+        cpL: 1.52, cpV: 0.89, glide: 0.0, tDescMax: 90, shOptimo: [4, 8], scOptimo: [4, 8], rPMax: 9.0, esZeotropico: false,
+        dome: [
+          {p: 1.0, hL: 125.0, hV: 355.0, tSat: -46.1}, {p: 3.0, hL: 160.0, hV: 364.0, tSat: -20.2},
+          {p: 7.0, hL: 192.0, hV: 370.0, tSat: 4.8},   {p: 15.0, hL: 232.0, hV: 366.0, tSat: 31.2},
+          {p: 26.0, hL: 275.0, hV: 352.0, tSat: 55.4}, {p: 37.1, hL: 320.0, hV: 320.0, tSat: 70.6}
+        ]
+      },
+      R407C: {
+        nombre: "R-407C", criticalP: 46.3, xRange: [130, 470],
+        cpL: 1.50, cpV: 0.92, glide: 4.8, tDescMax: 105, shOptimo: [5, 9], scOptimo: [3, 7], rPMax: 8.0, esZeotropico: true,
+        dome: [
+          {p: 1.0, hL: 142.0, hV: 405.0, tSat: -41.2}, {p: 3.0, hL: 178.0, hV: 413.0, tSat: -18.1},
+          {p: 7.0, hL: 212.0, hV: 418.0, tSat: 8.5},   {p: 15.0, hL: 252.0, hV: 417.0, tSat: 38.2},
+          {p: 30.0, hL: 310.0, hV: 402.0, tSat: 67.4}, {p: 46.3, hL: 410.0, hV: 410.0, tSat: 86.0}
+        ]
+      },
+      R717: {
+        nombre: "R-717 (Amoníaco)", criticalP: 113.5, xRange: [700, 1850],
+        cpL: 4.70, cpV: 2.20, glide: 0, tDescMax: 125, shOptimo: [5, 12], scOptimo: [3, 8], rPMax: 8.0, esZeotropico: false,
+        dome: [{p:0.8,hL:260,hV:1460,tSat:-33.3},{p:2,hL:330,hV:1485,tSat:-17},{p:5,hL:430,hV:1510,tSat:2},{p:10,hL:540,hV:1525,tSat:25},{p:25,hL:720,hV:1510,tSat:58},{p:60,hL:980,hV:1430,tSat:95},{p:113.5,hL:1200,hV:1200,tSat:132.4}]
+      },
+      R744: {
+        nombre: "R-744 (CO₂)", criticalP: 73.8, xRange: [180, 520], 
+        cpL: 2.20, cpV: 0.90, glide: 0, tDescMax: 140, shOptimo: [4, 10], scOptimo: [2, 8], rPMax: 4.0, esZeotropico: false,
+        dome: [{p:5.2,hL:180,hV:430,tSat:-56.6},{p:8,hL:205,hV:430,tSat:-46},{p:12,hL:235,hV:440,tSat:-30},{p:20,hL:280,hV:455,tSat:-11},{p:35,hL:335,hV:470,tSat:5},{p:55,hL:390,hV:475,tSat:22},{p:73.8,hL:430,hV:430,tSat:31.0}]
+      },
+      R407F: {
+        nombre: "R-407F", criticalP: 44.9, xRange: [130, 470],
+        cpL: 1.50, cpV: 0.95, glide: 6.0, tDescMax: 105, shOptimo: [5, 9], scOptimo: [3, 7], rPMax: 8.0, esZeotropico: true,
+        dome: [{p:1,hL:145,hV:405,tSat:-44},{p:3,hL:180,hV:414,tSat:-20},{p:7,hL:215,hV:420,tSat:7},{p:15,hL:255,hV:418,tSat:36},{p:30,hL:315,hV:402,tSat:65},{p:44.9,hL:410,hV:410,tSat:82}]
+      },
+      R448A: {
+        nombre: "R-448A", criticalP: 44.7, xRange: [120, 460],
+        cpL: 1.50, cpV: 0.94, glide: 5.0, tDescMax: 105, shOptimo: [5, 9], scOptimo: [3, 7], rPMax: 8.5, esZeotropico: true,
+        dome: [{p:1,hL:140,hV:395,tSat:-45},{p:3,hL:175,hV:405,tSat:-23},{p:7,hL:210,hV:414,tSat:2},{p:15,hL:250,hV:415,tSat:29},{p:30,hL:310,hV:405,tSat:59},{p:44.7,hL:405,hV:405,tSat:82}]
+      },
+      R449A: {
+        nombre: "R-449A", criticalP: 44.5, xRange: [120, 460],
+        cpL: 1.50, cpV: 0.94, glide: 4.5, tDescMax: 105, shOptimo: [5, 9], scOptimo: [3, 7], rPMax: 8.5, esZeotropico: true,
+        dome: [{p:1,hL:140,hV:397,tSat:-45},{p:3,hL:175,hV:407,tSat:-23},{p:7,hL:210,hV:416,tSat:2},{p:15,hL:250,hV:416,tSat:29},{p:30,hL:310,hV:405,tSat:59},{p:44.5,hL:405,hV:405,tSat:82}]
+      },
+      R422D: {
+        nombre: "R-422D", criticalP: 37.95, xRange: [110, 420],
+        cpL: 1.48, cpV: 0.92, glide: 1.6, tDescMax: 100, shOptimo: [5, 10], scOptimo: [3, 7], rPMax: 8.0, esZeotropico: true,
+        dome: [{p:1,hL:130,hV:360,tSat:-43.5},{p:3,hL:160,hV:368,tSat:-23},{p:7,hL:195,hV:374,tSat:1},{p:15,hL:235,hV:372,tSat:28},{p:26,hL:275,hV:360,tSat:54},{p:37.95,hL:325,hV:325,tSat:79.6}]
+      },
+      R427A: {
+        nombre: "R-427A", criticalP: 43.9, xRange: [120, 450],
+        cpL: 1.50, cpV: 0.93, glide: 2.0, tDescMax: 105, shOptimo: [5, 10], scOptimo: [3, 7], rPMax: 8.0, esZeotropico: true,
+        dome: [{p:1,hL:135,hV:390,tSat:-42.7},{p:3,hL:170,hV:399,tSat:-22},{p:7,hL:205,hV:406,tSat:3},{p:15,hL:245,hV:407,tSat:30},{p:30,hL:305,hV:395,tSat:58},{p:43.9,hL:400,hV:400,tSat:85.3}]
+      },
+      R438A: {
+        nombre: "R-438A", criticalP: 42.16, xRange: [120, 450],
+        cpL: 1.48, cpV: 0.93, glide: 1.5, tDescMax: 105, shOptimo: [5, 10], scOptimo: [3, 7], rPMax: 8.0, esZeotropico: true,
+        dome: [{p:1,hL:132,hV:388,tSat:-42.3},{p:3,hL:168,hV:397,tSat:-22},{p:7,hL:204,hV:404,tSat:3},{p:15,hL:244,hV:405,tSat:30},{p:28,hL:300,hV:394,tSat:57},{p:42.16,hL:398,hV:398,tSat:83.7}]
+      },
+      R513A: {
+        nombre: "R-513A", criticalP: 36.48, xRange: [150, 450],
+        cpL: 1.41, cpV: 1.05, glide: 0.1, tDescMax: 100, shOptimo: [5, 9], scOptimo: [3, 7], rPMax: 8.0, esZeotropico: true,
+        dome: [{p:0.7,hL:150,hV:360,tSat:-45},{p:1,hL:160,hV:365,tSat:-39},{p:3,hL:195,hV:375,tSat:-10},{p:7,hL:230,hV:380,tSat:16},{p:15,hL:275,hV:378,tSat:43},{p:28,hL:330,hV:365,tSat:72},{p:36.48,hL:370,hV:370,tSat:94.9}]
+      }
+    };
+
+    function actualizarReloj() {
+      const ahora = new Date();
+      const opciones = { 
+        year: 'numeric', month: '2-digit', day: '2-digit', 
+        hour: '2-digit', minute: '2-digit', second: '2-digit', 
+        hour12: true 
+      };
+      document.getElementById('txtFechaHora').innerText = ahora.toLocaleString('es-VE', opciones);
+    }
+
+    function convertirTemp(tempC) {
+      if (tUnitActual === 'F') {
+        return (tempC * 9/5) + 32;
+      }
+      return tempC;
+    }
+
+    async function obtenerClimaPuntoFijo() {
+      const lbl = document.getElementById('txtTempAmb');
+      try {
+        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=11.7&longitude=-70.2&current_weather=true');
+        const data = await res.json();
+        if (data && data.current_weather) {
+          tempAmbientePuntoFijoC = data.current_weather.temperature;
+          let tempMostrar = convertirTemp(tempAmbientePuntoFijoC);
+          lbl.innerText = `${tempMostrar.toFixed(1)} °${tUnitActual}`;
+          guardarYActualizar();
+        } else {
+          lbl.innerText = "30.0 °C";
+        }
+      } catch (e) {
+        lbl.innerText = "30.0 °C";
+      }
+    }
+
+    function actualizarEtiquetas() {
+      document.getElementById('lblPSuct').innerText = `P. Succión (${pUnits[pUnitActual].label})`;
+      document.getElementById('lblPDesc').innerText = `P. Descarga (${pUnits[pUnitActual].label})`;
+      document.getElementById('lblTEvapOut').innerText = `T. Salida Evap (°${tUnitActual})`;
+      document.getElementById('lblTSuct').innerText = `T. Succ Tubo (°${tUnitActual})`;
+      document.getElementById('lblTLiq').innerText = `T. Liq Tubo (°${tUnitActual})`;
+      document.getElementById('lblTDescReal').innerText = `T. Desc (°${tUnitActual})`;
+    }
+
+    function cambiarUnidades() {
+      const nuevaPUnit = document.getElementById('pUnitSelect').value;
+      const nuevaTUnit = document.getElementById('tUnitSelect').value;
+
+      const pFactorViejo = pUnits[pUnitActual].factor;
+      const pFactorNuevo = pUnits[nuevaPUnit].factor;
+
+      ['pSuct', 'pDesc'].forEach(id => {
+        const elem = document.getElementById(id);
+        const valBar = parseFloat(elem.value) / pFactorViejo;
+        elem.value = (valBar * pFactorNuevo).toFixed(nuevaPUnit === 'psi' ? 0 : 1);
+      });
+
+      if (tUnitActual !== nuevaTUnit) {
+        ['tEvapOut', 'tSuct', 'tLiq', 'tDescReal'].forEach(id => {
+          const elem = document.getElementById(id);
+          let val = parseFloat(elem.value);
+          if (nuevaTUnit === 'F') {
+            elem.value = (val * 9/5 + 32).toFixed(1);
+          } else {
+            elem.value = ((val - 32) * 5/9).toFixed(1);
+          }
+        });
+      }
+
+      pUnitActual = nuevaPUnit;
+      tUnitActual = nuevaTUnit;
+
+      actualizarEtiquetas();
+      obtenerClimaPuntoFijo();
+    }
+
+    function toggleZonaActiva() {
+      zonaActivaHabilitada = !zonaActivaHabilitada;
+      actualizarEstadoBotonZoom();
+      guardarYActualizar();
+    }
+
+    function actualizarEstadoBotonZoom() {
+      const btn = document.getElementById('btnZonaActiva');
+      btn.innerText = `🔍 Zoom Zona Activa: ${zonaActivaHabilitada ? 'ON' : 'OFF'}`;
+      btn.classList.toggle('active', zonaActivaHabilitada);
+    }
+
+    function toggleCompresionIdeal() {
+      compresionIdealVisible = !compresionIdealVisible;
+      actualizarEstadoBotonCompresionIdeal();
+      guardarYActualizar();
+    }
+
+    function actualizarEstadoBotonCompresionIdeal() {
+      const btn = document.getElementById('btnCompresionIdeal');
+      if (!btn) return;
+      btn.innerText = `⚙ Compresión ideal: ${compresionIdealVisible ? 'ON' : 'OFF'}`;
+      btn.classList.toggle('active', compresionIdealVisible);
+    }
+
+    function cambiarModoEvaporacion() {
+      modoEvapActual = document.getElementById('modoEvapSelect').value;
+      guardarYActualizar();
+    }
+
+    function cambiarExpansion() {
+      expansionActual = document.getElementById('expansionSelect').value;
+      guardarYActualizar();
+    }
+
+    /*
+     * Paleta del diagrama de Mollier y de las trazas.
+     * El módulo del monitor la redefine según el tema claro/oscuro activo;
+     * si el módulo no está presente se conserva la paleta oscura original.
+     */
+    const CM = () => (window.__colorMollier ? window.__colorMollier() : {
+      paper: '#1e293b', plot: '#0f172a', grid: '#334155', eje: '#cbd5e1',
+      titulo: '#94a3b8', cicloTexto: '#f8fafc', contraste: '#0f172a',
+      idealTexto: '#ddd6fe', domo: '#38bdf8'
+    });
+
+    /*
+     * Nombre real del motor termodinámico cargado. El paquete de unpkg se llama
+     * coolprop-wasm 6.6.0, pero la versión interna que reporta CoolProp puede
+     * ser otra (hoy informa 7.2.1dev), así que se consulta en caliente.
+     */
+    function nombreCoolProp() {
+      try {
+        if (window.CoolProp && window.CoolProp.get_global_param_string) {
+          return 'CoolProp ' + window.CoolProp.get_global_param_string('version');
+        }
+      } catch (e) { /* si la consulta falla se usa el nombre genérico */ }
+      return 'CoolProp';
+    }
+
+    const TIPOS_EXPANSION = {
+      CAPILAR: {label:'Capilar', control:'fijo', chargeSensitive:true, shControl:false, levelControl:false, desc:'Restricción fija; el caudal depende de presión, subenfriamiento y carga.'},
+      ORIFICIO: {label:'Orificio fijo', control:'fijo', chargeSensitive:true, shControl:false, levelControl:false, desc:'Orificio calibrado; sensible a carga y condiciones de operación.'},
+      PISTON: {label:'Pistón calibrado', control:'fijo', chargeSensitive:true, shControl:false, levelControl:false, desc:'Restricción fija calibrada; el diagnóstico se apoya en SH + SC + presiones.'},
+      SHORT_TUBE: {label:'Short-Tube / Restrictor', control:'fijo', chargeSensitive:true, shControl:false, levelControl:false, desc:'Restrictor de orificio fijo; sensible a carga y diferencial de presión.'},
+      TXV: {label:'VET / TXV', control:'SH', chargeSensitive:false, shControl:true, levelControl:false, desc:'Válvula termostática que regula el sobrecalentamiento en el evaporador.'},
+      AEV: {label:'Válvula automática (AEV)', control:'Pevap', chargeSensitive:false, shControl:false, levelControl:false, desc:'Regula principalmente la presión de evaporación; el SH puede variar con la carga.'},
+      MANUAL: {label:'Válvula manual', control:'manual', chargeSensitive:false, shControl:false, levelControl:false, desc:'Apertura fija/manual; requiere correlacionar SH, SC y respuesta a carga.'},
+      EEV: {label:'Válvula electrónica (EEV)', control:'SH', chargeSensitive:false, shControl:true, levelControl:false, desc:'Control electrónico; normalmente mantiene un objetivo de sobrecalentamiento mediante sensores.'},
+      FLOAT_H: {label:'Flotador alta presión', control:'nivel', chargeSensitive:false, shControl:false, levelControl:true, desc:'Controla alimentación según nivel de líquido en el lado de alta.'},
+      FLOAT_L: {label:'Flotador baja presión', control:'nivel', chargeSensitive:false, shControl:false, levelControl:true, desc:'Controla alimentación según nivel de líquido en el evaporador/lado de baja.'}
+    };
+
+    function guardarConfiguracion() {
+      const data = {
+        empresaNombre: document.getElementById('empresaNombre').value,
+        empresaRif: document.getElementById('empresaRif').value,
+        tecnicoNombre: document.getElementById('tecnicoNombre').value,
+        equipoMarca: document.getElementById('equipoMarca').value,
+        equipoModelo: document.getElementById('equipoModelo').value,
+        // Nuevo: guardamos valor numérico y unidad por separado
+        capFrigValue: document.getElementById('capFrigValue').value,
+        capFrigUnit: document.getElementById('capUnitSelect').value,
+        refSelect: document.getElementById('refSelect').value,
+        modoEvapSelect: document.getElementById('modoEvapSelect').value,
+        expansionSelect: document.getElementById('expansionSelect').value,
+        compresionIdealVisible: compresionIdealVisible,
+        pUnitSelect: document.getElementById('pUnitSelect').value,
+        tUnitSelect: document.getElementById('tUnitSelect').value,
+        pSuct: document.getElementById('pSuct').value,
+        pDesc: document.getElementById('pDesc').value,
+        tEvapOut: document.getElementById('tEvapOut').value,
+        tSuct: document.getElementById('tSuct').value,
+        tLiq: document.getElementById('tLiq').value,
+        tDescReal: document.getElementById('tDescReal').value,
+        vVolt: document.getElementById('vVolt').value,
+        iAmp: document.getElementById('iAmp').value,
+        zonaActivaHabilitada: zonaActivaHabilitada
+      };
+      localStorage.setItem('mollier_app_report_data', JSON.stringify(data));
+    }
+
+    function cargarConfiguracion() {
+      const saved = localStorage.getItem('mollier_app_report_data');
+      if (saved) {
+        try {
+          const data = JSON.parse(saved);
+          if (data.empresaNombre !== undefined) document.getElementById('empresaNombre').value = data.empresaNombre;
+          if (data.empresaRif !== undefined) document.getElementById('empresaRif').value = data.empresaRif;
+          if (data.tecnicoNombre !== undefined) document.getElementById('tecnicoNombre').value = data.tecnicoNombre;
+          if (data.equipoMarca !== undefined) document.getElementById('equipoMarca').value = data.equipoMarca;
+          if (data.equipoModelo !== undefined) document.getElementById('equipoModelo').value = data.equipoModelo;
+
+          // Compatibilidad: si existe capFrigValue lo usamos; si solo existe el antiguo capFrigNominal intentamos parsearlo
+          if (data.capFrigValue !== undefined) {
+            document.getElementById('capFrigValue').value = data.capFrigValue;
+          } else if (data.capFrigNominal) {
+            const s = data.capFrigNominal;
+            const m = s.match(/([\d\.,]+)/);
+            if (m) {
+              const num = parseFloat(m[1].replace(/,/g, ''));
+              if (!isNaN(num)) document.getElementById('capFrigValue').value = num;
+            }
+          }
+          if (data.capFrigUnit !== undefined) {
+            document.getElementById('capUnitSelect').value = data.capFrigUnit;
+          } else if (data.capFrigNominal) {
+            const s = data.capFrigNominal.toLowerCase();
+            if (s.includes('ton')) document.getElementById('capUnitSelect').value = 'Ton';
+            else if (s.includes('kw')) document.getElementById('capUnitSelect').value = 'kW';
+            else document.getElementById('capUnitSelect').value = 'BTU/h';
+          }
+
+          if (data.refSelect) document.getElementById('refSelect').value = data.refSelect;
+          if (data.modoEvapSelect) {
+            document.getElementById('modoEvapSelect').value = data.modoEvapSelect;
+            modoEvapActual = data.modoEvapSelect;
+          }
+          if (data.expansionSelect) {
+            document.getElementById('expansionSelect').value = data.expansionSelect;
+            expansionActual = data.expansionSelect;
+          }
+          if (data.compresionIdealVisible !== undefined) compresionIdealVisible = !!data.compresionIdealVisible;
+          if (data.pUnitSelect) document.getElementById('pUnitSelect').value = data.pUnitSelect;
+          if (data.tUnitSelect) document.getElementById('tUnitSelect').value = data.tUnitSelect;
+          if (data.pSuct !== undefined) document.getElementById('pSuct').value = data.pSuct;
+          if (data.pDesc !== undefined) document.getElementById('pDesc').value = data.pDesc;
+          if (data.tEvapOut !== undefined) document.getElementById('tEvapOut').value = data.tEvapOut;
+          if (data.tSuct !== undefined) document.getElementById('tSuct').value = data.tSuct;
+          if (data.tLiq !== undefined) document.getElementById('tLiq').value = data.tLiq;
+          if (data.tDescReal !== undefined) document.getElementById('tDescReal').value = data.tDescReal;
+          if (data.vVolt !== undefined) document.getElementById('vVolt').value = data.vVolt;
+          if (data.iAmp !== undefined) document.getElementById('iAmp').value = data.iAmp;
+          if (data.zonaActivaHabilitada !== undefined) zonaActivaHabilitada = data.zonaActivaHabilitada;
+
+          pUnitActual = document.getElementById('pUnitSelect').value;
+          tUnitActual = document.getElementById('tUnitSelect').value;
+          actualizarEstadoBotonZoom();
+          actualizarEstadoBotonCompresionIdeal();
+        } catch (e) {
+          console.error("Error al cargar datos", e);
+        }
+      }
+    }
+
+    function guardarYActualizar() {
+      guardarConfiguracion();
+      actualizarTodo();
+    }
+
+    /*
+     * REPORTE PDF
+     * Se convirtió en async para poder preparar el documento antes de que
+     * html2canvas lo capture: el módulo del monitor rasteriza las dos gráficas
+     * (histórico de sondas y diagrama de Mollier) a imágenes PNG, porque
+     * html2canvas no reproduce de forma fiable los gráficos vectoriales.
+     * Los ganchos __monitorAntesPDF / __monitorDespuesPDF los define el módulo
+     * del monitor; si no existen, todo sigue funcionando como antes.
+     */
+    async function descargarPDFReporte() {
+      const element = document.getElementById('reporteArea');
+
+      if (typeof window.__monitorAntesPDF === 'function') {
+        try {
+          await window.__monitorAntesPDF();
+        } catch (e) {
+          console.warn('No se pudo preparar el reporte:', e);
+        }
+      }
+
+      document.body.classList.add('generating-pdf');
+
+      const opt = {
+        margin:       [5, 5, 5, 5],
+        filename:     `Reporte_Tecnico_${document.getElementById('equipoMarca').value}_${document.getElementById('equipoModelo').value}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'] }
+      };
+
+      try {
+        await html2pdf().set(opt).from(element).save();
+      } catch (e) {
+        console.error('Error al generar el PDF:', e);
+        const avisoPdf = document.getElementById('notaVentana');
+        if (avisoPdf) avisoPdf.textContent = 'No se pudo generar el PDF: ' + (e && e.message ? e.message : e);
+      } finally {
+        document.body.classList.remove('generating-pdf');
+        if (typeof window.__monitorDespuesPDF === 'function') {
+          try { window.__monitorDespuesPDF(); } catch (e) { console.warn(e); }
+        }
+      }
+    }
+
+    function cpCall(output, name1, value1, name2, value2, fluid) {
+      if (!window.CoolProp) return null;
+      try {
+        const v = window.CoolProp.PropsSI(output, name1, value1, name2, value2, fluid);
+        return Number.isFinite(v) ? v : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function cpConst(output, fluid) {
+      if (!window.CoolProp) return null;
+      try {
+        const v = window.CoolProp.PropsSI(output, "", 0, "", 0, fluid);
+        return Number.isFinite(v) ? v : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function refreshCoolPropMeta(refData) {
+      if (!window.CoolProp || !refData.coolprop) return false;
+      try {
+        const pc = cpConst("pcrit", refData.coolprop) / 100000;
+        if (Number.isFinite(pc) && pc > 0) {
+          refData.criticalP = pc;
+          refData.xRange = [refData.xRange[0], Math.max(refData.xRange[1], 450)];
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function saturationAtP(refData, pBarAbs) {
+      const fluid = refData.coolprop || refData.nombre.replace(/^R-/, "");
+      const P = pBarAbs * 100000;
+
+      if (window.CoolProp && fluid) {
+        try {
+          const tBubbleK = cpCall("T", "P", P, "Q", 0, fluid);
+          const tDewK = cpCall("T", "P", P, "Q", 1, fluid);
+          const hL = cpCall("H", "P", P, "Q", 0, fluid);
+          const hV = cpCall("H", "P", P, "Q", 1, fluid);
+
+          if ([tBubbleK, tDewK, hL, hV].every(Number.isFinite)) {
+            return {
+              hL: hL / 1000,
+              hV: hV / 1000,
+              tBubble: tBubbleK - 273.15,
+              tDew: tDewK - 273.15,
+              tSat: tDewK - 273.15,
+              source: nombreCoolProp()
+            };
+          }
+        } catch (e) {}
+      }
+
+      const dome = refData.dome;
+      if (pBarAbs <= dome[0].p) return {...dome[0], tBubble: dome[0].tSat, tDew: dome[0].tSat, source:"tabla local"};
+      if (pBarAbs >= refData.criticalP) {
+        const d = dome[dome.length - 1];
+        return {...d, tBubble:d.tSat, tDew:d.tSat, source:"tabla local"};
+      }
+
+      for (let i = 0; i < dome.length - 1; i++) {
+        if (pBarAbs >= dome[i].p && pBarAbs <= dome[i+1].p) {
+          const a = dome[i], b = dome[i+1];
+          const f = (Math.log(pBarAbs) - Math.log(a.p)) / (Math.log(b.p) - Math.log(a.p));
+          const t = a.tSat + f * (b.tSat - a.tSat);
+          return {
+            hL: a.hL + f*(b.hL-a.hL),
+            hV: a.hV + f*(b.hV-a.hV),
+            tSat:t, tBubble:t, tDew:t,
+            source:"tabla local"
+          };
+        }
+      }
+      return dome[0];
+    }
+
+    function getPropAtP(refData, pBarAbs) {
+      return saturationAtP(refData, pBarAbs);
+    }
+
+    function getStatePT(refData, pBarAbs, tC) {
+      const fluid = refData.coolprop;
+      if (window.CoolProp && fluid) {
+        const P = pBarAbs * 100000;
+        const T = tC + 273.15;
+        const h = cpCall("H", "P", P, "T", T, fluid);
+        const s = cpCall("S", "P", P, "T", T, fluid);
+        const cp = cpCall("C", "P", P, "T", T, fluid);
+        if ([h, s].every(Number.isFinite)) {
+          return {
+            h: h/1000,
+            s: s/1000,
+            cp: Number.isFinite(cp) ? cp/1000 : null,
+            source:nombreCoolProp()
+          };
+        }
+      }
+
+      const sat = saturationAtP(refData, pBarAbs);
+      const superheat = Math.max(tC - sat.tDew, 0);
+      const cpV = refData.cpV || 1.0;
+      return {
+        h: sat.hV + superheat*cpV,
+        s: null,
+        cp: cpV,
+        source:"tabla local"
+      };
+    }
+
+    function getStatePS(refData, pBarAbs, sKjKgK) {
+      const fluid = refData.coolprop;
+      if (window.CoolProp && fluid && Number.isFinite(sKjKgK)) {
+        const P = pBarAbs * 100000;
+        const S = sKjKgK * 1000;
+        const h = cpCall("H", "P", P, "S", S, fluid);
+        const t = cpCall("T", "P", P, "S", S, fluid);
+        if ([h,t].every(Number.isFinite)) {
+          return { h:h/1000, t:t-273.15, s:sKjKgK, source:nombreCoolProp() };
+        }
+      }
+      return null;
+    }
+
+    function pressureAtT(refData, tC, quality=1) {
+      const fluid = refData.coolprop;
+      if (window.CoolProp && fluid && Number.isFinite(tC)) {
+        try {
+          const pPa = cpCall("P", "T", tC + 273.15, "Q", quality, fluid);
+          if (Number.isFinite(pPa) && pPa > 0) return pPa / 100000;
+        } catch (e) {}
+      }
+      return null;
+    }
+
+    function getStatePH(refData, pBarAbs, hKjKg) {
+      const fluid = refData.coolprop;
+      if (window.CoolProp && fluid) {
+        const P = pBarAbs * 100000;
+        const H = hKjKg * 1000;
+        const t = cpCall("T", "P", P, "H", H, fluid);
+        if (Number.isFinite(t)) return t - 273.15;
+      }
+      return null;
+    }
+
+    function buildCoolPropDome(refData, n=48) {
+      if (!window.CoolProp || !refData.coolprop) return null;
+      const pc = cpConst("pcrit", refData.coolprop);
+      const pmin = cpConst("ptriple", refData.coolprop);
+      if (!Number.isFinite(pc)) return null;
+
+      const lo = Math.max((Number.isFinite(pmin) ? pmin : 5000) / 100000, 0.005);
+      const hi = (pc / 100000) * 0.995;
+      const pts = [];
+
+      for (let i=0; i<n; i++) {
+        const f = i/(n-1);
+        const p = Math.exp(Math.log(lo) + f*(Math.log(hi)-Math.log(lo)));
+        const sat = saturationAtP(refData, p);
+        if (sat && Number.isFinite(sat.hL) && Number.isFinite(sat.hV)) {
+          pts.push({
+            p, hL:sat.hL, hV:sat.hV,
+            tSat:sat.tDew,
+            tBubble:sat.tBubble,
+            tDew:sat.tDew
+          });
+        }
+      }
+      if (pts.length >= 10) {
+        refData.dome = pts;
+        refData.thermoSource = nombreCoolProp();
+        refData.criticalP = pc/100000;
+        return pts;
+      }
+      return null;
+    }
+
+    const COOLPROP_FLUID_MAP = {
+      R134a: 'R134a',
+      R22: 'R22',
+      R404A: 'R404A',
+      R410A: 'R410A',
+      R32: 'R32',
+      R290: 'R290',
+      R600a: 'R600a',
+      R507A: 'R507A',
+      R407C: 'R407C',
+      R717: 'Ammonia',
+      R744: 'CarbonDioxide',
+      R407F: 'R407F',
+      R448A: 'R448A',
+      R449A: 'R449A',
+      R513A: 'R513A',
+      R422D: 'R422D',
+      R427A: 'R427A',
+      R438A: 'R438A'
+    };
+
+    function prepareRefrigerant(refData) {
+      const selectedKey = document.getElementById('refSelect')?.value;
+      if (!refData.coolprop && selectedKey && COOLPROP_FLUID_MAP[selectedKey]) {
+        refData.coolprop = COOLPROP_FLUID_MAP[selectedKey];
+      }
+
+      if (window.CoolProp && refData.coolprop) {
+        refreshCoolPropMeta(refData);
+        buildCoolPropDome(refData, 52);
+      }
+      return refData;
+    }
+
+    function getZoneTraces(refData, minX, maxX) {
+      const f = pUnits[pUnitActual].factor;
+      const dome = refData.dome;
+
+      const pVals = dome.map(pt => pt.p * f);
+      const hLVals = dome.map(pt => pt.hL);
+      const hVVals = dome.map(pt => pt.hV);
+
+      const pTop = pVals[pVals.length - 1];
+      const pBot = pVals[0];
+
+      const liquidX = [minX, minX];
+      const liquidY = [pBot, pTop];
+      for (let i = dome.length - 1; i >= 0; i--) {
+        liquidX.push(hLVals[i]);
+        liquidY.push(pVals[i]);
+      }
+
+      const traceLiquid = {
+        x: liquidX, y: liquidY, fill: 'toself',
+        fillcolor: 'rgba(2, 132, 199, 0.22)', line: { color: 'transparent' },
+        name: 'Líquido', showlegend: false, hoverinfo: 'none'
+      };
+
+      const satX = []; const satY = [];
+      for (let i = 0; i < dome.length; i++) { satX.push(hLVals[i]); satY.push(pVals[i]); }
+      for (let i = dome.length - 1; i >= 0; i--) { satX.push(hVVals[i]); satY.push(pVals[i]); }
+
+      const traceSat = {
+        x: satX, y: satY, fill: 'toself',
+        fillcolor: 'rgba(16, 185, 129, 0.22)', line: { color: 'transparent' },
+        name: 'Mezcla', showlegend: false, hoverinfo: 'none'
+      };
+
+      const vaporX = []; const vaporY = [];
+      for (let i = 0; i < dome.length; i++) { vaporX.push(hVVals[i]); vaporY.push(pVals[i]); }
+      vaporX.push(maxX, maxX);
+      vaporY.push(pTop, pBot);
+
+      const traceVapor = {
+        x: vaporX, y: vaporY, fill: 'toself',
+        fillcolor: 'rgba(245, 158, 11, 0.20)', line: { color: 'transparent' },
+        name: 'Vapor', showlegend: false, hoverinfo: 'none'
+      };
+
+      return [traceLiquid, traceSat, traceVapor];
+    }
+
+    function getDomeTrace(refData) {
+      const hVals = [];
+      const pVals = [];
+      const tempsText = [];
+      const f = pUnits[pUnitActual].factor;
+
+      refData.dome.forEach(pt => {
+        hVals.push(pt.hL);
+        pVals.push(pt.p * f);
+        tempsText.push(`${convertirTemp(pt.tSat).toFixed(1)} °${tUnitActual}`);
+      });
+
+      for (let i = refData.dome.length - 1; i >= 0; i--) {
+        hVals.push(refData.dome[i].hV);
+        pVals.push(refData.dome[i].p * f);
+        tempsText.push(`${convertirTemp(refData.dome[i].tSat).toFixed(1)} °${tUnitActual}`);
+      }
+
+      return {
+        x: hVals,
+        y: pVals,
+        mode: 'lines+markers',
+        name: `Domo ${refData.nombre}`,
+        line: { color: CM().domo, width: 2.0, shape: 'spline', smoothing: 1.1 },
+        marker: { size: 4, color: CM().domo },
+        hovertemplate: `<b>Domo Sat. (${refData.nombre})</b><br>` +
+                       `Temp Sat: %{text}<br>` +
+                       `P: %{y:.1f} ${pUnits[pUnitActual].label}<br>` +
+                       `h: %{x:.1f} kJ/kg<extra></extra>`,
+        text: tempsText
+      };
+    }
+
+    /*
+     * MOTOR DE EVIDENCIA / DIAGNÓSTICO V2
+     * La interfaz y las variables de campo se mantienen intactas.
+     * El motor NO declara una falla como confirmada: pondera evidencias,
+     * contradicciones y datos faltantes.
+     */
+    function evaluarDiagnostico(refData, rP, tDescRealC, tLiqC, tSatCondC,
+      SHUtil, SHTotal, SC, dischargeSuperHeatK, tempAmbienteC,
+      pSuctBarAbs, pDescBarAbs, tEvapSatRef, expansionKey) {
+
+      const alertas = [];
+      let alarmaTDesc = false;
+      let alarmaTLiq = false;
+      const evidencias = [];
+      const contradicciones = [];
+      let score = 100;
+
+      const deltaTCondAmb = tSatCondC - tempAmbienteC;
+      const shMin = refData.shOptimo[0];
+      const shMax = refData.shOptimo[1];
+      const scMin = refData.scOptimo[0];
+      const scMax = refData.scOptimo[1];
+
+      const finite = v => Number.isFinite(v);
+      const modo = MODOS_EVAP[modoEvapActual] || MODOS_EVAP.MBP;
+
+      const expansion = TIPOS_EXPANSION[expansionKey] || TIPOS_EXPANSION.TXV;
+
+      // La expansión cambia la interpretación diagnóstica, no los estados termodinámicos medidos.
+      if (expansionKey === 'TXV' || expansionKey === 'EEV') {
+        if (finite(SHUtil)) {
+          if (SHUtil < shMin) {
+            score -= 6;
+            alertas.push(`🔴 <b>CONTROL DE EXPANSIÓN — ${expansion.label}:</b> SH útil ${SHUtil.toFixed(1)} K está por debajo del rango ${shMin}–${shMax} K. <span style="color:#fca5a5;">Condición compatible con sobrealimentación del evaporador o control insuficiente; confirme sensor, bulbo/actuador y estabilidad.</span>`);
+          } else if (SHUtil > shMax) {
+            score -= 4;
+            alertas.push(`🟡 <b>CONTROL DE EXPANSIÓN — ${expansion.label}:</b> SH útil ${SHUtil.toFixed(1)} K está por encima de ${shMax} K. <span style="color:#fde68a;">Compatible con evaporador subalimentado, ajuste/control conservador u otra causa.</span>`);
+          } else {
+            evidencias.push(`${expansion.label}: SH útil dentro del objetivo de referencia.`);
+          }
+        }
+      } else if (expansionKey === 'CAPILAR' || expansionKey === 'ORIFICIO' || expansionKey === 'PISTON' || expansionKey === 'SHORT_TUBE') {
+        if (finite(SHUtil) && finite(SC)) {
+          if (SHUtil > shMax && SC < scMin) {
+            score -= 5;
+            alertas.push(`🟠 <b>EXPANSIÓN FIJA — ${expansion.label}:</b> SH útil alto (${SHUtil.toFixed(1)} K) + SC bajo (${SC.toFixed(1)} K). <span style="color:#fcd34d;">La combinación es compatible con evaporador subalimentado; revise carga, restricción, caída de presión y condiciones de condensación.</span>`);
+          } else if (SHUtil < shMin && SC > scMax) {
+            score -= 5;
+            alertas.push(`🟠 <b>EXPANSIÓN FIJA — ${expansion.label}:</b> SH útil bajo (${SHUtil.toFixed(1)} K) + SC alto (${SC.toFixed(1)} K). <span style="color:#fcd34d;">La combinación puede ser compatible con exceso de alimentación/carga o restricción demasiado abierta para las condiciones.</span>`);
+          } else {
+            evidencias.push(`${expansion.label}: SH y SC evaluados conjuntamente por tratarse de un dispositivo fijo.`);
+          }
+        }
+      } else if (expansionKey === 'AEV') {
+        evidencias.push(`${expansion.label}: el SH no se interpreta como una consigna directa de la válvula; se priorizan presión de evaporación y respuesta de carga.`);
+      } else if (expansionKey === 'MANUAL') {
+        evidencias.push(`${expansion.label}: la apertura no se corrige automáticamente; se requiere observar SH/SC y respuesta estable después de cada ajuste.`);
+      } else if (expansionKey === 'FLOAT_H' || expansionKey === 'FLOAT_L') {
+        evidencias.push(`${expansion.label}: el control depende del nivel de líquido; SH/SC no deben interpretarse como única evidencia de regulación.`);
+      }
+
+      // Penalización por calidad de datos. Evita un 100% cuando faltan
+      // mediciones esenciales o las entradas no son físicamente coherentes.
+      const required = [
+        pSuctBarAbs, pDescBarAbs, tSatCondC, tDescRealC,
+        tLiqC, SHUtil, SHTotal, SC, dischargeSuperHeatK
+      ];
+      const validCount = required.filter(finite).length;
+      score -= (required.length - validCount) * 9;
+
+      if (!finite(pSuctBarAbs) || !finite(pDescBarAbs) || pSuctBarAbs <= 0 || pDescBarAbs <= 0) {
+        alertas.push(`🔴 <b>DATOS INSUFICIENTES:</b> No es posible validar correctamente las relaciones de presión.`);
+      }
+
+      if (pDescBarAbs <= pSuctBarAbs) {
+        score -= 35;
+        alertas.push(`🔴 <b>INCONSISTENCIA DE MEDICIÓN:</b> La presión absoluta de descarga no supera a la de succión. Verifique manómetros, unidades y puntos de toma.`);
+      }
+
+      // Clasificación de aplicación: compara la evaporación real con el modo elegido.
+      // No modifica la termodinámica medida; modifica la referencia diagnóstica.
+      if (finite(tEvapSatRef)) {
+        if (tEvapSatRef < modo.tMin || tEvapSatRef > modo.tMax) {
+          score -= 10;
+          alertas.push(`🟠 <b>APLICACIÓN ${modoEvapActual}:</b> T. evaporación de referencia ${tEvapSatRef.toFixed(1)} °C está fuera del rango orientativo ${modo.tMin} a ${modo.tMax} °C. <span style="color:#fcd34d;">Verifique que la clasificación del compresor coincida con su ficha técnica.</span>`);
+        } else {
+          evidencias.push(`Aplicación ${modoEvapActual}: T. evaporación ${tEvapSatRef.toFixed(1)} °C dentro del rango orientativo ${modo.tMin} a ${modo.tMax} °C.`);
+        }
+      }
+
+      // Temperatura de descarga: condición crítica real, pero no atribución automática.
+      if (finite(tDescRealC) && tDescRealC > refData.tDescMax) {
+        alarmaTDesc = true;
+        score -= 18;
+        evidencias.push(`Temperatura de descarga ${tDescRealC.toFixed(1)} °C por encima del límite de referencia de ${refData.tDescMax} °C.`);
+        alertas.push(`🔴 <b>CONDICIÓN CRÍTICA — T. DESCARGA:</b> ${tDescRealC.toFixed(1)} °C supera ${refData.tDescMax} °C. <span style="color:#fca5a5;">Indica una condición térmica de riesgo; la causa debe verificarse.</span>`);
+      } else if (finite(tDescRealC) && tDescRealC > refData.tDescMax - 10) {
+        score -= 4;
+        alertas.push(`🟠 <b>VIGILAR T. DESCARGA:</b> ${tDescRealC.toFixed(1)} °C está próxima al límite de referencia (${refData.tDescMax} °C).`);
+      }
+
+      // Líquido / flash gas.
+      if (finite(tLiqC) && finite(tSatCondC) && tLiqC >= tSatCondC) {
+        alarmaTLiq = true;
+        score -= 15;
+        evidencias.push(`Temperatura de líquido ${tLiqC.toFixed(1)} °C no muestra margen de subenfriamiento respecto a la saturación.`);
+        alertas.push(`🔴 <b>CONDICIÓN DE LÍQUIDO:</b> T. líquido ${tLiqC.toFixed(1)} °C ≥ T. saturación ${tSatCondC.toFixed(1)} °C. <span style="color:#fca5a5;">Existe indicio de ausencia de subenfriamiento y posible formación de gas flash.</span>`);
+      }
+
+      // Subenfriamiento: diagnóstico diferencial, no "falta de refrigerante" automática.
+      if (finite(SC)) {
+        if (SC < scMin) {
+          score -= 8;
+          evidencias.push(`Subenfriamiento ${SC.toFixed(1)} K por debajo del rango de referencia ${scMin}–${scMax} K.`);
+
+          const condenserEvidence = finite(deltaTCondAmb) && deltaTCondAmb > 18;
+          const pressureEvidence = finite(rP) && rP > refData.rPMax;
+          const chargeEvidence = finite(SHTotal) && SHTotal > shMax;
+
+          if (condenserEvidence && pressureEvidence) {
+            score -= 4;
+            alertas.push(`🟠 <b>INDICIO COMPATIBLE CON RESTRICCIÓN / BAJA RECHAZO DE CALOR EN CONDENSADOR:</b> SC ${SC.toFixed(1)} K bajo + ΔT Cond-Amb ${deltaTCondAmb.toFixed(1)} K + relación de presión ${rP.toFixed(2)}. <span style="color:#fcd34d;">Verifique limpieza, flujo de aire, ventilación y temperatura ambiente antes de concluir.</span>`);
+          } else if (chargeEvidence) {
+            score -= 3;
+            alertas.push(`🟡 <b>HIPÓTESIS: CARGA DE REFRIGERANTE INSUFICIENTE:</b> SC ${SC.toFixed(1)} K bajo junto con SH total ${SHTotal.toFixed(1)} K elevado. <span style="color:#fde68a;">Es una hipótesis; confirme con método de carga, visor, masa recuperada/cargada y condiciones del fabricante.</span>`);
+          } else {
+            alertas.push(`🟡 <b>SUBENFRIAMIENTO BAJO:</b> ${SC.toFixed(1)} K frente al rango ${scMin}–${scMax} K. <span style="color:#fde68a;">La medición por sí sola no identifica la causa.</span>`);
+          }
+        } else if (SC > scMax) {
+          score -= 5;
+          alertas.push(`🔵 <b>SUBENFRIAMIENTO ALTO:</b> ${SC.toFixed(1)} K > ${scMax} K. <span style="color:#c4b5fd;">Puede ser compatible con exceso de carga, baja transferencia de calor u otra condición; no se confirma la causa solo con SC.</span>`);
+        } else {
+          evidencias.push(`SC ${SC.toFixed(1)} K dentro del rango de referencia.`);
+        }
+      }
+
+      // Relación de presión.
+      if (finite(rP)) {
+        if (rP > refData.rPMax) {
+          score -= 10;
+          evidencias.push(`Relación de presión ${rP.toFixed(2)} superior al umbral de referencia ${refData.rPMax}.`);
+          alertas.push(`🟠 <b>RELACIÓN DE PRESIÓN ELEVADA:</b> ${rP.toFixed(2)} > ${refData.rPMax}. <span style="color:#fcd34d;">Es un indicio de mayor esfuerzo del compresor; no confirma una falla del compresor.</span>`);
+        }
+      }
+
+      // SH útil.
+      if (finite(SHUtil)) {
+        if (SHUtil < shMin) {
+          score -= 10;
+          evidencias.push(`SH útil ${SHUtil.toFixed(1)} K por debajo del mínimo de referencia.`);
+          alertas.push(`🔴 <b>SH ÚTIL BAJO:</b> ${SHUtil.toFixed(1)} K < ${shMin} K. <span style="color:#fca5a5;">Condición compatible con riesgo de retorno de líquido; confirme ubicación del sensor y estabilidad antes de intervenir.</span>`);
+        } else if (SHUtil > shMax) {
+          score -= 7;
+          evidencias.push(`SH útil ${SHUtil.toFixed(1)} K por encima del rango de referencia.`);
+          alertas.push(`🟡 <b>SH ÚTIL ALTO:</b> ${SHUtil.toFixed(1)} K > ${shMax} K. <span style="color:#fde68a;">Compatible con evaporador subalimentado o baja carga térmica, entre otras causas.</span>`);
+        } else {
+          evidencias.push(`SH útil ${SHUtil.toFixed(1)} K dentro del rango de referencia.`);
+        }
+      }
+
+      // SH total y descarga: corroboración / contradicción.
+      if (finite(SHTotal)) {
+        if (SHTotal > shMax) {
+          score -= 5;
+          evidencias.push(`SH total ${SHTotal.toFixed(1)} K elevado.`);
+        } else if (SHTotal >= shMin && SHTotal <= shMax) {
+          evidencias.push(`SH total ${SHTotal.toFixed(1)} K dentro del rango de referencia.`);
+        }
+      }
+
+      // Contradicciones que reducen confianza.
+      if (finite(SC) && finite(SHTotal) && SC >= scMin && SC <= scMax && SHTotal > shMax) {
+        contradicciones.push("SC normal pero SH total elevado: la hipótesis de baja carga no queda demostrada.");
+        score -= 6;
+      }
+      if (finite(SHUtil) && SHUtil >= shMin && SHUtil <= shMax && alarmaTLiq) {
+        contradicciones.push("SH útil dentro de referencia mientras la medición de líquido no muestra subenfriamiento.");
+        score -= 4;
+      }
+      if (finite(deltaTCondAmb) && deltaTCondAmb < 5 && finite(rP) && rP > refData.rPMax) {
+        contradicciones.push("Relación de presión elevada sin un ΔT Cond-Amb elevado; revisar condiciones de medición antes de atribuirlo al condensador.");
+        score -= 3;
+      }
+
+      // Mezclas zeotrópicas: verificar en tiempo real que el motor pueda resolver
+      // ambas referencias de saturación en la presión de succión.
+      // SH -> rocío (Q=1) y SC -> burbuja (Q=0). No se penaliza la certeza
+      // cuando ambas referencias están disponibles en CoolProp.
+      if (refData.esZeotropico) {
+        const satCheck = { dew: false, bubble: false };
+        try {
+          if (window.CoolProp && refData.coolprop && finite(pSuctBarAbs) && pSuctBarAbs > 0) {
+            /* CORREGIDO: saturationAtP() recibe (refData, pBarAbs) y devuelve
+               tBubble/tDew en el mismo objeto. La versión anterior la llamaba
+               con un tercer argumento inexistente y leía una propiedad ".T"
+               que no existe, por lo que TODA mezcla zeotrópica caía siempre en
+               el aviso de "referencia P–T incompleta" y perdía 8 puntos de
+               confiabilidad aunque CoolProp sí resolviera las dos ramas. */
+            const satRef = saturationAtP(refData, pSuctBarAbs);
+            satCheck.dew = !!(satRef && Number.isFinite(satRef.tDew));
+            satCheck.bubble = !!(satRef && Number.isFinite(satRef.tBubble));
+          }
+        } catch(e) {
+          console.warn('No se pudieron verificar referencias Dew/Bubble:', e);
+        }
+
+        if (satCheck.dew && satCheck.bubble) {
+          alertas.push(`🟢 <b>REFERENCIAS P–T DISPONIBLES (${refData.nombre}):</b> SH se calcula con el punto de rocío y SC con el punto de burbuja. <span style="color:#86efac;">Ambas referencias fueron resueltas por el motor termodinámico para la presión de succión.</span>`);
+        } else {
+          const faltan = [!satCheck.dew ? 'rocío' : '', !satCheck.bubble ? 'burbuja' : ''].filter(Boolean).join(' y ');
+          score -= 8;
+          alertas.push(`🟠 <b>REFERENCIA P–T INCOMPLETA (${refData.nombre}):</b> No fue posible resolver ${faltan || 'las referencias de saturación'} para esta condición. <span style="color:#fcd34d;">SH/SC no deben utilizarse como evidencia principal hasta disponer de la referencia correspondiente.</span>`);
+        }
+      }
+
+      // Mensaje global cuando no hay una condición concreta.
+      if (alertas.length === 0) {
+        alertas.push(`🟢 <b>CONDICIONES SIN ALERTAS RELEVANTES:</b> Las mediciones introducidas son compatibles con el rango de referencia. <span style="color:#86efac;">Esto no constituye una certificación de funcionamiento perfecto.</span>`);
+      }
+
+      // Resumen de evidencia / faltantes sin crear nuevos cuadros.
+      if (evidencias.length >= 4) {
+        alertas.push(`🔎 <b>EVIDENCIA:</b> ${evidencias.length} indicadores revisados de forma cruzada; ${contradicciones.length ? contradicciones.length + " contradicción(es) reducen la certeza." : "sin contradicciones importantes detectadas."}`);
+      }
+
+      if (contradicciones.length) {
+        alertas.push(`⚠️ <b>DATOS EN CONFLICTO:</b> ${contradicciones.join(" ")}`);
+      }
+
+      // La confiabilidad es de la calidad/coherencia del análisis, NO probabilidad de falla.
+      score = Math.max(0, Math.min(100, Math.round(score)));
+
+      return { alertas, alarmaTDesc, alarmaTLiq, confiabilidad: score };
+    }
+
+    function actualizarBarraConfiabilidad(valor) {
+      const pct = Math.max(0, Math.min(100, Math.round(valor)));
+      const txt = document.getElementById('txtConfiabilidad');
+      const bar = document.getElementById('barraConfiabilidad');
+      if (!txt || !bar) return;
+
+      txt.innerText = `${pct}%`;
+      bar.style.width = `${pct}%`;
+
+      // Verde = análisis bien sustentado; amarillo = evidencia parcial;
+      // rojo = datos insuficientes/inconsistentes.
+      if (pct >= 85) {
+        bar.style.background = '#10b981';
+        txt.style.color = '#34d399';
+      } else if (pct >= 65) {
+        bar.style.background = '#f59e0b';
+        txt.style.color = '#fbbf24';
+      } else {
+        bar.style.background = '#ef4444';
+        txt.style.color = '#f87171';
+      }
+    }
+
+    function actualizarTodo() {
+      const refKey = document.getElementById('refSelect').value;
+      const refData = refrigerantes[refKey];
+      const pf = pUnits[pUnitActual].factor;
+
+      let pSuctInput = parseFloat(document.getElementById('pSuct').value);
+      let pDescInput = parseFloat(document.getElementById('pDesc').value);
+
+      if (isNaN(pSuctInput)) pSuctInput = 25;
+      if (isNaN(pDescInput)) pDescInput = 290;
+
+      const barFactor = (pUnitActual === 'psi') ? 14.5038 : ((pUnitActual === 'kpa') ? 100 : 1.0);
+      const atmBar = 1.01325;
+
+      const pSuctBarAbs = Math.max((pSuctInput / barFactor) + atmBar, 0.2);
+      const pDescBarAbs = Math.min((pDescInput / barFactor) + atmBar, refData.criticalP - 0.2);
+
+      let tEvapOutVal = parseFloat(document.getElementById('tEvapOut').value) || -12;
+      let tSuctVal = parseFloat(document.getElementById('tSuct').value) || -10;
+      let tLiqVal = parseFloat(document.getElementById('tLiq').value) || 45;
+      let tDescRealVal = parseFloat(document.getElementById('tDescReal').value) || 90;
+
+      let tEvapOutC = tEvapOutVal;
+      let tSuctC = tSuctVal;
+      let tLiqC = tLiqVal;
+      let tDescRealC = tDescRealVal;
+
+      if (tUnitActual === 'F') {
+        tEvapOutC = (tEvapOutVal - 32) * 5/9;
+        tSuctC = (tSuctVal - 32) * 5/9;
+        tLiqC = (tLiqVal - 32) * 5/9;
+        tDescRealC = (tDescRealVal - 32) * 5/9;
+      }
+
+      const vVolt = parseFloat(document.getElementById('vVolt').value) || 220;
+      const iAmp = parseFloat(document.getElementById('iAmp').value) || 0;
+      // Potencia eléctrica estimada: se conserva el factor 0.90 de la versión base.
+      // No se presenta como potencia medida si no existe PF/medición de kW.
+      const pKw = (vVolt * iAmp * 0.9) / 1000.0;
+
+      prepareRefrigerant(refData);
+
+      const propEvap = getPropAtP(refData, pSuctBarAbs);
+      const propCond = getPropAtP(refData, pDescBarAbs);
+
+      // Para mezclas: SH se referencia al punto de rocío y SC al punto de burbuja.
+      const tSatEvapDew = Number.isFinite(propEvap.tDew) ? propEvap.tDew : propEvap.tSat;
+      const tSatCondBubble = Number.isFinite(propCond.tBubble) ? propCond.tBubble : propCond.tSat;
+      const tSatCondDew = Number.isFinite(propCond.tDew) ? propCond.tDew : propCond.tSat;
+
+      const superHeatUtilK = tEvapOutC - tSatEvapDew;
+      const superHeatTotalK = tSuctC - tSatEvapDew;
+      const subCoolK = tSatCondBubble - tLiqC;
+      const dischargeSuperHeatK = tDescRealC - tSatCondDew;
+
+      const deltaTCondAmb = tSatCondBubble - tempAmbientePuntoFijoC;
+
+      /*
+       * ESTADOS REALES:
+       * 1 = P1 + T1
+       * 2 = P2 + T2  <-- la temperatura de descarga ahora determina h2
+       * 3 = P3 + T3
+       * 4 = h3, P4=P1 (expansión isentálpica)
+       *
+       * Ya no se utiliza Math.max() entre una estimación de compresión
+       * y otra térmica. La medición de campo P2/T2 manda sobre el punto 2.
+       */
+      const estado1 = getStatePT(refData, pSuctBarAbs, tSuctC);
+      const estado2 = getStatePT(refData, pDescBarAbs, tDescRealC);
+      const estado3 = getStatePT(refData, pDescBarAbs, tLiqC);
+
+      const h1 = Number.isFinite(estado1.h)
+        ? estado1.h
+        : propEvap.hV + Math.max(superHeatTotalK,0) * (refData.cpV || 1.0);
+
+      const h2 = Number.isFinite(estado2.h)
+        ? estado2.h
+        : propCond.hV + Math.max(dischargeSuperHeatK,0) * (refData.cpV || 1.0);
+
+      const h3 = Number.isFinite(estado3.h)
+        ? estado3.h
+        : propCond.hL - Math.max(subCoolK,0) * (refData.cpL || 1.0);
+
+      const h4 = h3;
+      const qn = h1 - h4;
+
+      const rP = pDescBarAbs / pSuctBarAbs;
+      const w = h2 - h1;
+      const cop = w > 0 ? (qn / w) : 0;
+
+      // Estado 2s: compresión isentrópica ideal desde el estado 1 hasta P2.
+      // Se calcula siempre para alimentar el motor; el botón solo controla su trazado.
+      const estado2s = (Number.isFinite(estado1.s) && pDescBarAbs > pSuctBarAbs)
+        ? getStatePS(refData, pDescBarAbs, estado1.s)
+        : null;
+      const h2s = estado2s && Number.isFinite(estado2s.h) ? estado2s.h : null;
+      const wIdeal = Number.isFinite(h2s) ? h2s - h1 : null;
+      const etaIs = Number.isFinite(w) && w > 0 && Number.isFinite(wIdeal) && wIdeal > 0
+        ? Math.max(0, Math.min(1.5, wIdeal / w)) : null;
+
+      document.getElementById('kpiSHUtil').innerText = `${superHeatUtilK.toFixed(1)} K`;
+      document.getElementById('kpiSHTotal').innerText = `${superHeatTotalK.toFixed(1)} K`;
+      document.getElementById('kpiSC').innerText = `${subCoolK.toFixed(1)} K`;
+      document.getElementById('kpiKW').innerText = `${pKw.toFixed(2)} kW`;
+      document.getElementById('kpiqn').innerText = `${qn.toFixed(1)} kJ/kg`;
+      document.getElementById('kpiw').innerText = `${w.toFixed(1)} kJ/kg`;
+      document.getElementById('kpicop').innerText = cop.toFixed(2);
+      document.getElementById('kpiDeltaAmb').innerText = `${deltaTCondAmb.toFixed(1)} K`;
+
+      const { alertas, alarmaTDesc, alarmaTLiq, confiabilidad } = evaluarDiagnostico(
+        refData, rP, tDescRealC, tLiqC, tSatCondBubble, superHeatUtilK, superHeatTotalK, subCoolK, dischargeSuperHeatK, tempAmbientePuntoFijoC,
+        pSuctBarAbs, pDescBarAbs, tSatEvapDew, expansionActual
+      );
+      
+      const grpDesc = document.getElementById('grpTDescReal');
+      const grpLiq = document.getElementById('grpTLiq');
+      const panelAlertas = document.getElementById('panelAlertas');
+
+      if (alarmaTDesc) grpDesc.classList.add('alarm-field-active');
+      else grpDesc.classList.remove('alarm-field-active');
+
+      if (alarmaTLiq) grpLiq.classList.add('alarm-field-active');
+      else grpLiq.classList.remove('alarm-field-active');
+
+      const fuenteTermo = refData.thermoSource || (window.CoolProp ? 'CoolProp disponible' : 'tabla local de respaldo');
+      const modoTexto = MODOS_EVAP[modoEvapActual] ? MODOS_EVAP[modoEvapActual].label : modoEvapActual;
+      const idealTexto = Number.isFinite(etaIs)
+        ? `2s disponible: h₂s ${h2s.toFixed(1)} kJ/kg · w ideal ${wIdeal.toFixed(1)} kJ/kg · ηis ${(etaIs*100).toFixed(1)} %`
+        : `2s no disponible: se requiere CoolProp para calcular la compresión isentrópica.`;
+      // Presentación estructurada: una fila por evidencia/alerta.
+      // El motor conserva el texto completo; aquí solo lo organizamos visualmente.
+      const escaparHtml = txt => String(txt)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+      const filaDiagnostico = (html, extraClass='') => {
+        const raw = String(html);
+        const iconMatch = raw.match(/^(🔴|🟠|🟡|🟢|🔵|⚠️|🔎)/);
+        const icon = iconMatch ? iconMatch[1] : '•';
+        let contenido = raw.replace(/^(🔴|🟠|🟡|🟢|🔵|⚠️|🔎)\s*/, '');
+        const titleMatch = contenido.match(/^<b>(.*?)<\/b>\s*:?\s*/);
+        let title = titleMatch ? titleMatch[1].replace(/:$/,'') : 'Diagnóstico';
+        let detalle = titleMatch ? contenido.slice(titleMatch[0].length) : contenido;
+        return `<tr class="${extraClass}"><td class="diag-status">${icon}</td><td class="diag-title">${title}</td><td class="diag-text">${detalle}</td></tr>`;
+      };
+
+      const filas = [];
+      filas.push(`<tr class="diag-info"><td class="diag-status">⚙</td><td class="diag-title">Expansión</td><td class="diag-text">${TIPOS_EXPANSION[expansionActual]?.label || expansionActual} · ${TIPOS_EXPANSION[expansionActual]?.desc || ''}</td></tr>`);
+      filas.push(`<tr class="diag-info"><td class="diag-status">⚙</td><td class="diag-title">Aplicación</td><td class="diag-text">${modoTexto} · referencia ${MODOS_EVAP[modoEvapActual]?.tMin ?? '—'} a ${MODOS_EVAP[modoEvapActual]?.tMax ?? '—'} °C</td></tr>`);
+      alertas.forEach(a => {
+        let cls = '';
+        if (String(a).includes('DATOS EN CONFLICTO')) cls = 'diag-conflict';
+        filas.push(filaDiagnostico(a, cls));
+      });
+      filas.push(`<tr class="diag-compression"><td class="diag-status">⚙</td><td class="diag-title">Compresión ideal</td><td class="diag-text">${idealTexto}</td></tr>`);
+      filas.push(`<tr class="diag-system"><td class="diag-status">ⓘ</td><td class="diag-title">Motor termodinámico</td><td class="diag-text">${fuenteTermo}. Las tablas locales son respaldo aproximado.</td></tr>`);
+
+      /* Filas que aporta el módulo del monitor: estado del ESP32, alarmas de
+         sonda, ΔT, batería y referencias P–T de las dos presiones medidas.
+         Si el módulo no está presente, la tabla queda igual que antes. */
+      if (typeof window.__monitorFilasDiag === 'function') {
+        try {
+          const filasExtra = window.__monitorFilasDiag();
+          if (Array.isArray(filasExtra)) filasExtra.forEach(f => filas.push(f));
+        } catch (e) {
+          console.warn('No se pudieron añadir las filas del monitor:', e);
+        }
+      }
+
+      panelAlertas.innerHTML = `<div class="diag-table-wrap"><table class="diag-table"><thead><tr><th class="diag-status">Est.</th><th>Indicador</th><th>Resultado / interpretación</th></tr></thead><tbody>${filas.join('')}</tbody></table></div>`;
+      actualizarBarraConfiabilidad(confiabilidad);
+
+      const pSuctPlot = pSuctBarAbs * pf;
+      const pDescPlot = pDescBarAbs * pf;
+
+      const minX = refData.xRange[0];
+      const maxX = refData.xRange[1];
+
+      const zoneTraces = getZoneTraces(refData, minX, maxX);
+
+      const t1Str = `${convertirTemp(tSuctC).toFixed(1)} °${tUnitActual}`;
+      const t2Str = `${convertirTemp(tDescRealC).toFixed(1)} °${tUnitActual}`;
+      const t3Str = `${convertirTemp(tLiqC).toFixed(1)} °${tUnitActual}`;
+      const t4Str = `${convertirTemp(tSatEvapDew).toFixed(1)} °${tUnitActual}`;
+
+      const cycleTrace = {
+        x: [h1, h2, h3, h4, h1],
+        y: [pSuctPlot, pDescPlot, pDescPlot, pSuctPlot, pSuctPlot],
+        mode: 'lines+markers+text',
+        name: 'Ciclo Operativo',
+        text: ['1', '2', '3', '4', '1'],
+        textposition: 'top center',
+        textfont: { size: 8, color: CM().cicloTexto },
+        line: { color: '#ef4444', width: 2.2 },
+        marker: { size: 6, color: '#f59e0b' },
+        hovertemplate: '<b>Punto %{text} del Ciclo</b><br>' +
+                       'Temp: %{customdata}<br>' +
+                       'P: %{y:.1f} ' + pUnits[pUnitActual].label + '<br>' +
+                       'h: %{x:.1f} kJ/kg<extra></extra>',
+        customdata: [t1Str, t2Str, t3Str, t4Str, t1Str]
+      };
+
+
+      // Puntos de consulta: uno por tramo.
+      // IMPORTANTE: el eje de presión es logarítmico. Para que el punto
+      // quede visualmente sobre el 50 % del tramo vertical 1→2, 3→4, etc.,
+      // la interpolación de presión debe hacerse en escala logarítmica.
+      // Con presión lineal el marcador se desplazaba fuera de la línea.
+      const probeDefs = [
+        {name:"Medio compresión 1→2", a:[h1,pSuctBarAbs], b:[h2,pDescBarAbs], frac:0.50},
+        {name:"Medio descarga / condensación 2→3", a:[h2,pDescBarAbs], b:[h3,pDescBarAbs], frac:0.50},
+        {name:"Medio expansión 3→4", a:[h3,pDescBarAbs], b:[h4,pSuctBarAbs], frac:0.50},
+        {name:"Medio evaporación 4→1", a:[h4,pSuctBarAbs], b:[h1,pSuctBarAbs], frac:0.50}
+      ];
+
+      const probeX = [];
+      const probeY = [];
+      const probeText = [];
+      const probeCustom = [];
+
+      const interpLogP = (pA, pB, f) => {
+        if (!(pA > 0) || !(pB > 0)) return NaN;
+        return Math.exp(Math.log(pA) + (Math.log(pB) - Math.log(pA)) * f);
+      };
+
+      probeDefs.forEach(pr => {
+        const x = pr.a[0] + (pr.b[0]-pr.a[0])*pr.frac;
+        const pBar = interpLogP(pr.a[1], pr.b[1], pr.frac);
+        const y = pBar * pf;
+        const t = getStatePH(refData, pBar, x);
+        probeX.push(x);
+        probeY.push(y);
+        probeText.push("•");
+        probeCustom.push([
+          pr.name,
+          Number.isFinite(t) ? `${convertirTemp(t).toFixed(1)} °${tUnitActual}` : "—",
+          `${(pBar*pf).toFixed(1)} ${pUnits[pUnitActual].label}`,
+          `${x.toFixed(1)} kJ/kg`
+        ]);
+      });
+
+      const probeTrace = {
+        x: probeX,
+        y: probeY,
+        mode: 'markers+text',
+        text: probeText,
+        textposition: 'middle center',
+        name: 'Puntos de consulta',
+        marker: {
+          size: 11,
+          color: '#fbbf24',
+          line: {color: CM().contraste, width:1.5},
+          symbol: 'circle'
+        },
+        customdata: probeCustom,
+        hovertemplate:
+          '<b>%{customdata[0]}</b><br>' +
+          'T aprox.: %{customdata[1]}<br>' +
+          'P: %{customdata[2]}<br>' +
+          'h: %{customdata[3]}<extra></extra>',
+        showlegend: false
+      };
+
+      // Trazado de compresión ideal: curva 1→2s a entropía constante.
+      const idealTraces = [];
+      if (compresionIdealVisible && estado2s && Number.isFinite(h2s) && Number.isFinite(estado1.s)) {
+        const idealX = [];
+        const idealY = [];
+        const idealT = [];
+        const nIdeal = 28;
+        for (let i = 0; i < nIdeal; i++) {
+          const f = i / (nIdeal - 1);
+          const pBar = pSuctBarAbs * Math.pow(pDescBarAbs / pSuctBarAbs, f);
+          const st = getStatePS(refData, pBar, estado1.s);
+          if (st && Number.isFinite(st.h)) {
+            idealX.push(st.h);
+            idealY.push(pBar * pf);
+            idealT.push(`${convertirTemp(st.t).toFixed(1)} °${tUnitActual}`);
+          }
+        }
+        if (idealX.length > 1) {
+          idealTraces.push({
+            x: idealX, y: idealY, mode:'lines', name:'Compresión ideal 1→2s',
+            line:{color:'#a78bfa', width:2, dash:'dot'},
+            customdata:idealT,
+            hovertemplate:'<b>Compresión ideal 1→2s</b><br>T: %{customdata}<br>P: %{y:.1f} '+pUnits[pUnitActual].label+'<br>h: %{x:.1f} kJ/kg<extra></extra>',
+            showlegend:false
+          });
+          idealTraces.push({
+            x:[h2s], y:[pDescPlot], mode:'markers+text', name:'Punto 2s',
+            text:['2s'], textposition:'top center',
+            textfont:{size:8,color: CM().idealTexto},
+            marker:{size:8,color:'#a78bfa',symbol:'diamond',line:{color:'#0f172a',width:1.5}},
+            customdata:[[estado2s.t, h2s, estado1.s, wIdeal, etaIs]],
+            hovertemplate:'<b>Punto 2s — compresión ideal</b><br>T: %{customdata[0]:.1f} °C<br>P: %{y:.1f} '+pUnits[pUnitActual].label+'<br>h: %{customdata[1]:.1f} kJ/kg<br>s₁: %{customdata[2]:.3f} kJ/kg·K<br>Trabajo ideal: %{customdata[3]:.1f} kJ/kg<br>ηis: %{customdata[4]:.1%}<extra></extra>',
+            showlegend:false
+          });
+        }
+      }
+
+      const modo = MODOS_EVAP[modoEvapActual] || MODOS_EVAP.MBP;
+      const modoBandTraces = [];
+      const pModoMin = pressureAtT(refData, modo.tMin, 1);
+      const pModoMax = pressureAtT(refData, modo.tMax, 1);
+      if (Number.isFinite(pModoMin) && Number.isFinite(pModoMax) && pModoMin > 0 && pModoMax > 0) {
+        const yLow = Math.min(pModoMin, pModoMax) * pf;
+        const yHigh = Math.max(pModoMin, pModoMax) * pf;
+        // Zona de aplicación: sombreado muy tenue para no competir con el ciclo.
+        // Las dos fronteras son las únicas líneas visibles de referencia.
+        modoBandTraces.push({
+          x:[minX,maxX,maxX,minX,minX], y:[yLow,yLow,yHigh,yHigh,yLow],
+          fill:'toself', mode:'lines',
+          line:{color:'rgba(0,0,0,0)',width:0},
+          fillcolor:'rgba(148,163,184,0.025)', name:`Zona ${modoEvapActual}`,
+          hoverinfo:'skip', showlegend:false
+        });
+        modoBandTraces.push({
+          x:[minX,maxX], y:[yLow,yLow], mode:'lines',
+          line:{color:modo.color,width:1,dash:'dot'},
+          hovertemplate:`<b>${modoEvapActual} — límite inferior</b><br>Tevap: ${modo.tMin} °C<extra></extra>`,
+          showlegend:false
+        });
+        modoBandTraces.push({
+          x:[minX,maxX], y:[yHigh,yHigh], mode:'lines',
+          line:{color:modo.color,width:1,dash:'dot'},
+          hovertemplate:`<b>${modoEvapActual} — límite superior</b><br>Tevap: ${modo.tMax} °C<extra></extra>`,
+          showlegend:false
+        });
+        modoBandTraces.push({
+          x:[maxX - (maxX-minX)*0.08],
+          y:[Math.sqrt(yLow*yHigh)],
+          mode:'text',
+          text:[modoEvapActual],
+          textposition:'middle right',
+          textfont:{size:8,color:modo.color},
+          hoverinfo:'skip',
+          showlegend:false
+        });
+      }
+
+      const domeTrace = getDomeTrace(refData);
+
+      const layout = {
+        autosize: true,
+        // Navegación del gráfico: arrastrar desplaza el Mollier.
+        // Se evita el zoom rectangular por selección.
+        dragmode: 'pan',
+        margin: { l: 22, r: 10, t: 10, b: 22 },
+        paper_bgcolor: CM().paper,
+        plot_bgcolor: CM().plot,
+        showlegend: false,
+        xaxis: {
+          title: 'h (kJ/kg)',
+          titlefont: { size: 7, color: CM().titulo },
+          tickfont: { size: 6.5, color: CM().eje },
+          gridcolor: CM().grid,
+          zeroline: false,
+          autorange: !zonaActivaHabilitada,
+          range: zonaActivaHabilitada ? [Math.max(h4 - 25, minX), Math.min(h2 + 25, maxX)] : undefined
+        },
+        yaxis: {
+          title: `P. Abs (${pUnits[pUnitActual].label})`,
+          titlefont: { size: 7, color: CM().titulo },
+          tickfont: { size: 6.5, color: CM().eje },
+          type: 'log',
+          automargin: true,
+          gridcolor: CM().grid,
+          zeroline: false,
+          autorange: !zonaActivaHabilitada,
+          range: zonaActivaHabilitada ? [Math.log10(pSuctPlot * 0.75), Math.log10(pDescPlot * 1.25)] : undefined
+        }
+      };
+
+      if (typeof Plotly !== 'undefined') {
+        Plotly.react('mollierPlot', [...zoneTraces, ...modoBandTraces, domeTrace, ...idealTraces, cycleTrace, probeTrace], layout, {
+          responsive: true,
+          displayModeBar: false,
+          // Sin barra de herramientas. Un dedo = pan; rueda = zoom.
+          // El pinch de dos dedos se gestiona manualmente para evitar que
+          // Plotly mezcle pan + zoom y provoque movimientos erráticos.
+          scrollZoom: true,
+          doubleClick: 'reset'
+        }).then(() => instalarPinchZoomMollier());
+      } else {
+        console.warn('Plotly todavía no está disponible; se reintentará.');
+        setTimeout(() => {
+          if (typeof Plotly !== 'undefined') {
+            actualizarTodo();
+          }
+        }, 800);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Navegación táctil estable del Mollier
+    // -------------------------------------------------------------------------
+    // Plotly maneja muy bien el pan con un dedo y el zoom con rueda, pero en
+    // algunos teléfonos el gesto de dos dedos puede ser interpretado a la vez
+    // como pan + zoom. Aquí interceptamos SOLO el gesto de dos dedos y hacemos
+    // el zoom de forma controlada. El gesto de un dedo queda para Plotly.
+    let pinchMollierInstalado = false;
+    let pinchActivo = false;
+    let pinchDistInicial = 0;
+    let pinchXRangoInicial = null;
+    let pinchYRangoInicial = null;
+    let pinchCentroXInicial = null;
+    let pinchCentroYInicial = null;
+
+    function distanciaPinch(t1, t2) {
+      const dx = t2.clientX - t1.clientX;
+      const dy = t2.clientY - t1.clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    function instalarPinchZoomMollier() {
+      const gd = document.getElementById('mollierPlot');
+      if (!gd || pinchMollierInstalado) return;
+      pinchMollierInstalado = true;
+
+      // Evita que el navegador intente desplazar la página sobre el gráfico.
+      gd.style.touchAction = 'none';
+
+      gd.addEventListener('touchstart', (ev) => {
+        if (ev.touches.length !== 2) return;
+
+        // Desde este punto Plotly no recibe el gesto de dos dedos.
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        const a = ev.touches[0];
+        const b = ev.touches[1];
+        pinchDistInicial = distanciaPinch(a, b);
+        if (!Number.isFinite(pinchDistInicial) || pinchDistInicial <= 0) return;
+
+        const xRange = gd._fullLayout?.xaxis?.range;
+        const yRange = gd._fullLayout?.yaxis?.range;
+        if (!Array.isArray(xRange) || !Array.isArray(yRange)) return;
+
+        pinchXRangoInicial = [...xRange];
+        pinchYRangoInicial = [...yRange];
+
+        // Centro visual del gesto, expresado en coordenadas de pantalla.
+        pinchCentroXInicial = (a.clientX + b.clientX) / 2;
+        pinchCentroYInicial = (a.clientY + b.clientY) / 2;
+        pinchActivo = true;
+      }, { capture: true, passive: false });
+
+      gd.addEventListener('touchmove', (ev) => {
+        if (!pinchActivo || ev.touches.length < 2) return;
+
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        const a = ev.touches[0];
+        const b = ev.touches[1];
+        const distActual = distanciaPinch(a, b);
+        if (!Number.isFinite(distActual) || distActual <= 0) return;
+
+        // >1 acerca; <1 aleja.
+        const factor = distActual / pinchDistInicial;
+        if (!Number.isFinite(factor) || factor <= 0) return;
+
+        const x0 = pinchXRangoInicial[0];
+        const x1 = pinchXRangoInicial[1];
+        const y0 = pinchYRangoInicial[0];
+        const y1 = pinchYRangoInicial[1];
+
+        const xMid = (x0 + x1) / 2;
+        const yMid = (y0 + y1) / 2;
+        const xHalf = Math.abs(x1 - x0) / 2 / factor;
+        const yHalf = Math.abs(y1 - y0) / 2 / factor;
+
+        if (!(xHalf > 0) || !(yHalf > 0)) return;
+
+        // Conservamos el centro de la vista durante el pinch. Esto evita que
+        // pequeñas variaciones de posición de los dedos hagan "saltar" la gráfica.
+        const nuevoX = [xMid - xHalf, xMid + xHalf];
+        const nuevoY = [yMid - yHalf, yMid + yHalf];
+
+        Plotly.relayout(gd, {
+          'xaxis.range': nuevoX,
+          'yaxis.range': nuevoY,
+          'xaxis.autorange': false,
+          'yaxis.autorange': false
+        });
+      }, { capture: true, passive: false });
+
+      const finalizarPinch = (ev) => {
+        if (!pinchActivo) return;
+        if (ev.type === 'touchend' || ev.type === 'touchcancel') {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        if (ev.touches && ev.touches.length >= 2) return;
+        pinchActivo = false;
+        pinchDistInicial = 0;
+        pinchXRangoInicial = null;
+        pinchYRangoInicial = null;
+      };
+
+      gd.addEventListener('touchend', finalizarPinch, { capture: true, passive: false });
+      gd.addEventListener('touchcancel', finalizarPinch, { capture: true, passive: false });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      cargarConfiguracion();
+      actualizarEtiquetas();
+      actualizarReloj();
+      actualizarEstadoBotonZoom();
+      actualizarEstadoBotonCompresionIdeal();
+      setInterval(actualizarReloj, 1000);
+
+      // Render inicial independiente de Internet/clima.
+      // Esto garantiza KPIs, alertas y Mollier desde el primer momento.
+      try {
+        actualizarTodo();
+      } catch (e) {
+        console.error('Error en render inicial:', e);
+      }
+
+      // El clima solo actualiza el Delta T después; no bloquea el diagnóstico.
+      obtenerClimaPuntoFijo().catch(e => console.warn('Clima no disponible:', e));
+
+      // Si CoolProp termina de cargar después del primer render,
+      // sustituimos tablas locales por EOS y redibujamos el domo.
+      window.addEventListener('coolprop-ready', () => {
+        try {
+          const rd = refrigerantes[document.getElementById('refSelect').value];
+          prepareRefrigerant(rd);
+          actualizarTodo();
+        } catch (e) {
+          console.error('No se pudo activar CoolProp:', e);
+        }
+      });
+    });
+  </script>
+  <script>
+/* ============================================================================
+   MÓDULO MONITOR TÉRMICO · API ESP32 (Cloudflare Worker) · HERMETICIDAD · TEMA
+   ----------------------------------------------------------------------------
+   Se apoya en el motor de Mollier cargado justo más arriba:
+     · refrigerantes, prepareRefrigerant(), saturationAtP()
+     · pUnits, pUnitActual, tUnitActual, convertirTemp()
+     · actualizarTodo(), guardarYActualizar(), toggleCompresionIdeal(),
+       toggleZonaActiva(), descargarPDFReporte()
+   Todo vive dentro de un IIFE para no chocar con los nombres del motor.
+   ============================================================================ */
+(function () {
+  'use strict';
+
+  /* ------------------------------- CONFIGURACIÓN -------------------------- */
+  const API_URL   = "https://api-termometro.manuelaa1990.workers.dev";
+  const API_TOKEN = "trm_2026_xK9pL3mN7qR2sT5vW8yZ1bC4dF6gH0jA";
+
+  const WORKER_SOPORTA_FROM_TO  = false;
+  const MAX_HORAS_ATRAS         = 72;
+  const MAX_PUNTOS_GRAFICA      = 1200;
+  const HUECO_MS                = 5 * 60 * 1000;
+  const PASO_MARCA_MIN          = { 2: 20, 4: 30, 8: 60, 12: 120, 24: 180 };
+  const VENTANAS_VALIDAS        = [2, 4, 8, 12, 24];
+  const EDAD_MAX_ESP32_MS       = 35000;
+  const INTERVALO_SONDEO_MS     = 10000;
+  const INTERVALO_HISTORICO_MS  = 30000;
+  const ATM_PSI                 = 14.696;
+  const PA_POR_PSI              = 6894.757293168;
+  const CAMPOS_TEMP             = ['tEvapOut', 'tSuct', 'tLiq', 'tDescReal'];
+
+  /* Claves de localStorage: se conservan los nombres que ya usaba la app del
+     termómetro para no perder alarmas ni la referencia de hermeticidad
+     guardadas (las dos apps comparten origen en GitHub Pages). */
+  const K_ALARMA1     = 'alarm1-input';
+  const K_ALARMA2     = 'alarm2-input';
+  const K_ALARMAD     = 'alarmDeltaMin-input';
+  const K_RANGO       = 'selected-hours-range';
+  const K_INVERTIR    = 'probes-inverted';
+  const K_PESO1       = 'ph-s1-weight';
+  const K_REF_PH      = 'pressure-reference';
+  const K_ULT_PH      = 'pressure-last-measured';
+  const K_MED_PH      = 'pressure-measurements';
+  const K_TEMA        = 'refrig_tema';
+  const K_SENSOR_P    = 'refrig_sensor_p';
+  const K_MAP_S1      = 'refrig_map_s1';
+  const K_MAP_S2      = 'refrig_map_s2';
+  const K_AUTO_CAMPOS = 'refrig_auto_campos';
+
+  /* --------------------------------- ESTADO ------------------------------- */
+  const $ = id => document.getElementById(id);
+  const poner = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
+
+  let rangoHoras = parseInt(localStorage.getItem(K_RANGO), 10);
+  if (!VENTANAS_VALIDAS.includes(rangoHoras)) rangoHoras = 2;
+
+  let finVentana      = new Date();
+  let enVivo          = true;
+  let datosCrudos     = [];
+  let ultimaVista     = null;   // última fila procesada de la ventana visible
+  let ultimaAbsoluta  = null;   // última lectura absoluta (batería / wifi)
+  let invertido       = localStorage.getItem(K_INVERTIR) === 'true';
+  let alarmaActiva    = false;
+  let ultimaSenal     = null;
+  let apiOk           = null;
+  let errorApi        = null;
+  let sondeando       = false;
+  let secuencia       = 0;
+  let mapaS1          = localStorage.getItem(K_MAP_S1) || 'tEvapOut';
+  let mapaS2          = localStorage.getItem(K_MAP_S2) || 'tSuct';
+  const autoCampos    = { tEvapOut: true, tSuct: true, tLiq: true, tDescReal: true };
+  const autoPresion   = { pSuct: true, pDesc: true };
+  let sensorAbsoluto  = localStorage.getItem(K_SENSOR_P) === 'absoluta';
+  let temaActual      = localStorage.getItem(K_TEMA) === 'claro' ? 'claro' : 'oscuro';
+
+  let pesoEvap = parseInt(localStorage.getItem(K_PESO1), 10);
+  if (!Number.isFinite(pesoEvap) || pesoEvap < 0 || pesoEvap > 100) pesoEvap = 60;
+  let pesoCond = 100 - pesoEvap;
+  let referenciaPH   = null;
+  let ultimaMedidaPH = null;
+  let medidasPH      = [];
+
+  /* ------------------------------- UTILIDADES ----------------------------- */
+  function aNumero(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  /* El DS18B20 entrega -127 cuando está desconectado: se descarta */
+  function limpiarTemp(v) {
+    const n = aNumero(v);
+    return (n !== null && n > -50 && n <= 125) ? n : null;
+  }
+  function conTimeout(promesa, ms) {
+    let timer;
+    const corte = new Promise((_, rechazar) => { timer = setTimeout(() => rechazar(new Error('TIMEOUT')), ms); });
+    return Promise.race([promesa, corte]).finally(() => clearTimeout(timer));
+  }
+  function esperar(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function escaparHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function formatearEdad(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return s + ' s';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + ' min';
+    const h = Math.floor(m / 60);
+    return h + ' h ' + (m % 60) + ' min';
+  }
+  function vibrar(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
+
+  /* -------------------------------- TEMA ---------------------------------- */
+  function esTemaClaro() { return document.documentElement.getAttribute('data-tema') === 'claro'; }
+
+  /* Colores que el motor de Mollier consulta en cada render */
+  function colorMollier() {
+    return esTemaClaro()
+      ? { paper: '#ffffff', plot: '#f8fafc', grid: '#cbd5e1', eje: '#334155', titulo: '#475569',
+          cicloTexto: '#0f172a', contraste: '#ffffff', idealTexto: '#6d28d9', domo: '#0284c7' }
+      : { paper: '#1e293b', plot: '#0f172a', grid: '#334155', eje: '#cbd5e1', titulo: '#94a3b8',
+          cicloTexto: '#f8fafc', contraste: '#0f172a', idealTexto: '#ddd6fe', domo: '#38bdf8' };
+  }
+  window.__colorMollier = colorMollier;
+
+  function colorMonitor() {
+    return esTemaClaro()
+      ? { papel: '#ffffff', fondo: '#f8fafc', rejilla: '#e2e8f0', eje: '#475569', titulo: '#334155' }
+      : { papel: '#1e293b', fondo: '#0f172a', rejilla: '#334155', eje: '#cbd5e1', titulo: '#94a3b8' };
+  }
+
+  function aplicarTema(nuevo, silencioso) {
+    temaActual = (nuevo === 'claro') ? 'claro' : 'oscuro';
+    document.documentElement.setAttribute('data-tema', temaActual);
+    try { localStorage.setItem(K_TEMA, temaActual); } catch (e) {}
+    const btn = $('btnTema');
+    if (btn) btn.textContent = temaActual === 'claro' ? '🌙 Oscuro' : '☀️ Claro';
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', temaActual === 'claro' ? '#eef2f7' : '#0f172a');
+    if (silencioso) return;
+    try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
+    dibujarMonitor();
+  }
+  window.alternarTema = function () { aplicarTema(temaActual === 'claro' ? 'oscuro' : 'claro'); };
+
+  /* --------------------------- PANTALLA COMPLETA -------------------------- */
+  function abrirMollier() {
+    const ov = $('overlayMollier');
+    if (!ov) return;
+    ov.classList.add('abierto');
+    document.body.classList.add('con-overlay');
+    try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
+    const ajustar = () => { try { if (window.Plotly) Plotly.Plots.resize('mollierPlot'); } catch (e) {} };
+    setTimeout(ajustar, 60);
+    setTimeout(ajustar, 380);
+    vibrar(10);
+  }
+  function cerrarMollier() {
+    const ov = $('overlayMollier');
+    if (!ov) return;
+    ov.classList.remove('abierto');
+    document.body.classList.remove('con-overlay');
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  }
+  function pantallaCompletaNativa() {
+    const raiz = document.documentElement;
+    if (!document.fullscreenElement) {
+      if (raiz.requestFullscreen) raiz.requestFullscreen().catch(() => {});
+      else if (raiz.webkitRequestFullscreen) raiz.webkitRequestFullscreen();
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+    setTimeout(() => { try { if (window.Plotly) Plotly.Plots.resize('mollierPlot'); } catch (e) {} }, 400);
+  }
+  window.abrirMollier = abrirMollier;
+  window.cerrarMollier = cerrarMollier;
+  window.pantallaCompletaNativa = pantallaCompletaNativa;
+
+  /* --------------------- MAPEO SONDA -> CAMPO DEL MOTOR ------------------- */
+  function idMarca(campo) { return 'auto' + campo.charAt(0).toUpperCase() + campo.slice(1); }
+
+  function pintarMarcaAuto(campo) {
+    const el = $(idMarca(campo));
+    if (!el) return;
+    const activo = !!autoCampos[campo];
+    el.textContent = activo ? 'A' : 'M';
+    el.classList.toggle('auto', activo);
+    el.title = activo
+      ? 'Se rellena desde la sonda en vivo. Toque para pasar a manual.'
+      : 'Edición manual. Toque para volver a la sonda en vivo.';
+  }
+  function guardarAutoCampos() {
+    try { localStorage.setItem(K_AUTO_CAMPOS, JSON.stringify(autoCampos)); } catch (e) {}
+  }
+  function cargarAutoCampos() {
+    try {
+      const s = JSON.parse(localStorage.getItem(K_AUTO_CAMPOS) || 'null');
+      if (s && typeof s === 'object') {
+        CAMPOS_TEMP.forEach(c => { if (typeof s[c] === 'boolean') autoCampos[c] = s[c]; });
+      }
+    } catch (e) {}
+    CAMPOS_TEMP.forEach(pintarMarcaAuto);
+  }
+
+  function datosFrescos(fila) {
+    if (!fila || !fila.created_at) return false;
+    const t = new Date(fila.created_at).getTime();
+    return Number.isFinite(t) && (Date.now() - t) <= EDAD_MAX_ESP32_MS;
+  }
+
+  /* Escribe las sondas en los campos del motor respetando el modo de cada campo */
+  function aplicarSondasAlMotor() {
+    const fila = ultimaVista;
+    if (!fila || !datosFrescos(fila)) return false;
+    let cambio = false;
+    [[mapaS1, fila.s1], [mapaS2, fila.s2]].forEach(par => {
+      const campo = par[0], valor = par[1];
+      if (!campo || valor === null || valor === undefined) return;
+      if (!autoCampos[campo]) return;
+      const el = $(campo);
+      if (!el) return;
+      const nuevo = convertirTemp(valor).toFixed(1);
+      if (el.value !== nuevo) { el.value = nuevo; cambio = true; }
+    });
+    if (cambio) guardarYActualizar();
+    return cambio;
+  }
+
+  window.cambiarMapeoSondas = function () {
+    const s1 = $('mapS1'), s2 = $('mapS2');
+    mapaS1 = s1 ? s1.value : '';
+    mapaS2 = s2 ? s2.value : '';
+    try {
+      localStorage.setItem(K_MAP_S1, mapaS1);
+      localStorage.setItem(K_MAP_S2, mapaS2);
+    } catch (e) {}
+    /* Al reasignar una sonda, sus campos vuelven a modo automático */
+    CAMPOS_TEMP.forEach(c => { autoCampos[c] = true; pintarMarcaAuto(c); });
+    guardarAutoCampos();
+    aplicarSondasAlMotor();
+  };
+
+  window.alternarAuto = function (campo) {
+    autoCampos[campo] = !autoCampos[campo];
+    pintarMarcaAuto(campo);
+    guardarAutoCampos();
+    if (autoCampos[campo]) aplicarSondasAlMotor();
+    else guardarYActualizar();
+  };
+
+  window.marcarTemperaturaManual = function (campo) {
+    autoCampos[campo] = false;
+    pintarMarcaAuto(campo);
+    guardarAutoCampos();
+    guardarYActualizar();
+  };
+
+  /* ------------------------------ PRESIONES ------------------------------- */
+  function factorPresion() {
+    return (pUnitActual === 'psi') ? 14.5038 : ((pUnitActual === 'kpa') ? 100 : 1.0);
+  }
+  function presionAbsolutaBar(id) {
+    const el = $(id);
+    if (!el) return null;
+    const v = aNumero(el.value);
+    if (v === null) return null;
+    return Math.max((v / factorPresion()) + 1.01325, 0.005);
+  }
+  /* El motor trabaja en presión MANOMÉTRICA en la unidad activa */
+  function presionApiAUnidad(psiBruto) {
+    const psi = aNumero(psiBruto);
+    if (psi === null) return null;
+    const psiMan = sensorAbsoluto ? psi - ATM_PSI : psi;
+    return (psiMan / 14.5038) * pUnits[pUnitActual].factor;
+  }
+  function extraerPresionesApi(fila) {
+    if (!fila) return { suct: null, desc: null };
+    const buscar = nombres => {
+      for (let i = 0; i < nombres.length; i++) {
+        const v = fila[nombres[i]];
+        if (v !== undefined && v !== null && v !== '') return v;
+      }
+      return null;
+    };
+    return {
+      suct: buscar(['presion_succion', 'presionSuccion', 'presion1', 'pres1', 'p_succion', 'pSuccion', 'p1', 'presion_baja', 'presBaja']),
+      desc: buscar(['presion_descarga', 'presionDescarga', 'presion2', 'pres2', 'p_descarga', 'pDescarga', 'p2', 'presion_alta', 'presAlta'])
+    };
+  }
+  function pintarOrigenPresion(id) {
+    const badge = $(id === 'pSuct' ? 'origenPSuct' : 'origenPDesc');
+    if (!badge) return;
+    const auto = !!autoPresion[id];
+    badge.textContent = auto ? 'API' : 'manual';
+    badge.className = 'badge' + (auto ? ' badge-ok' : '');
+    badge.title = auto
+      ? 'Valor tomado del API del ESP32. Toque para pasar a manual.'
+      : 'Valor manual. Toque para volver al API.';
+    badge.onclick = () => window.alternarPresionAuto(id);
+  }
+  window.alternarPresionAuto = function (id) {
+    autoPresion[id] = true;
+    pintarOrigenPresion(id);
+    aplicarPresionesAlMotor();
+  };
+  window.marcarPresionManual = function (id) {
+    autoPresion[id] = false;
+    pintarOrigenPresion(id);
+    guardarYActualizar();
+  };
+  window.cambiarTipoSensorPresion = function () {
+    const sel = $('tipoSensorP');
+    sensorAbsoluto = !!(sel && sel.value === 'absoluta');
+    try { localStorage.setItem(K_SENSOR_P, sensorAbsoluto ? 'absoluta' : 'manometrica'); } catch (e) {}
+    aplicarPresionesAlMotor();
+    actualizarTsat();
+  };
+
+  function aplicarPresionesAlMotor() {
+    const fila = ultimaVista;
+    if (!fila || !datosFrescos(fila)) return false;
+    const p = extraerPresionesApi(fila);
+    let cambio = false;
+    [['pSuct', p.suct], ['pDesc', p.desc]].forEach(par => {
+      const id = par[0], bruto = par[1];
+      if (bruto === null || !autoPresion[id]) return;
+      const v = presionApiAUnidad(bruto);
+      if (v === null) return;
+      const el = $(id);
+      if (!el) return;
+      const nuevo = v.toFixed(v >= 100 ? 0 : 1);
+      if (el.value !== nuevo) { el.value = nuevo; cambio = true; }
+    });
+    if (cambio) guardarYActualizar();
+    return cambio;
+  }
+
+  /* Temperaturas de saturación P–T resueltas con CoolProp (o tabla local) */
+  function actualizarTsat() {
+    const sel = $('refSelect');
+    const refData = (typeof refrigerantes !== 'undefined' && sel) ? refrigerantes[sel.value] : null;
+    const u = '°' + tUnitActual;
+
+    const pintar = (id, pBarAbs) => {
+      if (!refData || pBarAbs === null) { poner(id, 'Tsat: —'); return; }
+      try {
+        const sat = saturationAtP(refData, pBarAbs);
+        const tDew = Number.isFinite(sat.tDew) ? sat.tDew : sat.tSat;
+        const tBub = Number.isFinite(sat.tBubble) ? sat.tBubble : sat.tSat;
+        if (!Number.isFinite(tDew)) { poner(id, 'Tsat: —'); return; }
+        const zeo = Number.isFinite(tBub) && Math.abs(tDew - tBub) > 0.15;
+        const fuente = (sat.source || '').indexOf('CoolProp') === 0 ? 'CoolProp' : 'tabla';
+        poner(id, zeo
+          ? `Tsat rocío ${convertirTemp(tDew).toFixed(1)} ${u} · burbuja ${convertirTemp(tBub).toFixed(1)} ${u} · ${fuente}`
+          : `Tsat ${convertirTemp(tDew).toFixed(1)} ${u} · ${fuente}`);
+      } catch (e) {
+        poner(id, 'Tsat: —');
+      }
+    };
+
+    pintar('tsatPSuct', presionAbsolutaBar('pSuct'));
+    pintar('tsatPDesc', presionAbsolutaBar('pDesc'));
+    poner('unidadPSuct', pUnits[pUnitActual].label);
+    poner('unidadPDesc', pUnits[pUnitActual].label);
+
+    /* Etiqueta de la tarjeta de indicadores: qué motor termodinámico resuelve */
+    const motor = (window.CoolProp && refData && refData.coolprop)
+      ? nombreCoolProp()
+      : 'tablas locales de respaldo';
+    poner('txtFuenteTermo', 'Motor: ' + motor);
+  }
+  /* ------------------------------ API DEL ESP32 --------------------------- */
+  async function traerJSON(ruta) {
+    const res = await conTimeout(fetch(API_URL + ruta, {
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store'
+    }), 10000);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error('HTTP ' + res.status + (txt ? ': ' + txt.substring(0, 100) : ''));
+    }
+    return res.json();
+  }
+  const traerUltima = () => traerJSON('/latest');
+  const traerRango  = horas => traerJSON('/range?hours=' + horas);
+
+  function interpretarError(err) {
+    const msg = String((err && err.message) || err || 'Error desconocido');
+    if (msg.indexOf('TIMEOUT') >= 0) return 'el Worker no respondió en 10 s.';
+    if (msg.indexOf('HTTP 401') >= 0 || msg.indexOf('HTTP 403') >= 0) return 'token rechazado por el Worker.';
+    if (msg.indexOf('HTTP 404') >= 0) return 'ruta no encontrada en el Worker.';
+    if (msg.indexOf('Failed to fetch') >= 0 || msg.indexOf('NetworkError') >= 0) return 'sin conexión o bloqueo de red/DNS.';
+    return msg;
+  }
+  function nota(txt) { poner('notaVentana', txt || ''); }
+
+  function ventanaActual() {
+    const fin = enVivo ? Date.now() : finVentana.getTime();
+    return { inicio: fin - rangoHoras * 3600000, fin: fin };
+  }
+
+  async function traerVentana(inicioMs, finMs) {
+    if (WORKER_SOPORTA_FROM_TO) {
+      return traerJSON('/range?from=' + encodeURIComponent(new Date(inicioMs).toISOString()) +
+                       '&to=' + encodeURIComponent(new Date(finMs).toISOString()));
+    }
+    const horas = Math.ceil((Date.now() - inicioMs) / 3600000) + 1;
+    if (horas > MAX_HORAS_ATRAS) {
+      const filas = await traerRango(MAX_HORAS_ATRAS);
+      nota('El Worker entrega hasta ' + MAX_HORAS_ATRAS + ' h hacia atrás: se muestran los datos disponibles de la ventana pedida.');
+      return filas;
+    }
+    nota('');
+    return traerRango(horas);
+  }
+
+  async function cargarHistorico() {
+    const miSecuencia = ++secuencia;
+    const v = ventanaActual();
+    try {
+      const filas = await traerVentana(v.inicio, v.fin);
+      if (miSecuencia !== secuencia) return;
+      datosCrudos = (Array.isArray(filas) ? filas : [])
+        .filter(f => f && Number.isFinite(new Date(f.created_at).getTime()))
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      marcarApi(true);
+    } catch (err) {
+      if (miSecuencia !== secuencia) return;
+      marcarApi(false, err);
+      nota('No se pudo leer el histórico: ' + interpretarError(err));
+    }
+    renderMonitor();
+  }
+
+  function anotarSenal(createdAt) {
+    const d = new Date(createdAt);
+    if (isNaN(d.getTime())) return;
+    if (!ultimaSenal || d > ultimaSenal) ultimaSenal = d;
+  }
+  function marcarApi(ok, err) {
+    apiOk = ok;
+    errorApi = ok ? null : (err || new Error('Error desconocido'));
+    actualizarBadgeConexion();
+    pintarBannerSistema();
+  }
+
+  async function sondearUltima() {
+    if (sondeando || document.hidden) return;
+    sondeando = true;
+    try {
+      const fila = await traerUltima();
+      if (fila && fila.created_at) {
+        anotarSenal(fila.created_at);
+        ultimaAbsoluta = procesarFila(fila);
+        pintarBateriaWifi();
+        if (enVivo) fusionarEnVivo(fila);
+      }
+      marcarApi(true);
+    } catch (err) {
+      marcarApi(false, err);
+    } finally {
+      sondeando = false;
+      actualizarBadgeConexion();
+      pintarBannerSistema();
+    }
+  }
+
+  function fusionarEnVivo(fila) {
+    const t = new Date(fila.created_at).getTime();
+    if (!Number.isFinite(t)) return;
+    const v = ventanaActual();
+    if (t < v.inicio || t > v.fin + 60000) return;
+    const ultimaT = datosCrudos.length
+      ? new Date(datosCrudos[datosCrudos.length - 1].created_at).getTime()
+      : -Infinity;
+    if (t <= ultimaT) return;
+    datosCrudos = datosCrudos.filter(f => new Date(f.created_at).getTime() >= v.inicio);
+    datosCrudos.push(fila);
+    renderMonitor();
+  }
+
+  const CURVA_BATERIA = [
+    [4.20, 100], [4.06, 90], [3.98, 80], [3.92, 70], [3.87, 60], [3.82, 50],
+    [3.79, 40], [3.77, 30], [3.74, 20], [3.68, 10], [3.45, 5], [3.00, 0]
+  ];
+  function voltajeAPorcentaje(v) {
+    if (!Number.isFinite(v)) return null;
+    if (v >= CURVA_BATERIA[0][0]) return 100;
+    const fin = CURVA_BATERIA[CURVA_BATERIA.length - 1];
+    if (v <= fin[0]) return 0;
+    for (let i = 0; i < CURVA_BATERIA.length - 1; i++) {
+      const vAlto = CURVA_BATERIA[i][0], pAlto = CURVA_BATERIA[i][1];
+      const vBajo = CURVA_BATERIA[i + 1][0], pBajo = CURVA_BATERIA[i + 1][1];
+      if (v <= vAlto && v >= vBajo) {
+        const r = (v - vBajo) / (vAlto - vBajo);
+        return Math.round(pBajo + r * (pAlto - pBajo));
+      }
+    }
+    return 0;
+  }
+
+  function procesarFila(fila) {
+    if (!fila) return null;
+    const crudo1 = limpiarTemp(fila.temp1);
+    const crudo2 = limpiarTemp(fila.temp2);
+    const s1 = invertido ? crudo2 : crudo1;
+    const s2 = invertido ? crudo1 : crudo2;
+    const delta = (s1 !== null && s2 !== null) ? Math.abs(s1 - s2) : null;
+    const vBat = aNumero(fila.bateriaVolt);
+    return Object.assign({}, fila, {
+      s1: s1,
+      s2: s2,
+      delta: delta,
+      bateria: vBat !== null ? voltajeAPorcentaje(vBat) : null,
+      bateriaVolt: vBat,
+      wifi: fila.wifi || fila.ssid || null,
+      ip: fila.ip_local || fila.ip || null
+    });
+  }
+
+  /* --------------------------- ESTADO / AVISOS ---------------------------- */
+  function actualizarBadgeConexion() {
+    const badge = $('estadoDispositivo');
+    if (!badge) return;
+    const edad = ultimaSenal ? Math.max(0, Date.now() - ultimaSenal.getTime()) : null;
+    let texto = 'ESP32: verificando…', clase = 'badge badge-warn', tip = 'Comprobando el API del termómetro…';
+    if (!enVivo) {
+      texto = 'Modo historial'; clase = 'badge';
+      tip = 'Viendo datos históricos. Toque «Actual» para volver al presente.';
+    } else if (apiOk === null) {
+      texto = 'ESP32: verificando…'; clase = 'badge badge-warn'; tip = 'Comprobando el API del termómetro…';
+    } else if (apiOk === false) {
+      texto = 'API: sin respuesta'; clase = 'badge badge-warn';
+      tip = errorApi ? interpretarError(errorApi) : 'No se puede leer el Worker.';
+    } else if (edad !== null && edad <= EDAD_MAX_ESP32_MS) {
+      texto = 'ESP32: en línea'; clase = 'badge badge-ok';
+      tip = 'Transmitiendo · última lectura hace ' + formatearEdad(edad);
+    } else {
+      texto = 'ESP32: sin datos' + (edad !== null ? ' (' + formatearEdad(edad) + ')' : '');
+      clase = 'badge badge-off';
+      tip = edad !== null ? 'Sin lecturas desde hace ' + formatearEdad(edad) : 'No hay lecturas registradas del ESP32.';
+    }
+    badge.textContent = texto;
+    badge.className = clase;
+    badge.title = tip;
+  }
+
+  function pintarBateriaWifi() {
+    const badge = $('badgeBateria');
+    if (badge) {
+      if (ultimaAbsoluta && ultimaAbsoluta.bateria !== null && ultimaAbsoluta.bateriaVolt !== null) {
+        const pct = ultimaAbsoluta.bateria, v = ultimaAbsoluta.bateriaVolt;
+        badge.textContent = '🔋 ' + pct + '%';
+        badge.className = 'badge ' + (pct <= 20 ? 'badge-off' : (pct <= 50 ? 'badge-warn' : 'badge-ok'));
+        badge.title = 'Batería del ESP32: ' + pct + '% · ' + v.toFixed(2) + ' V';
+      } else {
+        badge.textContent = '🔋 —';
+        badge.className = 'badge';
+        badge.title = 'Sin dato de batería.';
+      }
+    }
+    const w = $('wifiValor');
+    if (w) {
+      if (ultimaAbsoluta) {
+        let txt = ultimaAbsoluta.wifi ? 'Wifi: "' + ultimaAbsoluta.wifi + '"' : 'Wifi: "Sin conexión"';
+        if (ultimaAbsoluta.ip) txt += ' · IP ' + ultimaAbsoluta.ip;
+        w.textContent = txt;
+        const rssi = aNumero(ultimaAbsoluta.rssi);
+        w.title = rssi !== null ? 'Señal: ' + rssi + ' dBm' : '';
+      } else {
+        w.textContent = 'Wifi: "—"';
+      }
+    }
+  }
+
+  function pintarBannerSistema() {
+    const b = $('bannerSistema');
+    if (!b) return;
+    let texto = '', clase = 'banner-alerta';
+    const pct = ultimaAbsoluta ? ultimaAbsoluta.bateria : null;
+    const v = ultimaAbsoluta ? ultimaAbsoluta.bateriaVolt : null;
+    if (apiOk === false) {
+      texto = '⚠️ No se puede leer el API del termómetro: ' + interpretarError(errorApi);
+      clase = 'banner-alerta peligro';
+    } else if (enVivo && ultimaSenal && !datosFrescos(ultimaAbsoluta)) {
+      texto = '⏸ Datos congelados: sin lecturas nuevas desde hace ' +
+              formatearEdad(Date.now() - ultimaSenal.getTime()) +
+              '. Las alarmas de sonda quedan en pausa hasta recibir datos nuevos.';
+    } else if (pct !== null && (pct <= 20 || (v !== null && v <= 3.10))) {
+      texto = (v !== null && v <= 3.10)
+        ? '🔋 Batería crítica del ESP32 (' + v.toFixed(2) + ' V): entrará en protección.'
+        : '🔋 Batería del ESP32 por debajo del 20% (' + pct + '%). Cargue el dispositivo.';
+    }
+    b.textContent = texto;
+    b.className = texto ? clase : 'banner-alerta oculto';
+  }
+
+  /* ------------------------------- ALARMAS -------------------------------- */
+  function leerUmbral(id) {
+    const el = $(id);
+    return el ? aNumero(el.value) : null;
+  }
+  function marcarTarjeta(id, activa) {
+    const el = $(id);
+    if (el) el.classList.toggle('alarma', !!activa);
+  }
+
+  function estadoAlarmas() {
+    const al1 = leerUmbral('alarmaS1');
+    const al2 = leerUmbral('alarmaS2');
+    const ald = leerUmbral('alarmaDT');
+    const fila = ultimaVista;
+    const fresco = !!(enVivo && fila && datosFrescos(fila));
+    return {
+      fresco: fresco,
+      fila: fila,
+      al1: al1, al2: al2, ald: ald,
+      a1: fresco && fila.s1 !== null && al1 !== null && fila.s1 >= al1,
+      a2: fresco && fila.s2 !== null && al2 !== null && fila.s2 >= al2,
+      ad: fresco && fila.delta !== null && ald !== null && fila.delta <= ald
+    };
+  }
+
+  function evaluarAlarmas() {
+    const e = estadoAlarmas();
+    marcarTarjeta('cardS1', e.a1);
+    marcarTarjeta('cardS2', e.a2);
+    marcarTarjeta('cardDT', e.ad);
+
+    const f = e.fila;
+    const texto = (valor, activa, umbral, signo) => {
+      if (!f) return 'Esperando datos…';
+      if (valor === null) return 'Sonda sin lectura válida (¿desconectada?)';
+      if (activa) return '¡ALARMA! ' + valor.toFixed(1) + ' °C ' + signo + ' ' + umbral + ' °C';
+      return 'Normal (' + valor.toFixed(1) + ' °C)';
+    };
+    const s1 = f ? f.s1 : null, s2 = f ? f.s2 : null, dt = f ? f.delta : null;
+    const e1 = $('estadoS1'), e2 = $('estadoS2'), ed = $('estadoDT');
+    if (e1) { e1.textContent = texto(s1, e.a1, e.al1, '≥'); e1.classList.toggle('alarma', e.a1); }
+    if (e2) { e2.textContent = texto(s2, e.a2, e.al2, '≥'); e2.classList.toggle('alarma', e.a2); }
+    if (ed) {
+      ed.textContent = !f ? 'Esperando datos…'
+        : (dt === null ? 'Falta una sonda'
+        : (e.ad ? '¡ALARMA! ΔT ' + dt.toFixed(1) + ' °C ≤ ' + e.ald + ' °C' : 'Normal (ΔT ' + dt.toFixed(1) + ' °C)'));
+      ed.classList.toggle('alarma', e.ad);
+    }
+
+    const nueva = e.a1 || e.a2 || e.ad;
+    if (nueva && !alarmaActiva) vibrar(600);
+    alarmaActiva = nueva;
+  }
+
+  window.guardarAlarmasMonitor = function () {
+    try {
+      localStorage.setItem(K_ALARMA1, ($('alarmaS1') || {}).value || '');
+      localStorage.setItem(K_ALARMA2, ($('alarmaS2') || {}).value || '');
+      localStorage.setItem(K_ALARMAD, ($('alarmaDT') || {}).value || '');
+    } catch (e) {}
+    evaluarAlarmas();
+    dibujarMonitor();
+    actualizarFilasMonitorEnTabla();
+  };
+
+  function cargarAlarmas() {
+    const a1 = localStorage.getItem(K_ALARMA1);
+    const a2 = localStorage.getItem(K_ALARMA2);
+    const ad = localStorage.getItem(K_ALARMAD);
+    if (a1 !== null && $('alarmaS1')) $('alarmaS1').value = a1;
+    if (a2 !== null && $('alarmaS2')) $('alarmaS2').value = a2;
+    if (ad !== null && $('alarmaDT')) $('alarmaDT').value = ad;
+  }
+
+  /* ------------------- FILAS DEL MONITOR EN LA TABLA DIAGNÓSTICO ---------- */
+  function filaDiagHtml(icono, titulo, texto, esAlarma) {
+    return '<tr class="' + (esAlarma ? 'diag-monitor-alarma' : 'diag-monitor') + '">' +
+           '<td class="diag-status">' + icono + '</td>' +
+           '<td class="diag-title">' + escaparHtml(titulo) + '</td>' +
+           '<td class="diag-text">' + texto + '</td></tr>';
+  }
+
+  function filasDiagnosticoMonitor() {
+    const filas = [];
+    const e = estadoAlarmas();
+    const f = e.fila;
+
+    if (apiOk === false) {
+      filas.push(filaDiagHtml('⚠️', 'Monitor — API',
+        'Sin respuesta del API del termómetro: ' + escaparHtml(interpretarError(errorApi)) +
+        ' Los valores de sonda mostrados pueden estar atrasados.', true));
+    }
+    if (enVivo && !e.fresco) {
+      filas.push(filaDiagHtml('🟠', 'Monitor — datos congelados',
+        ultimaSenal
+          ? 'Sin lecturas nuevas desde hace ' + formatearEdad(Date.now() - ultimaSenal.getTime()) +
+            ' (umbral ' + Math.round(EDAD_MAX_ESP32_MS / 1000) + ' s). Alarmas de sonda en pausa.'
+          : 'Todavía no llegó ninguna lectura del ESP32.', true));
+    }
+    if (e.a1) {
+      filas.push(filaDiagHtml('🔴', 'Alarma Sonda 1',
+        'Lectura ' + f.s1.toFixed(1) + ' °C ≥ umbral ' + e.al1 + ' °C. ' +
+        '<span style="color:#fca5a5;">Umbral configurado en el monitor; verifique el punto de medición antes de concluir.</span>', true));
+    }
+    if (e.a2) {
+      filas.push(filaDiagHtml('🔴', 'Alarma Sonda 2',
+        'Lectura ' + f.s2.toFixed(1) + ' °C ≥ umbral ' + e.al2 + ' °C. ' +
+        '<span style="color:#fca5a5;">Umbral configurado en el monitor; verifique el punto de medición antes de concluir.</span>', true));
+    }
+    if (e.ad) {
+      filas.push(filaDiagHtml('🔴', 'Alarma ΔT',
+        'ΔT ' + f.delta.toFixed(1) + ' °C ≤ mínimo ' + e.ald + ' °C. ' +
+        '<span style="color:#fca5a5;">Poca separación térmica entre sondas: revise ubicación y contacto.</span>', true));
+    }
+
+    if (e.fresco && f) {
+      const pct = ultimaAbsoluta ? ultimaAbsoluta.bateria : null;
+      const v = ultimaAbsoluta ? ultimaAbsoluta.bateriaVolt : null;
+      if (pct !== null && (pct <= 20 || (v !== null && v <= 3.10))) {
+        filas.push(filaDiagHtml('🟠', 'Batería del ESP32',
+          pct + '%' + (v !== null ? ' · ' + v.toFixed(2) + ' V' : '') + '. Cargue el dispositivo: con batería baja la transmisión puede cortarse.', true));
+      }
+      const pr = extraerPresionesApi(f);
+      const origen = (pr.suct !== null || pr.desc !== null)
+        ? 'Presiones leídas del transmisor del ESP32'
+        : 'Presiones introducidas a mano';
+      filas.push(filaDiagHtml('🔵', 'Monitor — origen de datos',
+        origen + (sensorAbsoluto ? ' (sensor absoluto: se descuenta la atmosférica)' : ' (sensor manométrico)') +
+        ' · sondas ' + (invertido ? 'invertidas' : 'sin invertir') + '.', false));
+    }
+
+    /* Referencias P–T resueltas con CoolProp para las dos presiones medidas */
+    try {
+      const sel = $('refSelect');
+      const refData = (typeof refrigerantes !== 'undefined' && sel) ? refrigerantes[sel.value] : null;
+      const pS = presionAbsolutaBar('pSuct');
+      const pD = presionAbsolutaBar('pDesc');
+      if (refData && pS !== null && pD !== null) {
+        const satS = saturationAtP(refData, pS);
+        const satD = saturationAtP(refData, pD);
+        const u = '°' + tUnitActual;
+        const tS = Number.isFinite(satS.tDew) ? satS.tDew : satS.tSat;
+        const tD = Number.isFinite(satD.tBubble) ? satD.tBubble : satD.tSat;
+        const fuente = (String(satS.source).indexOf('CoolProp') === 0) ? String(satS.source) : 'tabla local de respaldo';
+        if (Number.isFinite(tS) && Number.isFinite(tD)) {
+          filas.push(filaDiagHtml('⚙', 'Referencia P–T (' + refData.nombre + ')',
+            'Tsat succión ' + convertirTemp(tS).toFixed(1) + ' ' + u +
+            ' · Tsat descarga ' + convertirTemp(tD).toFixed(1) + ' ' + u +
+            ' · fuente: ' + fuente + '.', false));
+        }
+      }
+    } catch (err) { /* si el motor aún no está listo, se omite la fila */ }
+
+    return filas;
+  }
+  window.__monitorFilasDiag = filasDiagnosticoMonitor;
+
+  /*
+   * Refresca SOLO las filas que aporta el monitor dentro de la tabla del motor.
+   * OJO: no se guarda ninguna caché del HTML generado. Antes se comparaba con
+   * una copia y, si coincidía, se salía sin reinsertar: como las filas ya se
+   * habían borrado unas líneas antes, desaparecían de la tabla (lo detectó la
+   * prueba en navegador). Borrar y reinsertar siempre es idempotente.
+   */
+  function actualizarFilasMonitorEnTabla() {
+    const tbody = document.querySelector('#panelAlertas tbody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr.diag-monitor, tr.diag-monitor-alarma').forEach(tr => tr.remove());
+    const html = filasDiagnosticoMonitor().join('');
+    if (html) tbody.insertAdjacentHTML('beforeend', html);
+  }
+
+  /* ------------------------------- GRÁFICA -------------------------------- */
+  let ultimaSerie = {
+    x: [], s1: [], s2: [], dt: [], pe: [], ps: [], pd: [], xPH: [], yPH: [],
+    hayPH: false, hayPresionApi: false, inicio: Date.now(), fin: Date.now(), refT: null
+  };
+
+  function reducir(pts, maxPts) {
+    if (pts.length <= maxPts) return pts;
+    const k = Math.ceil(pts.length / maxPts);
+    const salida = [];
+    for (let i = 0; i < pts.length; i += k) {
+      const g = pts.slice(i, i + k);
+      const prom = clave => {
+        const vals = g.map(p => p[clave]).filter(x => x !== null && x !== undefined);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      };
+      salida.push({
+        t: g.reduce((a, p) => a + p.t, 0) / g.length,
+        s1: prom('s1'), s2: prom('s2'), delta: prom('delta'), ps: prom('ps'), pd: prom('pd')
+      });
+    }
+    return salida;
+  }
+
+  function trazasMonitor() {
+    const s = ultimaSerie;
+    const t = [
+      { x: s.x, y: s.s1, type: 'scatter', mode: 'lines', name: 'Sonda 1', connectgaps: false,
+        line: { color: '#38bdf8', width: 2, shape: 'spline' },
+        hovertemplate: 'Sonda 1: %{y:.1f}<br>%{x|%d/%m %H:%M}<extra></extra>' },
+      { x: s.x, y: s.s2, type: 'scatter', mode: 'lines', name: 'Sonda 2', connectgaps: false,
+        line: { color: '#f87171', width: 2, shape: 'spline' },
+        hovertemplate: 'Sonda 2: %{y:.1f}<br>%{x|%d/%m %H:%M}<extra></extra>' },
+      { x: s.x, y: s.dt, type: 'scatter', mode: 'lines', name: 'ΔT', connectgaps: false,
+        line: { color: '#fbbf24', width: 1.5, dash: 'dot' },
+        hovertemplate: 'ΔT: %{y:.1f}<br>%{x|%d/%m %H:%M}<extra></extra>' }
+    ];
+    if (s.hayPH) {
+      t.push({ x: s.x, y: s.pe, type: 'scatter', mode: 'lines', name: 'P. esperada (P.H.)', yaxis: 'y2', connectgaps: false,
+        line: { color: '#34d399', width: 1.5, dash: 'dash' },
+        hovertemplate: 'P. esperada: %{y:.1f} PSI<br>%{x|%d/%m %H:%M}<extra></extra>' });
+      t.push({ x: s.xPH, y: s.yPH, type: 'scatter', mode: 'markers', name: 'P. medida (P.H.)', yaxis: 'y2',
+        marker: { size: 9, color: '#a7f3d0', line: { color: '#059669', width: 1 } },
+        hovertemplate: 'P. medida: %{y:.1f} PSI<br>%{x|%d/%m %H:%M}<extra></extra>' });
+    }
+    if (s.hayPresionApi) {
+      t.push({ x: s.x, y: s.ps, type: 'scatter', mode: 'lines', name: 'P. succión (API)', yaxis: 'y2', connectgaps: false,
+        line: { color: '#818cf8', width: 1.4 },
+        hovertemplate: 'P. succión: %{y:.1f} PSI<br>%{x|%d/%m %H:%M}<extra></extra>' });
+      t.push({ x: s.x, y: s.pd, type: 'scatter', mode: 'lines', name: 'P. descarga (API)', yaxis: 'y2', connectgaps: false,
+        line: { color: '#f472b6', width: 1.4 },
+        hovertemplate: 'P. descarga: %{y:.1f} PSI<br>%{x|%d/%m %H:%M}<extra></extra>' });
+    }
+    return t;
+  }
+
+  function layoutMonitor() {
+    const c = colorMonitor();
+    const s = ultimaSerie;
+    const paso = PASO_MARCA_MIN[rangoHoras] || 60;
+    const formas = [];
+    const al1 = leerUmbral('alarmaS1'), al2 = leerUmbral('alarmaS2'), ald = leerUmbral('alarmaDT');
+    if (al1 !== null) formas.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: al1, y1: al1, line: { color: '#38bdf8', width: 1, dash: 'dot' } });
+    if (al2 !== null) formas.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: al2, y1: al2, line: { color: '#f87171', width: 1, dash: 'dot' } });
+    if (ald !== null) formas.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: ald, y1: ald, line: { color: '#fbbf24', width: 1, dash: 'dot' } });
+    if (s.refT !== null) formas.push({ type: 'line', xref: 'x', x0: new Date(s.refT).toISOString(), x1: new Date(s.refT).toISOString(), yref: 'paper', y0: 0, y1: 1, line: { color: '#34d399', width: 1.2, dash: 'dash' } });
+
+    const rangoX = (Number.isFinite(s.inicio) && Number.isFinite(s.fin) && s.fin > s.inicio)
+      ? [new Date(s.inicio).toISOString(), new Date(s.fin).toISOString()]
+      : undefined;
+
+    return {
+      margin: { l: 36, r: 40, t: 6, b: 26 },
+      paper_bgcolor: c.papel,
+      plot_bgcolor: c.fondo,
+      showlegend: true,
+      legend: { orientation: 'h', y: 1.14, x: 0, font: { size: 8, color: c.eje } },
+      dragmode: 'pan',
+      hovermode: 'x unified',
+      xaxis: {
+        type: 'date', range: rangoX, gridcolor: c.rejilla,
+        tickfont: { size: 7.5, color: c.eje }, tickformat: '%H:%M', dtick: paso * 60000
+      },
+      yaxis: {
+        title: { text: 'Temperatura (°' + tUnitActual + ')', font: { size: 8, color: c.titulo } },
+        gridcolor: c.rejilla, tickfont: { size: 7.5, color: c.eje }, zeroline: false
+      },
+      yaxis2: {
+        title: { text: 'Presión (PSI man.)', font: { size: 8, color: c.titulo } },
+        overlaying: 'y', side: 'right', showgrid: false,
+        tickfont: { size: 7.5, color: c.eje }, zeroline: false,
+        visible: !!(s.hayPH || s.hayPresionApi)
+      },
+      shapes: formas
+    };
+  }
+
+  let reintentoPlotly = false;
+  function dibujarMonitor() {
+    const cont = $('chartMonitor');
+    if (!cont) return;
+    if (typeof Plotly === 'undefined') {
+      if (!reintentoPlotly) {
+        reintentoPlotly = true;
+        setTimeout(() => { reintentoPlotly = false; dibujarMonitor(); }, 800);
+      }
+      return;
+    }
+    try {
+      Plotly.react('chartMonitor', trazasMonitor(), layoutMonitor(),
+        { responsive: true, displayModeBar: false, scrollZoom: true, doubleClick: 'reset' });
+    } catch (e) { console.warn('Gráfica del monitor no disponible:', e); }
+  }
+
+  /* ------------------------------ VENTANA --------------------------------- */
+  function actualizarEtiquetaVentana() {
+    const v = ventanaActual();
+    const opciones = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
+    poner('txtVentana', new Date(v.inicio).toLocaleString([], opciones) + ' → ' +
+                        new Date(v.fin).toLocaleString([], opciones) + (enVivo ? ' (en vivo)' : ''));
+  }
+  function actualizarBotonesVentana() {
+    document.querySelectorAll('.btn-ventana').forEach(b => {
+      b.classList.toggle('activo', parseInt(b.dataset.horas, 10) === rangoHoras);
+    });
+  }
+  window.cambiarVentanaHoras = function (h) {
+    const n = Number(h);
+    if (!VENTANAS_VALIDAS.includes(n)) return;
+    rangoHoras = n;
+    try { localStorage.setItem(K_RANGO, String(n)); } catch (e) {}
+    enVivo = true;
+    finVentana = new Date();
+    actualizarBotonesVentana();
+    cargarHistorico();
+  };
+  window.desplazarVentana = function (dir) {
+    const pasoMs = rangoHoras * 3600000;
+    const base = enVivo ? Date.now() : finVentana.getTime();
+    const nuevoFin = base + dir * pasoMs;
+    if (nuevoFin > Date.now() - 5000) { window.volverEnVivo(); return; }
+    enVivo = false;
+    finVentana = new Date(nuevoFin);
+    cargarHistorico();
+  };
+  window.volverEnVivo = function () {
+    enVivo = true;
+    finVentana = new Date();
+    cargarHistorico();
+    sondearUltima();
+  };
+
+  /* --------------------------- RENDER PRINCIPAL --------------------------- */
+  function renderMonitor() {
+    if (enVivo) finVentana = new Date();
+    actualizarEtiquetaVentana();
+    const v = ventanaActual();
+
+    /* Tolerancia de 60 s en vivo: el reloj del ESP32 puede ir ligeramente adelantado */
+    const tolerancia = enVivo ? 60000 : 0;
+    const procesadas = datosCrudos
+      .map(procesarFila)
+      .filter(Boolean)
+      .filter(f => {
+        const t = new Date(f.created_at).getTime();
+        return t >= v.inicio && t <= v.fin + tolerancia;
+      });
+
+    let minS1 = Infinity, maxS1 = -Infinity;
+    let minS2 = Infinity, maxS2 = -Infinity;
+    let minD = Infinity, maxD = -Infinity;
+    procesadas.forEach(f => {
+      if (f.s1 !== null) { if (f.s1 < minS1) minS1 = f.s1; if (f.s1 > maxS1) maxS1 = f.s1; }
+      if (f.s2 !== null) { if (f.s2 < minS2) minS2 = f.s2; if (f.s2 > maxS2) maxS2 = f.s2; }
+      if (f.delta !== null) { if (f.delta < minD) minD = f.delta; if (f.delta > maxD) maxD = f.delta; }
+    });
+
+    const base = procesadas.map(f => {
+      const pr = extraerPresionesApi(f);
+      return {
+        t: new Date(f.created_at).getTime(),
+        s1: f.s1, s2: f.s2, delta: f.delta,
+        ps: aNumero(pr.suct), pd: aNumero(pr.desc)
+      };
+    });
+    const pts = reducir(base, MAX_PUNTOS_GRAFICA);
+
+    const x = [], y1 = [], y2 = [], yd = [], ype = [], yps = [], ypd = [];
+    const tRef = temperaturaRefPH();
+    const refT = referenciaPH ? new Date(referenciaPH.timestamp).getTime() : null;
+    const gas = gasPH();
+
+    pts.forEach(p => {
+      x.push(new Date(p.t).toISOString());
+      y1.push(p.s1); y2.push(p.s2); yd.push(p.delta);
+      yps.push(p.ps); ypd.push(p.pd);
+      let pe = null;
+      if (referenciaPH && tRef !== null && p.t >= refT - 60000 && p.s1 !== null && p.s2 !== null) {
+        const tEf = temperaturaEfectiva(p.s1, p.s2);
+        const r = presionEsperada(referenciaPH.pressureGauge, tRef, tEf, gas);
+        pe = (r.psi !== null) ? Number(r.psi.toFixed(1)) : null;
+      }
+      ype.push(pe);
+    });
+
+    /* Corte de línea cuando hay más de 5 minutos sin datos */
+    for (let i = x.length - 1; i > 0; i--) {
+      const t1 = new Date(x[i]).getTime(), t0 = new Date(x[i - 1]).getTime();
+      if (t1 - t0 > HUECO_MS) {
+        const medio = new Date((t0 + t1) / 2).toISOString();
+        x.splice(i, 0, medio);
+        y1.splice(i, 0, null); y2.splice(i, 0, null); yd.splice(i, 0, null);
+        ype.splice(i, 0, null); yps.splice(i, 0, null); ypd.splice(i, 0, null);
+      }
+    }
+
+    const xPH = [], yPH = [];
+    medidasPH.forEach(m => {
+      const t = new Date(m.timestamp).getTime();
+      if (!Number.isFinite(t) || t < v.inicio || t > v.fin + 60000) return;
+      xPH.push(new Date(t).toISOString());
+      yPH.push(Number(m.pressureGauge));
+    });
+
+    ultimaSerie = {
+      x: x, s1: y1, s2: y2, dt: yd, pe: ype, ps: yps, pd: ypd, xPH: xPH, yPH: yPH,
+      hayPH: !!referenciaPH,
+      hayPresionApi: yps.some(n => n !== null) || ypd.some(n => n !== null),
+      inicio: v.inicio, fin: v.fin, refT: refT
+    };
+
+    const ultima = procesadas.length ? procesadas[procesadas.length - 1] : null;
+    ultimaVista = ultima;
+
+    const aviso = $('notaVentana');
+    if (!enVivo && !procesadas.length && aviso && !aviso.textContent) {
+      nota('Sin datos en esta ventana: el ESP32 no envió lecturas o el Worker no llega tan atrás.');
+    }
+
+    if (ultima) {
+      poner('valS1', ultima.s1 !== null ? ultima.s1.toFixed(1) + ' °C' : '--.- °C');
+      poner('valS2', ultima.s2 !== null ? ultima.s2.toFixed(1) + ' °C' : '--.- °C');
+      poner('valDT', ultima.delta !== null ? ultima.delta.toFixed(1) + ' °C' : '--.- °C');
+      poner('txtUltimaLectura', 'Última lectura: ' +
+        new Date(ultima.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } else {
+      poner('valS1', '--.- °C');
+      poner('valS2', '--.- °C');
+      poner('valDT', '--.- °C');
+      poner('txtUltimaLectura', enVivo ? 'Última lectura: —' : 'Sin datos en esta ventana');
+    }
+    poner('minS1', minS1 !== Infinity ? minS1.toFixed(1) : '--.-');
+    poner('maxS1', maxS1 !== -Infinity ? maxS1.toFixed(1) : '--.-');
+    poner('minS2', minS2 !== Infinity ? minS2.toFixed(1) : '--.-');
+    poner('maxS2', maxS2 !== -Infinity ? maxS2.toFixed(1) : '--.-');
+    poner('minDT', minD !== Infinity ? minD.toFixed(1) : '--.-');
+    poner('maxDT', maxD !== -Infinity ? maxD.toFixed(1) : '--.-');
+
+    evaluarAlarmas();
+    aplicarSondasAlMotor();
+    aplicarPresionesAlMotor();
+    actualizarTsat();
+    actualizarPanelPH();
+    dibujarMonitor();
+    actualizarFilasMonitorEnTabla();
+    pintarBannerSistema();
+    actualizarBadgeConexion();
+  }
+
+  /* --------- GANCHO DE PRUEBA (para revisar la app sin el ESP32) ----------
+     Inyecta una lectura con el MISMO formato que devuelve el Worker y la hace
+     pasar por el circuito normal (sondas, presiones, alarmas, gráfica y tabla
+     de diagnóstico). Desde la consola del navegador, por ejemplo:
+
+       __monitorInyectarLectura({ temp1: -12.4, temp2: -9.1, bateriaVolt: 3.9,
+                                  presion_succion: 38, presion_descarga: 300 })
+
+     Sirve para demostración y para verificar la interfaz en banco. No se usa
+     en la operación normal. */
+  window.__monitorInyectarLectura = function (parcial) {
+    const fila = Object.assign({}, parcial || {});
+    if (!fila.created_at) fila.created_at = new Date().toISOString();
+    if (!Number.isFinite(new Date(fila.created_at).getTime())) return 'created_at inválido';
+    anotarSenal(fila.created_at);
+    ultimaSenal = new Date(fila.created_at);
+    ultimaAbsoluta = procesarFila(fila);
+    pintarBateriaWifi();
+    marcarApi(true);
+    const v = ventanaActual();
+    datosCrudos = datosCrudos.filter(f => new Date(f.created_at).getTime() >= v.inicio);
+    datosCrudos.push(fila);
+    datosCrudos.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    enVivo = true;
+    renderMonitor();
+    return 'lectura inyectada';
+  };
+
+  /* --------------------------- EXPORTAR CSV ------------------------------- */
+  window.exportarCSV = function () {
+    const procesadas = datosCrudos.map(procesarFila).filter(Boolean);
+    if (!procesadas.length) {
+      nota('Todavía no hay lecturas en la ventana actual para exportar.');
+      return;
+    }
+    nota('');
+    const cabecera = ['created_at', 'sonda1_C', 'sonda2_C', 'deltaT_C', 'p_succion_PSI', 'p_descarga_PSI',
+                      'bateria_V', 'bateria_%', 'wifi', 'ip', 'rssi'];
+    const lineas = [cabecera.join(';')];
+    procesadas.forEach(f => {
+      const pr = extraerPresionesApi(f);
+      const celda = v => (v === null || v === undefined) ? '' : String(v).replace(/;/g, ',');
+      lineas.push([
+        celda(f.created_at),
+        celda(f.s1 !== null ? f.s1.toFixed(2) : ''),
+        celda(f.s2 !== null ? f.s2.toFixed(2) : ''),
+        celda(f.delta !== null ? f.delta.toFixed(2) : ''),
+        celda(aNumero(pr.suct) !== null ? aNumero(pr.suct).toFixed(2) : ''),
+        celda(aNumero(pr.desc) !== null ? aNumero(pr.desc).toFixed(2) : ''),
+        celda(f.bateriaVolt !== null ? f.bateriaVolt.toFixed(2) : ''),
+        celda(f.bateria !== null ? f.bateria : ''),
+        celda(f.wifi || ''),
+        celda(f.ip || ''),
+        celda(aNumero(f.rssi) !== null ? aNumero(f.rssi) : '')
+      ].join(';'));
+    });
+    const marca = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const nombre = 'historico_sondas_' + marca + '.csv';
+    const blob = new Blob(['\ufeff' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+  };
+  /* ------------------- PRUEBA DE HERMETICIDAD / PRESIÓN ------------------- */
+  function gasPH() {
+    const sel = $('phGas');
+    return (sel && sel.value) ? sel.value : 'Nitrogen';
+  }
+  function temperaturaEfectiva(s1, s2) {
+    const a = aNumero(s1), b = aNumero(s2);
+    if (a === null || b === null) return null;
+    return (pesoEvap / 100) * a + (pesoCond / 100) * b;
+  }
+  function temperaturaEfectivaCruda(raw1, raw2) {
+    const r1 = aNumero(raw1), r2 = aNumero(raw2);
+    const s1 = invertido ? r2 : r1;
+    const s2 = invertido ? r1 : r2;
+    return temperaturaEfectiva(s1, s2);
+  }
+  function temperaturaRefPH() {
+    if (!referenciaPH) return null;
+    const r = referenciaPH;
+    const r1 = aNumero(r.raw1) !== null ? aNumero(r.raw1) : aNumero(r.tempS1C);
+    const r2 = aNumero(r.raw2) !== null ? aNumero(r.raw2) : aNumero(r.tempS2C);
+    const t = temperaturaEfectivaCruda(r1, r2);
+    return t !== null ? t : aNumero(r.tempRefC);
+  }
+  function temperaturaMedidaPH(m) {
+    if (!m) return null;
+    const r1 = aNumero(m.raw1), r2 = aNumero(m.raw2);
+    if (r1 !== null && r2 !== null) {
+      const t = temperaturaEfectivaCruda(r1, r2);
+      if (t !== null) return t;
+    }
+    return aNumero(m.tempC);
+  }
+
+  /* Presión esperada a VOLUMEN CONSTANTE.
+     Con CoolProp se resuelve la densidad molar real del gas a la referencia y
+     con ella la presión a la temperatura actual (proceso isocórico). Es más
+     exacto que el gas ideal cuando la presión es alta. Si CoolProp no puede
+     resolver el estado (p. ej. cambio de fase), se cae a Gay-Lussac. */
+  function presionEsperada(pGaugeRef, tRefC, tActualC, fluido) {
+    const pGauge = aNumero(pGaugeRef);
+    const tRef = aNumero(tRefC);
+    const tAct = aNumero(tActualC);
+    if (pGauge === null || tRef === null || tAct === null) return { psi: null, modelo: '—' };
+    const refK = tRef + 273.15;
+    const actK = tAct + 273.15;
+    if (!(refK > 0) || !(actK > 0)) return { psi: null, modelo: '—' };
+    const pAbsPsi = pGauge + ATM_PSI;
+    const ideal = pAbsPsi * (actK / refK) - ATM_PSI;
+    try {
+      if (window.CoolProp && fluido) {
+        const pRefPa = pAbsPsi * PA_POR_PSI;
+        const rho = window.CoolProp.PropsSI('Dmolar', 'P', pRefPa, 'T', refK, fluido);
+        if (Number.isFinite(rho) && rho > 0) {
+          const pPa = window.CoolProp.PropsSI('P', 'T', actK, 'Dmolar', rho, fluido);
+          if (Number.isFinite(pPa) && pPa > 0) {
+            return { psi: pPa / PA_POR_PSI - ATM_PSI, modelo: 'CoolProp · ' + fluido + ' (volumen constante)' };
+          }
+        }
+      }
+    } catch (e) { /* fuera de rango o cambio de fase: se usa gas ideal */ }
+    return { psi: ideal, modelo: 'gas ideal (Gay-Lussac)' };
+  }
+
+  function veredictoPH(diff, pRef) {
+    if (diff === null) return '—';
+    const tolerancia = Math.max(1.5, 0.01 * Math.abs(aNumero(pRef) || 0));
+    if (diff >= -tolerancia) return 'Sin caída respecto a lo esperado';
+    if (diff >= -3 * tolerancia) return 'Caída leve: vigilar';
+    return 'Caída mayor a lo esperado: posible fuga';
+  }
+
+  function mensajePH(texto, nivel) {
+    const el = $('phMsg');
+    if (!el) return;
+    el.textContent = texto || '';
+    el.className = 'ph-msg' + (nivel ? ' ' + nivel : '');
+  }
+  function pistaPH() {
+    if (!referenciaPH) {
+      mensajePH('Sin referencia: la primera medición que acepte fija la referencia de la prueba.');
+      return;
+    }
+    const t = new Date(referenciaPH.timestamp).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    mensajePH('Referencia fijada el ' + t + ' · ' + medidasPH.length + ' medición(es) registradas.');
+  }
+
+  function actualizarPanelPH() {
+    poner('phPeso1val', pesoEvap + ' %');
+    poner('phPeso2val', pesoCond + ' %');
+    poner('phModelo', pesoEvap + '/' + pesoCond);
+    poner('phMediciones', medidasPH.length + ' medición(es)');
+
+    const ref = referenciaPH;
+    const f = ultimaVista;
+    if (!ref) {
+      poner('phPref', '---.- PSI'); poner('phTref', 'T ref: --.- °C');
+      poner('phPcalc', '---.- PSI'); poner('phPcalcT', 'T efectiva: --.- °C');
+      poner('phPlast', '---.- PSI'); poner('phModeloCalc', 'modelo: —');
+      poner('phDiff', '--.- PSI'); poner('phVeredicto', '—');
+      poner('phTiempo', '--');
+      return;
+    }
+
+    const tRef = temperaturaRefPH();
+    poner('phPref', Number(ref.pressureGauge).toFixed(1) + ' PSI');
+    poner('phTref', 'T ref: ' + (tRef !== null ? tRef.toFixed(1) : '--.-') + ' °C');
+
+    let tEf = null, pCalc = null, modelo = '—';
+    if (f && f.s1 !== null && f.s2 !== null && tRef !== null) {
+      tEf = temperaturaEfectiva(f.s1, f.s2);
+      const r = presionEsperada(ref.pressureGauge, tRef, tEf, gasPH());
+      pCalc = r.psi;
+      modelo = r.modelo;
+    }
+    poner('phPcalc', pCalc !== null ? pCalc.toFixed(1) + ' PSI' : '---.- PSI');
+    poner('phPcalcT', 'T efectiva: ' + (tEf !== null ? tEf.toFixed(1) : '--.-') + ' °C');
+
+    if (ultimaMedidaPH) {
+      poner('phPlast', Number(ultimaMedidaPH.pressureGauge).toFixed(1) + ' PSI');
+      const tMed = temperaturaMedidaPH(ultimaMedidaPH);
+      const rMed = (tRef !== null && tMed !== null)
+        ? presionEsperada(ref.pressureGauge, tRef, tMed, gasPH())
+        : { psi: null };
+      const diff = (rMed.psi !== null) ? Number(ultimaMedidaPH.pressureGauge) - rMed.psi : null;
+      poner('phDiff', diff !== null ? (diff >= 0 ? '+' : '') + diff.toFixed(1) + ' PSI' : '--.- PSI');
+      poner('phVeredicto', veredictoPH(diff, ref.pressureGauge));
+    } else {
+      poner('phPlast', '---.- PSI');
+      poner('phDiff', '--.- PSI');
+      poner('phVeredicto', '—');
+    }
+    poner('phModeloCalc', 'modelo: ' + modelo);
+
+    const ms = Date.now() - new Date(ref.timestamp).getTime();
+    poner('phTiempo', Number.isFinite(ms) && ms > 0 ? (ms / 3600000).toFixed(1) + ' h' : '--');
+  }
+
+  function guardarEstadoPH() {
+    try {
+      if (referenciaPH) localStorage.setItem(K_REF_PH, JSON.stringify(referenciaPH));
+      else localStorage.removeItem(K_REF_PH);
+      if (ultimaMedidaPH) localStorage.setItem(K_ULT_PH, JSON.stringify(ultimaMedidaPH));
+      else localStorage.removeItem(K_ULT_PH);
+      localStorage.setItem(K_MED_PH, JSON.stringify(medidasPH));
+    } catch (e) {}
+  }
+
+  window.cambiarPesoPH = function (valor) {
+    let v = parseInt(valor, 10);
+    if (!Number.isFinite(v)) v = 60;
+    v = Math.max(0, Math.min(100, v));
+    pesoEvap = v;
+    pesoCond = 100 - v;
+    try { localStorage.setItem(K_PESO1, String(v)); } catch (e) {}
+    const r = $('phPeso1');
+    if (r && Number(r.value) !== v) r.value = String(v);
+    const be = $('phBarraEvap'), bc = $('phBarraCond');
+    if (be) be.style.width = pesoEvap + '%';
+    if (bc) bc.style.width = pesoCond + '%';
+    actualizarPanelPH();
+    renderMonitor();
+  };
+
+  window.guardarPH = function () {
+    try {
+      const sel = $('phGas');
+      if (sel) localStorage.setItem('refrig_ph_gas', sel.value);
+    } catch (e) {}
+    renderMonitor();
+  };
+
+  function cargarPH() {
+    try {
+      const ref = JSON.parse(localStorage.getItem(K_REF_PH) || 'null');
+      const ult = JSON.parse(localStorage.getItem(K_ULT_PH) || 'null');
+      const med = JSON.parse(localStorage.getItem(K_MED_PH) || '[]');
+      medidasPH = Array.isArray(med)
+        ? med.filter(m => m && Number.isFinite(Number(m.pressureGauge)) && Number.isFinite(new Date(m.timestamp).getTime()))
+        : [];
+      referenciaPH = (ref && Number.isFinite(Number(ref.pressureGauge)) &&
+                      Number.isFinite(Number(ref.tempRefC)) &&
+                      Number.isFinite(new Date(ref.timestamp).getTime())) ? ref : null;
+      ultimaMedidaPH = (ult && Number.isFinite(Number(ult.pressureGauge)) &&
+                        Number.isFinite(Number(ult.tempC)) &&
+                        Number.isFinite(new Date(ult.timestamp).getTime())) ? ult : null;
+    } catch (e) {
+      referenciaPH = null;
+      ultimaMedidaPH = null;
+      medidasPH = [];
+    }
+    const gas = localStorage.getItem('refrig_ph_gas');
+    if (gas && $('phGas')) $('phGas').value = gas;
+    const r = $('phPeso1');
+    if (r) r.value = String(pesoEvap);
+    const be = $('phBarraEvap'), bc = $('phBarraCond');
+    if (be) be.style.width = pesoEvap + '%';
+    if (bc) bc.style.width = pesoCond + '%';
+    pistaPH();
+  }
+
+  window.aceptarMedidaPH = function () {
+    if (!enVivo) { mensajePH('Vuelva a «Actual» antes de registrar una medición.', 'err'); return; }
+    const p = aNumero(($('phPresionInicial') || {}).value);
+    if (p === null || p < 0) { mensajePH('Presión no válida.', 'err'); return; }
+    const fila = ultimaVista;
+    if (!fila) { mensajePH('Esperando lecturas del ESP32.', 'err'); return; }
+    if (!datosFrescos(fila)) { mensajePH('Los datos están atrasados: espere una lectura nueva antes de aceptar.', 'err'); return; }
+    const crudo1 = limpiarTemp(fila.temp1);
+    const crudo2 = limpiarTemp(fila.temp2);
+    if (crudo1 === null || crudo2 === null) { mensajePH('Se necesitan lecturas válidas de Sonda 1 y Sonda 2.', 'err'); return; }
+    const tEf = temperaturaEfectivaCruda(crudo1, crudo2);
+    if (tEf === null) { mensajePH('No se pudo calcular la temperatura efectiva del gas.', 'err'); return; }
+
+    const timestamp = new Date().toISOString();
+    const punto = { timestamp: timestamp, pressureGauge: p, tempC: tEf, raw1: crudo1, raw2: crudo2 };
+
+    if (!referenciaPH) {
+      referenciaPH = {
+        timestamp: timestamp,
+        pressureGauge: p,
+        tempS1C: invertido ? crudo2 : crudo1,
+        tempS2C: invertido ? crudo1 : crudo2,
+        raw1: crudo1, raw2: crudo2,
+        tempRefC: tEf,
+        modelo: pesoEvap + '/' + pesoCond
+      };
+      medidasPH = [punto];
+      mensajePH('Referencia fijada: ' + p.toFixed(1) + ' PSI a ' + tEf.toFixed(1) + ' °C.');
+    } else {
+      medidasPH.push(punto);
+      if (medidasPH.length > 500) medidasPH = medidasPH.slice(-500);
+      const tRef = temperaturaRefPH();
+      const r = (tRef !== null) ? presionEsperada(referenciaPH.pressureGauge, tRef, tEf, gasPH()) : { psi: null };
+      const diff = (r.psi !== null) ? p - r.psi : null;
+      mensajePH(
+        diff !== null
+          ? 'Medición registrada: ' + p.toFixed(1) + ' PSI a ' + tEf.toFixed(1) + ' °C · ' +
+            veredictoPH(diff, referenciaPH.pressureGauge) + ' (' + (diff >= 0 ? '+' : '') + diff.toFixed(1) + ' PSI).'
+          : 'Medición registrada: ' + p.toFixed(1) + ' PSI.',
+        (diff !== null && diff < -3) ? 'warn' : ''
+      );
+    }
+    ultimaMedidaPH = punto;
+    guardarEstadoPH();
+    renderMonitor();
+  };
+
+  window.usarPresionEnVivoPH = function () {
+    const el = $('phPresionInicial');
+    if (!el) return;
+    const p = aNumero(($('pSuct') || {}).value);
+    if (p === null) { mensajePH('No hay presión de succión disponible.', 'err'); return; }
+    const enPsi = (p / pUnits[pUnitActual].factor) * 14.5038;
+    el.value = enPsi.toFixed(1);
+    mensajePH('Copiada la presión de succión actual (' + enPsi.toFixed(1) + ' PSI). Confirme con el manómetro y pulse Aceptar.');
+  };
+
+  window.reiniciarPH = function () {
+    if (!confirm('¿Borrar la referencia y las mediciones de la prueba actual?')) return;
+    referenciaPH = null;
+    ultimaMedidaPH = null;
+    medidasPH = [];
+    guardarEstadoPH();
+    pistaPH();
+    renderMonitor();
+  };
+
+  /* ------------------------------- REPORTE PDF ---------------------------- */
+  async function rasterizarParaPDF() {
+    if (typeof Plotly === 'undefined') return;
+    /* 1) Gráfica del monitor */
+    try {
+      const cont = $('chartMonitor');
+      if (cont && cont.data) {
+        const url = await Plotly.toImage('chartMonitor', { format: 'png', width: 900, height: 470, scale: 2 });
+        const destino = $('printMonitor');
+        if (destino) destino.innerHTML = '<img src="' + url + '" alt="Histórico de sondas" style="width:100%;border:1px solid #cbd5e1;border-radius:4px;">';
+      }
+    } catch (e) { console.warn('No se pudo rasterizar el monitor para el PDF:', e); }
+
+    /* 2) Diagrama de Mollier: se abre un instante para que tenga tamaño real */
+    const ov = $('overlayMollier');
+    const estabaAbierto = ov ? ov.classList.contains('abierto') : false;
+    try {
+      if (ov && $('mollierPlot') && $('mollierPlot').data) {
+        if (!estabaAbierto) {
+          ov.classList.add('abierto');
+          document.body.classList.add('con-overlay');
+        }
+        await esperar(90);
+        try { Plotly.Plots.resize('mollierPlot'); } catch (e) {}
+        await esperar(280);
+        const url = await Plotly.toImage('mollierPlot', { format: 'png', width: 900, height: 760, scale: 2 });
+        const destino = $('pdfMollier');
+        if (destino) destino.innerHTML = '<img src="' + url + '" alt="Diagrama de Mollier" style="width:100%;border:1px solid #cbd5e1;border-radius:4px;">';
+      }
+    } catch (e) { console.warn('No se pudo rasterizar el Mollier para el PDF:', e); }
+    if (ov && !estabaAbierto) {
+      ov.classList.remove('abierto');
+      document.body.classList.remove('con-overlay');
+    }
+  }
+
+  window.__monitorAntesPDF = async function () {
+    document.querySelectorAll('details').forEach(d => {
+      d.dataset.abiertoAntes = d.open ? '1' : '0';
+      d.open = true;
+    });
+    await rasterizarParaPDF();
+  };
+
+  window.__monitorDespuesPDF = function () {
+    document.querySelectorAll('details').forEach(d => {
+      if (d.dataset.abiertoAntes === '0') d.open = false;
+    });
+    const a = $('printMonitor'), b = $('pdfMollier');
+    if (a) a.innerHTML = '';
+    if (b) b.innerHTML = '';
+    try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
+    dibujarMonitor();
+  };
+
+  /* ---------------------------------- INIT -------------------------------- */
+  function conectarControles() {
+    const s1 = $('mapS1'), s2 = $('mapS2');
+    if (s1) s1.value = mapaS1;
+    if (s2) s2.value = mapaS2;
+    const tp = $('tipoSensorP');
+    if (tp) tp.value = sensorAbsoluto ? 'absoluta' : 'manometrica';
+    pintarOrigenPresion('pSuct');
+    pintarOrigenPresion('pDesc');
+    CAMPOS_TEMP.forEach(pintarMarcaAuto);
+    actualizarBotonesVentana();
+  }
+
+  function init() {
+    aplicarTema(temaActual, true);
+    cargarAutoCampos();
+    cargarAlarmas();
+    cargarPH();
+    conectarControles();
+    actualizarEtiquetaVentana();
+    pintarBateriaWifi();
+    actualizarBadgeConexion();
+    renderMonitor();
+    sondearUltima();
+    cargarHistorico();
+
+    /* CoolProp llega por WASM después del primer render. Cuando está listo hay
+       que recalcular los tiles P–T (y las filas de diagnóstico) para que dejen
+       de mostrar la tabla local de respaldo. */
+    window.addEventListener('coolprop-ready', () => {
+      actualizarTsat();
+      actualizarFilasMonitorEnTabla();
+    });
+    window.addEventListener('coolprop-failed', () => {
+      actualizarTsat();
+      actualizarFilasMonitorEnTabla();
+    });
+
+    setInterval(() => { if (enVivo) cargarHistorico(); }, INTERVALO_HISTORICO_MS);
+    setInterval(sondearUltima, INTERVALO_SONDEO_MS);
+    setInterval(() => {
+      actualizarBadgeConexion();
+      evaluarAlarmas();
+      actualizarFilasMonitorEnTabla();
+      pintarBannerSistema();
+    }, 2000);
+    setInterval(() => { if (alarmaActiva) vibrar(1000); }, 10000);
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        sondearUltima();
+        if (enVivo) cargarHistorico();
+      }
+    });
+    window.addEventListener('resize', () => {
+      try { if (window.Plotly) Plotly.Plots.resize('chartMonitor'); } catch (e) {}
+    });
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') cerrarMollier(); });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+
+  </script>
+</body>
+</html>
