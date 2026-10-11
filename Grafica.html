@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gráfica Live · Mediciones del ciclo</title>
+
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; background: #0f172a; color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+    #chart-container { position: absolute; inset: 0; touch-action: none; }
+    #topbar, #bottombar {
+      position: absolute; left: 0; right: 0; z-index: 20;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    #topbar { top: 0; } #bottombar { bottom: 0; }
+    #topbar.hidden-ui { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+    #bottombar.hidden-ui { opacity: 0; transform: translateY(100%); pointer-events: none; }
+
+    #portrait-hint {
+      position: absolute; inset: 0; display: none; align-items: center;
+      justify-content: center; background: #0f172a; z-index: 100;
+      text-align: center; padding: 2rem;
+    }
+    @media (orientation: portrait) and (max-width: 1023px) {
+      #portrait-hint.force-hint { display: flex; }
+    }
+    #portrait-hint.hidden { display: none !important; }
+    .rotate-icon { animation: rotate 2s ease-in-out infinite; display: inline-block; }
+    @keyframes rotate { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } }
+
+    .range-btn {
+      padding: 4px 9px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      color: #94a3b8; background: transparent; border: 1px solid #334155;
+      transition: all 0.15s; cursor: pointer; white-space: nowrap;
+    }
+    .range-btn.active { background: #0284c7; color: white; border-color: #0284c7; }
+
+    .ui-bar {
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-color: rgba(51, 65, 85, 0.6);
+    }
+    .series-toggle {
+      border-color: #334155; background: #1e293b; color: #94a3b8; opacity: 0.45;
+    }
+    .series-toggle.active { opacity: 1; color: #e2e8f0; background: #334155; border-color: #475569; }
+    .history-badge { background: #7c3aed; color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+    #toggles-series { max-height: 34vh; overflow-y: auto; }
+  </style>
+</head>
+
+<body>
+
+<div id="portrait-hint">
+  <div>
+    <div class="rotate-icon text-6xl mb-4">📱</div>
+    <div class="text-xl font-bold mb-2">Gira el teléfono</div>
+    <div class="text-sm text-slate-400 mb-6">Para ver la gráfica a pantalla completa</div>
+    <button onclick="enterFullscreen()" class="px-6 py-3 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold">
+      Intentar pantalla completa
+    </button>
+  </div>
+</div>
+
+<div id="topbar" class="ui-bar border-b">
+  <div class="flex items-center gap-2 px-3 py-2">
+    <button onclick="exitAndGoBack()"
+      class="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold border border-rose-500 shadow-lg flex items-center gap-1.5 active:scale-95 transition shrink-0">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+      <span>Salir</span>
+    </button>
+
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-bold text-sky-400 truncate">Gráfica Live</span>
+        <div id="status-badge" class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 truncate">
+          Verificando...
+        </div>
+        <div id="history-indicator" class="history-badge hidden">Historial</div>
+      </div>
+      <div id="time-range-label" class="text-[10px] text-slate-400 font-mono truncate">--</div>
+    </div>
+
+    <div class="flex items-center gap-1 shrink-0 overflow-x-auto">
+      <button class="range-btn flex items-center justify-center w-8 h-7" onclick="navigateHistory(1)" title="Más antiguo">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </button>
+      <button id="btn-actual" class="range-btn bg-sky-600 text-white border-sky-600 hidden h-7" onclick="navigateHistory(0, true)">Live</button>
+      <button id="btn-forward" class="range-btn flex items-center justify-center w-8 h-7 hidden" onclick="navigateHistory(-1)" title="Más reciente">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      </button>
+      <div class="w-px h-4 bg-slate-700 mx-1"></div>
+      <button class="range-btn" data-min="10" onclick="setVentana(10)">10m</button>
+      <button class="range-btn" data-min="30" onclick="setVentana(30)">30m</button>
+      <button class="range-btn" data-min="60" onclick="setVentana(60)">1h</button>
+      <button class="range-btn" data-min="120" onclick="setVentana(120)">2h</button>
+      <button class="range-btn" data-min="240" onclick="setVentana(240)">4h</button>
+      <button class="range-btn" data-min="480" onclick="setVentana(480)">8h</button>
+      <button class="range-btn" data-min="1440" onclick="setVentana(1440)">24h</button>
+    </div>
+  </div>
+</div>
+
+<div id="chart-container">
+  <canvas id="tempChart"></canvas>
+</div>
+
+<div id="bottombar" class="ui-bar border-t">
+  <div class="flex items-center justify-between px-3 py-2 text-[11px] gap-2 flex-wrap">
+    <div class="flex items-center gap-1.5 shrink-0">
+      <svg id="bat-icon" class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+      <span id="bat-val" class="font-mono text-slate-300">--% · --.--V</span>
+    </div>
+
+    <div id="toggles-series" class="flex items-center gap-1 flex-wrap justify-center flex-1"></div>
+
+    <div class="flex items-center gap-1 text-slate-300 min-w-0">
+      <svg class="w-4 h-4 text-sky-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10 10 0 0114.142 0M1.42 9.428a16 16 0 01121.16 0"/>
+      </svg>
+      <span id="wifi-val" class="truncate max-w-[150px]">--</span>
+    </div>
+
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button onclick="resetZoom()" title="Reset zoom"
+        class="p-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 border border-slate-700">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+      <button onclick="toggleFullscreen()" title="Pantalla completa"
+        class="p-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 border border-slate-700">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ============================================================
+     CONFIGURACIÓN
+     ============================================================ */
+  const API_URL   = "https://api-termometro.manuelaa1990.workers.dev";
+  const POLL_MS   = 10000;
+  const MAX_AGE_MS = 35000;
+  const GAP_MS    = 2 * 60 * 1000;
+  const MAX_HISTORY_HOURS = 168;
+  const ATM_PSI   = 14.696;
+  const PA_POR_PSI = 6894.757293168;
+
+  const VENTANAS_MIN = [10, 30, 60, 120, 240, 480, 1440];
+  const PASO_TICK_MIN = { 10: 2, 30: 5, 60: 15, 120: 30, 240: 60, 480: 120, 1440: 180 };
+
+  /* Mismos canales y mismos alias que la página principal */
+  const ALIAS_TEMP = [
+    ['temp1','sonda1','t1'], ['temp2','sonda2','t2'], ['temp3','sonda3','t3'],
+    ['temp4','sonda4','t4'], ['temp5','sonda5','t5'], ['temp6','sonda6','t6']
+  ];
+  const ALIAS_PRES = [
+    ['presion_succion','presionSuccion','presion1','pres1','p_succion','pSuccion','p1','presion_baja'],
+    ['presion_descarga','presionDescarga','presion2','pres2','p_descarga','pDescarga','p2','presion_alta']
+  ];
+  const ASIGNACION_INICIAL = { psuct:'pres1', pdesc:'pres2', tdesc:'temp1', tliq:'temp2', tevap:'temp3', tsuct:'temp4', tamb:'temp5' };
+
+  const SERIES = [
+    { id:'tsuct', etiqueta:'T. Succión',     color:'#f87171', eje:'y',  varSlot:'tsuct' },
+    { id:'tdesc', etiqueta:'T. Descarga',    color:'#fb923c', eje:'y',  varSlot:'tdesc' },
+    { id:'tliq',  etiqueta:'T. Líquido',     color:'#34d399', eje:'y',  varSlot:'tliq'  },
+    { id:'tevap', etiqueta:'T. Salida Evap', color:'#38bdf8', eje:'y',  varSlot:'tevap' },
+    { id:'tamb',  etiqueta:'T. Ambiente',    color:'#a78bfa', eje:'y',  varSlot:'tamb'  },
+    { id:'dt',    etiqueta:'ΔT',             color:'#fbbf24', eje:'y' },
+    { id:'psuct', etiqueta:'P. Succión',     color:'#818cf8', eje:'y2', varSlot:'psuct', presion:true },
+    { id:'pdesc', etiqueta:'P. Descarga',    color:'#f472b6', eje:'y2', varSlot:'pdesc', presion:true },
+    { id:'phe',   etiqueta:'P.H. esperada',  color:'#22d3ee', eje:'y2', presion:true },
+    { id:'phm',   etiqueta:'P.H. medida',    color:'#a7f3d0', eje:'y2', presion:true, soloPuntos:true }
+  ];
+
+  /* ============================================================
+     ESTADO
+     ============================================================ */
+  let rangoMin = 10;
+  let offsetMin = 0;
+  let allData = [];
+  let latestRow = null;
+  let lastSeenAt = null;
+  let isRefreshing = false;
+  let userZoomed = false;
+  let asignacion = Object.assign({}, ASIGNACION_INICIAL);
+  let seriesVisibles = {};
+  SERIES.forEach(s => { seriesVisibles[s.id] = ['tsuct','tdesc','tevap'].indexOf(s.id) >= 0; });
+
+  try {
+    const a = JSON.parse(localStorage.getItem('refrig_asignacion_sondas') || 'null');
+    if (a && typeof a === 'object') Object.keys(ASIGNACION_INICIAL).forEach(k => { if (typeof a[k] === 'string') asignacion[k] = a[k]; });
+  } catch (e) {}
+  try {
+    const sv = JSON.parse(localStorage.getItem('refrig_series_grafica') || 'null');
+    if (sv && typeof sv === 'object') SERIES.forEach(s => { if (typeof sv[s.id] === 'boolean') seriesVisibles[s.id] = sv[s.id]; });
+  } catch (e) {}
+  const minParam = parseInt(new URLSearchParams(location.search).get('min'), 10);
+  if (VENTANAS_MIN.includes(minParam)) rangoMin = minParam;
+
+  /* ============================================================
+     UTILIDADES
+     ============================================================ */
+  function aNumero(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v); return Number.isFinite(n) ? n : null;
+  }
+  function limpiarTemp(v) { const n = aNumero(v); return (n !== null && n > -60 && n <= 200) ? n : null; }
+  function limpiarPres(v) { const n = aNumero(v); return (n !== null && n > -15 && n < 1500) ? n : null; }
+  function parseTs(s) {
+    if (!s) return null;
+    let str = String(s).trim();
+    if (str.includes(' ') && !str.includes('T')) str = str.replace(' ', 'T');
+    if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(str)) str += 'Z';
+    const t = new Date(str).getTime();
+    return isNaN(t) ? null : t;
+  }
+  function canalTemp(row, n) {
+    const lista = Array.isArray(row.temps) ? row.temps : (Array.isArray(row.temperaturas) ? row.temperaturas : null);
+    if (lista && lista.length >= n) return limpiarTemp(lista[n - 1]);
+    const alias = ALIAS_TEMP[n - 1] || [];
+    for (const k of alias) { if (row[k] !== undefined && row[k] !== null && row[k] !== '') return limpiarTemp(row[k]); }
+    return null;
+  }
+  function canalPres(row, n) {
+    const lista = Array.isArray(row.presiones) ? row.presiones : (Array.isArray(row.pres) ? row.pres : null);
+    if (lista && lista.length >= n) return limpiarPres(lista[n - 1]);
+    const alias = ALIAS_PRES[n - 1] || [];
+    for (const k of alias) { if (row[k] !== undefined && row[k] !== null && row[k] !== '') return limpiarPres(row[k]); }
+    return null;
+  }
+  function valorCanal(row, canal) {
+    const m = /^(temp|pres)(\d+)$/.exec(canal || '');
+    if (!m) return null;
+    return (m[1] === 'temp') ? canalTemp(row, parseInt(m[2], 10)) : canalPres(row, parseInt(m[2], 10));
+  }
+  function valorSlot(row, slot) { return valorCanal(row, asignacion[slot]); }
+
+  function procesarFila(row) {
+    if (!row) return null;
+    const vals = {};
+    SERIES.forEach(s => {
+      vals[s.id] = s.varSlot ? valorSlot(row, s.varSlot)
+                : (s.id === 'dt' ? null : null);
+    });
+    const tEvap = valorSlot(row, 'tevap');
+    const tDesc = valorSlot(row, 'tdesc');
+    vals.dt = (tEvap !== null && tDesc !== null) ? Math.abs(tEvap - tDesc) : null;
+    vals.created_at = row.created_at;
+    vals.bateriaVolt = aNumero(row.bateriaVolt);
+    vals.wifi = row.wifi || row.ssid || null;
+    vals.ip = row.ip_local || row.ip || null;
+    vals.rssi = aNumero(row.rssi);
+    vals.bateria = (vals.bateriaVolt !== null) ? Math.max(0, Math.min(100, Math.round(((vals.bateriaVolt - 3.10) / (4.20 - 3.10)) * 100))) : null;
+    return vals;
+  }
+  function withTimeout(p, ms) {
+    let timer;
+    const t = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('TIMEOUT')), ms); });
+    return Promise.race([p, t]).finally(() => clearTimeout(timer));
+  }
+  async function fetchJSON(path) {
+    const res = await withTimeout(fetch(API_URL + path, { cache: 'no-store' }), 12000);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+  async function fetchRange(hours, offset) {
+    const q = offset ? ('/range?hours=' + hours + '&offset=' + offset) : ('/range?hours=' + hours);
+    const data = await fetchJSON(q);
+    return Array.isArray(data) ? data : [];
+  }
+
+  /* ============================================================
+     CARGA DE HISTORIAL
+     ============================================================ */
+  async function loadAllHistory() {
+    const chunks = [];
+    let gotBig = false;
+    try {
+      const big = await fetchRange(MAX_HISTORY_HOURS, 0);
+      if (big.length > 1) {
+        const t0 = parseTs(big[0].created_at), t1 = parseTs(big[big.length - 1].created_at);
+        if (t0 && t1 && (t1 - t0) / 3600000 >= 12) { chunks.push(big); gotBig = true; }
+      }
+    } catch (e) { console.warn('Fallo carga 7d:', e); }
+    if (!gotBig) {
+      let prevFirst = null;
+      for (let i = 0; i < 8; i++) {
+        try {
+          const chunk = await fetchRange(24, i * 24);
+          if (!chunk.length) break;
+          const firstTs = parseTs(chunk[0].created_at);
+          if (prevFirst !== null && Math.abs(firstTs - prevFirst) < 60000) break;
+          prevFirst = firstTs;
+          chunks.push(chunk);
+        } catch (e) { break; }
+      }
+    }
+    const seen = new Set(), merged = [];
+    chunks.forEach(chunk => chunk.forEach(row => {
+      if (row && row.created_at && !seen.has(row.created_at)) { seen.add(row.created_at); merged.push(row); }
+    }));
+    merged.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
+    allData = merged;
+    if (!allData.length) {
+      const badge = document.getElementById('status-badge');
+      badge.textContent = '⚠️ Sin datos del equipo';
+      badge.className = 'px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 truncate';
+    }
+  }
+
+  function getSlice() {
+    if (!allData.length) return [];
+    const now = Date.now();
+    const endTime = now - offsetMin * 60000;
+    const startTime = endTime - rangoMin * 60000;
+    return allData.filter(r => {
+      const t = parseTs(r.created_at);
+      return t && t >= startTime && t <= endTime;
+    });
+  }
+
+  /* ============================================================
+     SERIES DE LA PRUEBA DE HERMETICIDAD
+     ============================================================ */
+  function leerPH() {
+    try {
+      const ref = JSON.parse(localStorage.getItem('pressure-reference') || 'null');
+      const med = JSON.parse(localStorage.getItem('pressure-measurements') || '[]');
+      const peso = parseInt(localStorage.getItem('ph-s1-weight'), 10);
+      if (!ref || !Number.isFinite(Number(ref.pressureGauge))) return null;
+      const wEvap = Number.isFinite(peso) ? peso : 60;
+      const tRef = aNumero(ref.rawEvap) !== null ? aNumero(ref.rawEvap) : aNumero(ref.raw1);
+      const tRefD = aNumero(ref.rawDesc) !== null ? aNumero(ref.rawDesc) : aNumero(ref.raw2);
+      let tRefEf = null;
+      if (tRef !== null && tRefD !== null) tRefEf = (wEvap / 100) * tRef + ((100 - wEvap) / 100) * tRefD;
+      if (tRefEf === null) tRefEf = aNumero(ref.tempRefC);
+      return {
+        ref: ref, medidas: Array.isArray(med) ? med : [],
+        peso: wEvap, tRef: tRefEf,
+        tRefMs: parseTs(ref.timestamp)
+      };
+    } catch (e) { return null; }
+  }
+  /* Presión esperada a volumen constante. Se usa el modelo de gas ideal, que en
+     nitrógeno y este rango de presiones difiere menos del 1 % del cálculo con
+     ecuación de estado que hace la página principal. */
+  function presionEsperada(pGaugeRef, tRefC, tActualC) {
+    const p = aNumero(pGaugeRef), a = aNumero(tRefC), b = aNumero(tActualC);
+    if (p === null || a === null || b === null) return null;
+    const refK = a + 273.15, actK = b + 273.15;
+    if (!(refK > 0) || !(actK > 0)) return null;
+    return (p + ATM_PSI) * (actK / refK) - ATM_PSI;
+  }
+
+  /* ============================================================
+     GRÁFICA
+     ============================================================ */
+  const ctx = document.getElementById('tempChart').getContext('2d');
+  function degradado(color) {
+    return c => {
+      const area = c.chart.chartArea;
+      if (!area) return 'transparent';
+      const g = c.chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
+      g.addColorStop(0, color + '00');
+      g.addColorStop(1, color + '66');
+      return g;
+    };
+  }
+  const datasets = SERIES.map(s => {
+    const ds = {
+      label: s.etiqueta,
+      borderColor: s.color,
+      backgroundColor: s.eje === 'y' ? degradado(s.color) : 'transparent',
+      data: [],
+      borderWidth: 2.5,
+      tension: 0.35,
+      pointRadius: s.soloPuntos ? 4 : 0,
+      pointHoverRadius: 6,
+      pointBackgroundColor: '#ffffff',
+      pointBorderColor: s.color,
+      pointBorderWidth: 2,
+      fill: false,
+      spanGaps: false,
+      yAxisID: s.eje
+    };
+    if (s.soloPuntos) { ds.showLine = false; ds.borderWidth = 0; }
+    if (s.id === 'phe') ds.borderDash = [6, 4];
+    if (s.id === 'dt') ds.borderDash = [3, 3];
+    return ds;
+  });
+
+  const tempChart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { top: 34, right: 42, bottom: 8, left: 12 } },
+      scales: {
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'dd/MM/yyyy, HH:mm:ss',
+                  displayFormats: { second: 'HH:mm:ss', minute: 'HH:mm', hour: 'HH:mm', day: 'dd/MM' } },
+          ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, padding: 4 },
+          grid: { display: false, drawBorder: false },
+          border: { display: false }
+        },
+        y: {
+          grace: '10%',
+          ticks: { color: '#64748b', font: { size: 11 }, padding: 4 },
+          grid: { color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false }
+        },
+        y2: {
+          position: 'right', display: false,
+          grace: '10%',
+          ticks: { color: '#818cf8', font: { size: 11 }, padding: 4 },
+          grid: { display: false, drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(15,23,42,0.95)', borderColor: '#334155', borderWidth: 1,
+          titleColor: '#e2e8f0', bodyColor: '#cbd5e1', padding: 10,
+          callbacks: {
+            label: c => {
+              const v = c.parsed.y;
+              const serie = SERIES[c.datasetIndex];
+              if (v === null || v === undefined || isNaN(v)) return c.dataset.label + ': --';
+              return c.dataset.label + ': ' + v.toFixed(2) + (serie && serie.presion ? ' PSI' : ' °C');
+            }
+          }
+        },
+        annotation: { annotations: {} },
+        zoom: {
+          limits: { x: { min: 'original', max: 'original' } },
+          pan: { enabled: true, mode: 'x', threshold: 5, onPan: () => { userZoomed = true; } },
+          zoom: { wheel: { enabled: true, speed: 0.05 }, pinch: { enabled: true }, drag: { enabled: false }, mode: 'x', onZoom: () => { userZoomed = true; } }
+        }
+      }
+    }
+  });
+
+  function getExtrema(datos) {
+    let max = { y: -Infinity, x: null }, min = { y: Infinity, x: null };
+    datos.forEach(p => {
+      if (p.y !== null && Number.isFinite(p.y)) {
+        if (p.y > max.y) max = { x: p.x, y: p.y };
+        if (p.y < min.y) min = { x: p.x, y: p.y };
+      }
+    });
+    return { max: max.y === -Infinity ? null : max, min: min.y === Infinity ? null : min };
+  }
+
+  function renderChart() {
+    const slice = getSlice();
+    const filas = slice.map(procesarFila).filter(Boolean);
+    const ph = leerPH();
+
+    const conjuntos = {};
+    SERIES.forEach(s => { conjuntos[s.id] = []; });
+    let lastTs = null;
+    filas.forEach(f => {
+      const t = parseTs(f.created_at);
+      if (!t) return;
+      if (lastTs !== null && (t - lastTs) > GAP_MS) {
+        const hueco = lastTs + 1000;
+        SERIES.forEach(s => conjuntos[s.id].push({ x: hueco, y: null }));
+      }
+      SERIES.forEach(s => {
+        let y = f[s.id];
+        if (s.id === 'phe') {
+          y = null;
+          if (ph && ph.tRef !== null && t >= (ph.tRefMs || 0) - 60000) {
+            const tEvap = valorSlotDeFilaPH(f, 'tevap'), tDesc = valorSlotDeFilaPH(f, 'tdesc');
+            if (tEvap !== null && tDesc !== null) {
+              const tEf = (ph.peso / 100) * tEvap + ((100 - ph.peso) / 100) * tDesc;
+              const p = presionEsperada(ph.ref.pressureGauge, ph.tRef, tEf);
+              y = (p === null) ? null : Number(p.toFixed(1));
+            }
+          }
+        } else if (s.id === 'phm') {
+          y = null;
+        }
+        conjuntos[s.id].push({ x: t, y: (y === undefined || y === null) ? null : y });
+      });
+      lastTs = t;
+    });
+
+    /* Mediciones manuales de la prueba de hermeticidad */
+    if (ph) {
+      const base = conjuntos.phm;
+      ph.medidas.forEach(m => {
+        const tm = parseTs(m.timestamp);
+        if (!tm || !base.length) return;
+        let mejor = null, mejorDif = Infinity;
+        base.forEach((p, i) => {
+          if (typeof p.x !== 'number') return;
+          const d = Math.abs(p.x - tm);
+          if (d < mejorDif) { mejorDif = d; mejor = i; }
+        });
+        if (mejor !== null && mejorDif <= GAP_MS) base[mejor] = { x: base[mejor].x, y: Number(m.pressureGauge) };
+      });
+    }
+
+    SERIES.forEach((s, i) => { tempChart.data.datasets[i].data = conjuntos[s.id]; });
+
+    /* Burbujas de máximo y mínimo de las temperaturas visibles */
+    try {
+      const anotaciones = {};
+      const visiblesTemp = SERIES.filter(s => seriesVisibles[s.id] && s.eje === 'y');
+      if (!filas.length) {
+        const now = Date.now();
+        anotaciones.vacio = {
+          type: 'label', xValue: now - (rangoMin * 60000) / 2, yValue: 20,
+          content: ['Sin datos en este rango'], font: { size: 14, weight: 'bold' }, color: '#64748b'
+        };
+      } else {
+        visiblesTemp.forEach(s => {
+          const ext = getExtrema(conjuntos[s.id]);
+          if (ext.max) {
+            anotaciones['max_' + s.id] = {
+              type: 'label', xValue: ext.max.x, yValue: ext.max.y,
+              content: [ext.max.y.toFixed(2) + ' °C'],
+              backgroundColor: 'rgba(255,255,255,0.95)', borderColor: s.color, borderWidth: 1, borderRadius: 6,
+              color: '#1e293b', font: { size: 10, weight: 'bold' },
+              padding: { top: 3, bottom: 3, left: 5, right: 5 },
+              callout: { display: true, borderColor: s.color, borderWidth: 1, margin: 4, position: 'bottom' }
+            };
+          }
+          if (ext.min) {
+            anotaciones['min_' + s.id] = {
+              type: 'label', xValue: ext.min.x, yValue: ext.min.y,
+              content: [ext.min.y.toFixed(2) + ' °C'],
+              backgroundColor: 'rgba(255,255,255,0.95)', borderColor: s.color, borderWidth: 1, borderRadius: 6,
+              color: '#1e293b', font: { size: 10, weight: 'bold' },
+              padding: { top: 3, bottom: 3, left: 5, right: 5 },
+              callout: { display: true, borderColor: s.color, borderWidth: 1, margin: 4, position: 'top' }
+            };
+          }
+        });
+      }
+      tempChart.options.plugins.annotation.annotations = anotaciones;
+    } catch (err) { console.error('Error en anotaciones:', err); }
+
+    if (!userZoomed) {
+      const now = Date.now();
+      const fin = now - offsetMin * 60000;
+      tempChart.options.scales.x.min = fin - rangoMin * 60000;
+      tempChart.options.scales.x.max = fin;
+    }
+
+    /* Escala de temperatura: se ajusta a lo visible con un 10 % de margen */
+    const temps = [];
+    SERIES.forEach(s => {
+      if (!seriesVisibles[s.id] || s.eje !== 'y') return;
+      conjuntos[s.id].forEach(p => { if (p.y !== null && Number.isFinite(p.y)) temps.push(p.y); });
+    });
+    if (temps.length) {
+      const tMin = Math.min.apply(null, temps), tMax = Math.max.apply(null, temps);
+      const margen = Math.max(1, (tMax - tMin) * 0.10);
+      tempChart.options.scales.y.min = Math.floor((tMin - margen) / 2) * 2;
+      tempChart.options.scales.y.max = Math.ceil((tMax + margen) / 2) * 2;
+    } else {
+      tempChart.options.scales.y.min = undefined;
+      tempChart.options.scales.y.max = undefined;
+    }
+
+    const hayPresion = SERIES.some(s => seriesVisibles[s.id] && s.eje === 'y2');
+    tempChart.options.scales.y2.display = hayPresion;
+
+    const paso = PASO_TICK_MIN[rangoMin] || 5;
+    tempChart.options.scales.x.time.unit = (rangoMin <= 30) ? 'minute' : 'hour';
+    tempChart.options.scales.x.ticks.stepSize = paso;
+
+    tempChart.update('none');
+    updateTimeLabel(filas.length);
+  }
+
+  function valorSlotDeFilaPH(f, slot) { return f[slot]; }
+
+  function updateTimeLabel(cantidad) {
+    const el = document.getElementById('time-range-label');
+    const ind = document.getElementById('history-indicator');
+    if (offsetMin > 0) ind.classList.remove('hidden'); else ind.classList.add('hidden');
+    const now = Date.now();
+    const fin = now - offsetMin * 60000;
+    const inicio = fin - rangoMin * 60000;
+    const opts = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
+    let txt = new Date(inicio).toLocaleString([], opts) + ' → ' + new Date(fin).toLocaleString([], opts);
+    txt += ' · ' + (rangoMin < 60 ? (rangoMin + ' min') : ((rangoMin / 60) + ' h'));
+    if (offsetMin > 0) txt += ' · hace ' + (offsetMin < 60 ? (offsetMin + ' min') : ((offsetMin / 60) + ' h'));
+    if (!cantidad) txt += ' (sin datos)';
+    el.textContent = txt;
+  }
+
+  function pintarToggles() {
+    const cont = document.getElementById('toggles-series');
+    cont.innerHTML = SERIES.map(s =>
+      '<button onclick="toggleSeries(\'' + s.id + '\')" class="series-toggle ' + (seriesVisibles[s.id] ? 'active' : '') +
+      ' flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold transition active:scale-95 border">' +
+      '<span class="w-2 h-2 rounded-full" style="background:' + s.color + '"></span><span>' + s.etiqueta + '</span></button>'
+    ).join('');
+  }
+  function toggleSeries(id) {
+    const visibles = SERIES.filter(s => seriesVisibles[s.id]).length;
+    if (seriesVisibles[id] && visibles <= 1) return;
+    seriesVisibles[id] = !seriesVisibles[id];
+    localStorage.setItem('refrig_series_grafica', JSON.stringify(seriesVisibles));
+    if ('vibrate' in navigator) navigator.vibrate(15);
+    pintarToggles();
+    renderChart();
+  }
+
+  function updateStatusBar() {
+    if (!latestRow) return;
+    if (latestRow.bateriaVolt !== null) {
+      document.getElementById('bat-val').textContent = latestRow.bateria + '% · ' + latestRow.bateriaVolt.toFixed(2) + 'V';
+      const icon = document.getElementById('bat-icon');
+      icon.className = 'w-4 h-4 ' + (latestRow.bateria <= 20 ? 'text-rose-500' : (latestRow.bateria <= 50 ? 'text-amber-400' : 'text-emerald-400'));
+    }
+    document.getElementById('wifi-val').textContent =
+      (latestRow.wifi || '?') + (latestRow.ip ? ' · ' + latestRow.ip : '');
+  }
+
+  function updateBadge() {
+    const b = document.getElementById('status-badge');
+    let text, style;
+    if (offsetMin > 0) {
+      text = 'Modo Historial'; style = 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+    } else {
+      const age = lastSeenAt ? Date.now() - lastSeenAt.getTime() : null;
+      if (age !== null && age <= MAX_AGE_MS) { text = 'En vivo · ' + fmtAge(age); style = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'; }
+      else if (age !== null) { text = 'Desconectado · ' + fmtAge(age); style = 'bg-rose-500/20 text-rose-400 border-rose-500/30'; }
+      else { text = 'Sin datos'; style = 'bg-amber-500/20 text-amber-400 border-amber-500/30'; }
+    }
+    b.textContent = text;
+    b.className = 'px-2 py-0.5 text-[10px] font-semibold rounded-full border truncate ' + style;
+  }
+  function fmtAge(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return s + ' s';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + ' min';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + ' h ' + (m % 60) + ' min';
+    return Math.floor(h / 24) + ' d';
+  }
+
+  async function refreshLatest() {
+    try {
+      const row = await fetchJSON('/latest');
+      if (row && row.created_at) {
+        const t = parseTs(row.created_at);
+        if (t && (!lastSeenAt || t > lastSeenAt.getTime())) lastSeenAt = new Date(t);
+        latestRow = procesarFila(row);
+        if (!allData.some(r => r.created_at === row.created_at)) {
+          allData.push(row);
+          allData.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
+        }
+        updateStatusBar();
+        if (offsetMin === 0) renderChart();
+      }
+      updateBadge();
+    } catch (e) { updateBadge(); }
+  }
+  async function refreshRecentHistory() {
+    if (isRefreshing) return;
+    isRefreshing = true;
+    try {
+      const recientes = await fetchRange(24, 0);
+      const vistos = new Set(allData.map(r => r.created_at));
+      let sumados = 0;
+      recientes.forEach(row => { if (row && row.created_at && !vistos.has(row.created_at)) { allData.push(row); sumados++; } });
+      if (sumados) {
+        allData.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
+        if (offsetMin === 0) renderChart();
+      }
+    } catch (e) {} finally { isRefreshing = false; }
+  }
+
+  function navigateHistory(dir, reset) {
+    if (reset) offsetMin = 0;
+    else { offsetMin += dir * rangoMin; if (offsetMin < 0) offsetMin = 0; }
+    userZoomed = false;
+    if (tempChart.resetZoom) tempChart.resetZoom();
+    const hist = offsetMin > 0;
+    document.getElementById('btn-actual').classList.toggle('hidden', !hist);
+    document.getElementById('btn-forward').classList.toggle('hidden', !hist);
+    renderChart();
+    updateBadge();
+  }
+  function setVentana(min) {
+    rangoMin = min;
+    localStorage.setItem('refrig_ventana_min', String(min));
+    document.querySelectorAll('.range-btn[data-min]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.min, 10) === min));
+    offsetMin = 0; userZoomed = false;
+    if (tempChart.resetZoom) tempChart.resetZoom();
+    document.getElementById('btn-actual').classList.add('hidden');
+    document.getElementById('btn-forward').classList.add('hidden');
+    renderChart();
+    updateBadge();
+  }
+  function resetZoom() {
+    userZoomed = false;
+    if (tempChart.resetZoom) tempChart.resetZoom();
+    renderChart();
+  }
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) enterFullscreen(); else document.exitFullscreen();
+  }
+  async function enterFullscreen() {
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (_) {}
+      document.getElementById('portrait-hint').classList.add('hidden');
+      setTimeout(() => { tempChart.resize(); }, 300);
+    } catch (e) {}
+  }
+  async function exitAndGoBack() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      if (screen.orientation && screen.orientation.unlock) { try { screen.orientation.unlock(); } catch (_) {} }
+    } catch (_) {}
+    location.replace('./index.html');
+  }
+
+  let ultimoToque = 0;
+  document.getElementById('chart-container').addEventListener('touchend', e => {
+    const ahora = Date.now();
+    if (ahora - ultimoToque < 300) {
+      e.preventDefault();
+      document.getElementById('topbar').classList.toggle('hidden-ui');
+      document.getElementById('bottombar').classList.toggle('hidden-ui');
+    }
+    ultimoToque = ahora;
+  }, { passive: false });
+
+  history.pushState({ page: 'grafica' }, '', location.href);
+  window.addEventListener('popstate', () => exitAndGoBack());
+
+  function updatePortraitHint() {
+    const hint = document.getElementById('portrait-hint');
+    const vertical = window.matchMedia('(orientation: portrait)').matches;
+    if (vertical && window.innerWidth < 1024) {
+      hint.classList.add('force-hint');
+      hint.classList.remove('hidden');
+    } else {
+      hint.classList.remove('force-hint');
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
+    document.querySelectorAll('.range-btn[data-min]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.min, 10) === rangoMin));
+    pintarToggles();
+    updatePortraitHint();
+    window.addEventListener('resize', () => { updatePortraitHint(); tempChart.resize(); });
+    window.addEventListener('orientationchange', () => setTimeout(() => { updatePortraitHint(); tempChart.resize(); }, 300));
+    document.querySelector('#portrait-hint button')?.addEventListener('click', enterFullscreen);
+
+    await loadAllHistory();
+    await refreshLatest();
+    renderChart();
+    updateBadge();
+
+    setInterval(() => { if (offsetMin === 0) refreshLatest(); }, POLL_MS);
+    setInterval(() => { if (offsetMin === 0) refreshRecentHistory(); }, 60000);
+    setInterval(updateBadge, 2000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && offsetMin === 0) { refreshLatest(); refreshRecentHistory(); }
+    });
+  });
+</script>
+
+</body>
+</html>
