@@ -313,12 +313,16 @@
     .unidad-presion { font-size: .58rem; font-weight: 800; color: var(--acento); min-width: 26px; }
 
     .ventana-bar {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      flex-wrap: wrap;
-      margin: 5px 0 3px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 4px; flex-wrap: wrap; margin: 5px 0 3px;
     }
+    .ventana-bar .nav-ventana {
+      display: flex; align-items: center; justify-content: center;
+      gap: 4px; flex-basis: 100%; margin-left: 0;
+    }
+    #cardGrafica .ventana-bar .sutil { text-align: center; }
+    .fila-invocar { display: flex; gap: 5px; padding: 6px 6px 2px; }
+    .fila-invocar .btn { min-height: 34px; font-size: .70rem; }
     .btn-ventana {
       border: 1px solid var(--borde2);
       background: var(--panel2);
@@ -483,7 +487,10 @@
     }
     .modo-btn.activo { background: var(--acento-bg); border-color: var(--acento-bg); color: #fff; }
     body[data-modo="monitor"] #cardHermeticidad { display: none; }
-    body[data-modo="ph"] #cardMonitor, body[data-modo="ph"] #cardIndicadores { display: none; }
+    body[data-modo="ph"] #cardMonitor,
+    body[data-modo="ph"] #cardIndicadores,
+    body[data-modo="ph"] #cardGrafica { display: none; }
+    /* La gráfica tampoco se imprime en el reporte del modo N₂ */
 
     /* ------------------------ Cajas y casilleros ----------------------- */
     /* Tres cajas apiladas a todo el ancho, con sus casilleros en columnas
@@ -494,11 +501,17 @@
       padding: 4px 6px; display: flex; flex-direction: column; gap: 4px;
     }
     .caja-slots { display: grid; gap: 5px; }
+    /* Sin min-width: 0 los casilleros no pueden encogerse y el selector de
+       sonda se sale del ancho del teléfono (comportamiento por defecto de las
+       rejillas CSS). */
+    .caja-slots > .slot { min-width: 0; }
+    .slot-datos, .slot-sel, .slot-alarma-fila { min-width: 0; }
     .caja-slots.caja-2 { grid-template-columns: 1fr 1fr; }
     .caja-slots.caja-3 { grid-template-columns: repeat(3, 1fr); }
     .caja-3 .slot-nombre { font-size: .46rem; }
     .caja-3 .slot-valor { font-size: 1.02rem; }
-    .caja-3 .slot-sel select { max-width: 100%; font-size: .52rem; }
+    .caja-3 .slot-sel select { font-size: .50rem; padding-left: 2px; padding-right: 12px; }
+    .caja-3 .slot-nombre, .caja-3 .slot-minmax, .caja-3 .slot-estado { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .caja-3 .slot-alarma { font-size: .46rem; }
     .caja-3 .slot-alarma input { width: 44px; }
     .slot-alarma-fila { display: flex; align-items: center; }
@@ -514,7 +527,8 @@
     .slot-valor .unidad { font-size: .58rem; font-weight: 700; color: var(--acento); }
     .slot-datos { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-top: 1px; }
     .slot-sel { font-size: .50rem; font-weight: 700; color: var(--sutil); display: flex; align-items: center; gap: 3px; }
-    .slot-sel select { height: 20px; font-size: .56rem; width: auto; max-width: 118px; }
+    .slot-sel { flex: 1 1 auto; }
+    .slot-sel select { height: 20px; font-size: .56rem; width: 100%; max-width: 100%; min-width: 0; }
     .slot-alarma { font-size: .50rem; font-weight: 700; color: var(--sutil); display: flex; align-items: center; gap: 3px; }
     .slot-alarma input { width: 54px; height: 19px; font-size: .62rem; padding: 1px 3px; }
     .slot-minmax { font-size: .52rem; color: var(--sutil); }
@@ -566,7 +580,6 @@
         <span class="sutil" id="wifiValor" title="Red del ESP32">Wifi: "—"</span>
         <span>📍 Punto Fijo: <span id="txtTempAmb">Cargando...</span></span>
         <button class="btn-mini" id="btnTema" onclick="alternarTema()" title="Alternar tema claro / oscuro">🌙 Claro</button>
-        <button class="btn-mini" onclick="abrirMollier()" title="Abrir el diagrama de Mollier en pantalla completa">⛶ p-h</button>
       </div>
     </div>
 
@@ -898,9 +911,6 @@
         <section class="card" id="cardGrafica">
       <h2>
         <span>Gráfica temporal</span>
-        <span class="h2-acciones">
-          <button class="btn-mini" onclick="abrirGraficaAmpliada()" title="Abrir la gráfica ampliada">🔍 Gráfica ampliada</button>
-        </span>
       </h2>
 
       <div class="series-bar" id="seriesBar"></div>
@@ -924,6 +934,15 @@
 
       <div id="chartMonitor" class="chart-monitor"></div>
       <div class="sutil" id="notaVentana"></div>
+
+      <div class="fila-invocar">
+        <button class="btn btn-accion" onclick="abrirMollier()" title="Diagrama de Mollier (p-h) a pantalla completa">
+          📈 Mollier p-h
+        </button>
+        <button class="btn btn-accion" onclick="abrirGraficaAmpliada()" title="Gráfica live a pantalla completa">
+          📊 Gráfica live
+        </button>
+      </div>
       <div class="solo-pdf" style="margin-top:5px;">
         <div class="sutil" style="margin-bottom:2px;">Histórico de mediciones de la ventana visible</div>
         <div id="printMonitor"></div>
@@ -1011,7 +1030,6 @@
     </div>
 
     <div class="action-bar">
-      <button class="btn btn-accion" onclick="abrirMollier()">📈 Diagrama de Mollier (pantalla completa)</button>
       <button class="btn btn-reporte" onclick="descargarPDFReporte()">📄 Reporte PDF</button>
     </div>
   </div>
@@ -2997,13 +3015,17 @@
   /* Abre la página aparte si ya está publicada; si no, usa la vista interna.
      Así el botón sirve igual antes y después de subir grafica.html/mollier.html. */
   async function abrirArchivoAparte(archivo, params, respaldo) {
-    try {
-      const r = await fetch(archivo, { method: 'HEAD', cache: 'no-store' });
-      if (r.ok) {
-        window.open(archivo + (params ? '?' + params : ''), '_blank');
-        return;
-      }
-    } catch (e) { /* sin red o archivo ausente */ }
+    /* En file:// las peticiones HEAD están bloqueadas por CORS, así que se va
+       directo al respaldo interno sin llenar la consola de errores. */
+    if (location.protocol !== 'file:') {
+      try {
+        const r = await fetch(archivo, { method: 'HEAD', cache: 'no-store' });
+        if (r.ok) {
+          window.open(archivo + (params ? '?' + params : ''), '_blank');
+          return;
+        }
+      } catch (e) { /* sin red o archivo ausente */ }
+    }
     if (typeof respaldo === 'function') respaldo();
   }
   /* Parámetros del ciclo para la página del Mollier (los mismos que espera) */
