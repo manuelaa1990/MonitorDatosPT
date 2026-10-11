@@ -63,7 +63,7 @@
       justify-content: center; background: #0f172a; z-index: 100;
       text-align: center; padding: 2rem;
     }
-    @media (orientation: portrait) and (max-width: 1023px) {
+    @media (orientation: portrait) {
       #portrait-hint.force-hint { display: flex; }
     }
     #portrait-hint.hidden { display: none !important; }
@@ -590,7 +590,7 @@
     const hint = document.getElementById('portrait-hint');
     const isPortrait = window.matchMedia('(orientation: portrait)').matches;
     const isSmall = window.innerWidth < 1024;
-    if (isPortrait && isSmall) {
+    if (isPortrait && !window.quiereVertical) {
       hint.classList.add('force-hint');
       hint.classList.remove('hidden');
     } else {
@@ -610,6 +610,50 @@
     window.addEventListener('coolprop-ready', () => { dibujar(); pintarDatos(); });
     window.addEventListener('coolprop-failed', () => { dibujar(); pintarDatos(); });
     if (window.CoolProp) { dibujar(); pintarDatos(); }
+  });
+</script>
+
+
+<!-- Orientación: intenta poner la pantalla en horizontal y ofrece seguir en vertical -->
+<script>
+  window.quiereVertical = false;
+
+  function redimensionarMollier() {
+    const gd = document.getElementById('mollierPlotFull');
+    if (gd && typeof Plotly !== 'undefined') Plotly.Plots.resize(gd);
+  }
+
+  window.seguirEnVertical = function () {
+    window.quiereVertical = true;
+    const hint = document.getElementById('portrait-hint');
+    if (hint) { hint.classList.remove('force-hint'); hint.classList.add('hidden'); }
+    setTimeout(redimensionarMollier, 250);
+  };
+
+  (function () {
+    const hint = document.getElementById('portrait-hint');
+    if (hint && !document.getElementById('btn-seguir-vertical')) {
+      const b = document.createElement('button');
+      b.id = 'btn-seguir-vertical';
+      b.textContent = 'Ver en vertical de todos modos';
+      b.style.cssText = 'margin-top:.85rem; padding:.55rem 1.1rem; background:transparent; color:#94a3b8;' +
+                        'border:1px solid #334155; border-radius:.5rem; font-size:.8rem; font-weight:600; cursor:pointer;';
+      b.onclick = window.seguirEnVertical;
+      hint.firstElementChild.appendChild(b);
+      const aviso = hint.firstElementChild.querySelector('div:nth-child(3)');
+      if (aviso) aviso.textContent = 'Ponga el teléfono horizontal para ver el diagrama completo';
+    }
+  })();
+
+  let intentado = false;
+  function intentarHorizontal() {
+    if (intentado || window.quiereVertical) return;
+    intentado = true;
+    try { enterFullscreen(); } catch (e) {}
+    setTimeout(function () { intentado = false; }, 4000);
+  }
+  ['touchstart', 'pointerdown', 'click'].forEach(function (ev) {
+    document.addEventListener(ev, intentarHorizontal, { passive: true });
   });
 </script>
 
