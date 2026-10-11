@@ -623,28 +623,6 @@
     if (gd && typeof Plotly !== 'undefined') Plotly.Plots.resize(gd);
   }
 
-  window.seguirEnVertical = function () {
-    window.quiereVertical = true;
-    const hint = document.getElementById('portrait-hint');
-    if (hint) { hint.classList.remove('force-hint'); hint.classList.add('hidden'); }
-    setTimeout(redimensionarMollier, 250);
-  };
-
-  (function () {
-    const hint = document.getElementById('portrait-hint');
-    if (hint && !document.getElementById('btn-seguir-vertical')) {
-      const b = document.createElement('button');
-      b.id = 'btn-seguir-vertical';
-      b.textContent = 'Ver en vertical de todos modos';
-      b.style.cssText = 'margin-top:.85rem; padding:.55rem 1.1rem; background:transparent; color:#94a3b8;' +
-                        'border:1px solid #334155; border-radius:.5rem; font-size:.8rem; font-weight:600; cursor:pointer;';
-      b.onclick = window.seguirEnVertical;
-      hint.firstElementChild.appendChild(b);
-      const aviso = hint.firstElementChild.querySelector('div:nth-child(3)');
-      if (aviso) aviso.textContent = 'Ponga el teléfono horizontal para ver el diagrama completo';
-    }
-  })();
-
   let intentado = false;
   function intentarHorizontal() {
     if (intentado || window.quiereVertical) return;
