@@ -386,8 +386,8 @@
       const area = c.chart.chartArea;
       if (!area) return 'transparent';
       const g = c.chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
-      g.addColorStop(0, color + '00');
-      g.addColorStop(1, color + '66');
+      g.addColorStop(0, color + '05');
+      g.addColorStop(1, color + '80');
       return g;
     };
   }
@@ -404,7 +404,7 @@
       pointBackgroundColor: '#ffffff',
       pointBorderColor: s.color,
       pointBorderWidth: 2,
-      fill: false,
+      fill: s.eje === 'y',
       spanGaps: false,
       yAxisID: s.eje
     };
@@ -808,33 +808,6 @@
 <script>
   window.quiereVertical = false;
 
-  window.seguirEnVertical = function () {
-    window.quiereVertical = true;
-    const hint = document.getElementById('portrait-hint');
-    if (hint) { hint.classList.remove('force-hint'); hint.classList.add('hidden'); }
-    setTimeout(function () { try { tempChart.resize(); } catch (e) {} }, 250);
-  };
-
-  (function () {
-    const hint = document.getElementById('portrait-hint');
-    if (hint && !document.getElementById('btn-seguir-vertical')) {
-      const b = document.createElement('button');
-      b.id = 'btn-seguir-vertical';
-      b.textContent = 'Ver en vertical de todos modos';
-      b.style.cssText = 'margin-top:.85rem; padding:.55rem 1.1rem; background:transparent; color:#94a3b8;' +
-                        'border:1px solid #334155; border-radius:.5rem; font-size:.8rem; font-weight:600; cursor:pointer;';
-      b.onclick = window.seguirEnVertical;
-      hint.querySelector('div > div:last-child, div')?.appendChild(b) || hint.firstElementChild.appendChild(b);
-    }
-    const ocultar = document.getElementById('btn-seguir-vertical');
-    if (ocultar && ocultar.parentElement) {
-      const aviso = ocultar.parentElement.querySelector('div:nth-child(3)');
-      if (aviso) aviso.textContent = 'Ponga el teléfono horizontal para ver la gráfica completa';
-    }
-  })();
-
-  /* El primer toque es la única oportunidad de pedir pantalla completa y bloquear
-     el horizontal: la pestaña nueva no hereda el gesto del botón que la abrió. */
   let intentado = false;
   function intentarHorizontal() {
     if (intentado || window.quiereVertical) return;
