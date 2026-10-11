@@ -333,7 +333,7 @@
     .btn-ventana.activo { background: var(--acento-bg); border-color: var(--acento-bg); color: #fff; }
     .nav-ventana { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 
-    .chart-monitor { width: 100%; height: 240px; }
+    .chart-monitor { width: 100%; height: 252px; }
 
     .banner-alerta {
       border-radius: 5px;
@@ -474,6 +474,56 @@
     /* En tema claro los avisos del motor (que traen color en línea pensado
        para fondo oscuro) se neutralizan para que sigan siendo legibles. */
     html[data-tema="claro"] .diag-table .diag-text span[style] { color: #334155 !important; }
+    /* ------------------------ Conmutador de modo ----------------------- */
+    .modo-switch { display: flex; gap: 4px; }
+    .modo-btn {
+      flex: 1; padding: 6px 8px; border: 1px solid var(--borde2); background: var(--panel);
+      color: var(--texto); border-radius: 6px; font-size: .70rem; font-weight: 800;
+      cursor: pointer; font-family: inherit;
+    }
+    .modo-btn.activo { background: var(--acento-bg); border-color: var(--acento-bg); color: #fff; }
+    body[data-modo="monitor"] #cardHermeticidad { display: none; }
+    body[data-modo="ph"] #cardMonitor, body[data-modo="ph"] #cardIndicadores { display: none; }
+
+    /* ------------------------ Cajas y casilleros ----------------------- */
+    .caja-doble {
+      background: var(--panel2); border: 1px solid var(--borde); border-radius: 6px;
+      padding: 4px 6px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .caja-doble.con-alarma { border-color: var(--peligro); }
+    .caja-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+    .caja-titulo { font-size: .62rem; font-weight: 800; color: var(--acento); letter-spacing: .4px; }
+    .slot { border-top: 1px solid var(--borde); padding-top: 3px; }
+    .slot:first-of-type { border-top: none; padding-top: 0; }
+    .slot.alarma { animation: parpadeo-alarma .8s infinite alternate; border-radius: 5px; padding-left: 3px; padding-right: 3px; }
+    .slot-fila { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+    .slot-nombre { font-size: .52rem; font-weight: 700; color: var(--sutil); }
+    .slot-valor { font-size: 1.22rem; font-weight: 800; line-height: 1.05; white-space: nowrap; }
+    .slot-valor .unidad { font-size: .58rem; font-weight: 700; color: var(--acento); }
+    .slot-datos { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-top: 1px; }
+    .slot-sel { font-size: .50rem; font-weight: 700; color: var(--sutil); display: flex; align-items: center; gap: 3px; }
+    .slot-sel select { height: 20px; font-size: .56rem; width: auto; max-width: 118px; }
+    .slot-alarma { font-size: .50rem; font-weight: 700; color: var(--sutil); display: flex; align-items: center; gap: 3px; }
+    .slot-alarma input { width: 54px; height: 19px; font-size: .62rem; padding: 1px 3px; }
+    .slot-minmax { font-size: .52rem; color: var(--sutil); }
+    .slot-minmax b { color: var(--texto); }
+    .slot-estado { font-size: .50rem; color: var(--sutil); min-height: 11px; }
+    .slot-estado.alarma { color: var(--peligro); font-weight: 800; }
+
+    /* -------------------- Selectores de líneas de la gráfica ------------ */
+    .series-bar { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 3px; }
+    .serie-chip {
+      display: flex; align-items: center; gap: 3px; font-size: .54rem; font-weight: 700;
+      border: 1px solid var(--borde2); border-radius: 999px; padding: 1px 7px;
+      background: var(--panel2); color: var(--sutil); cursor: pointer; user-select: none;
+    }
+    .serie-chip.activo { border-color: var(--color-serie); color: var(--texto); }
+    .serie-chip input { margin: 0; width: 13px; height: 13px; }
+    /* El gráfico se queda con todo el alto disponible, sin cromo extra */
+    .overlay-grafica { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; }
+    #overlayGrafica .overlay-head { padding: 1px 4px; }
+    #overlayGrafica .series-bar { gap: 3px; }
+    #overlayGrafica .serie-chip { font-size: .58rem; padding: 1px 6px; }
   </style>
 </head>
 <body>
@@ -498,8 +548,14 @@
     <div id="bannerSistema" class="banner-alerta oculto"></div>
 
     <!-- ======================= IDENTIFICACIÓN (colapsable) ==================== -->
-    <details class="card" id="cardIdentificacion">
-      <summary>Identificación del equipo y del técnico</summary>
+        <!-- Conmutador de modo: el monitor y la prueba de N₂ no conviven -->
+    <div class="modo-switch">
+      <button class="modo-btn activo" id="btnModoMonitor" onclick="cambiarModo('monitor')">📈 Monitor y diagnóstico</button>
+      <button class="modo-btn" id="btnModoPH" onclick="cambiarModo('ph')">🧪 Prueba de hermeticidad (N₂)</button>
+    </div>
+
+<section class="card" id="cardIdentificacion">
+      <h2><span>Identificación, técnico y configuración del ciclo</span></h2>
       <div class="prof-grid">
         <div class="input-group">
           <label for="empresaNombre">Empresa</label>
@@ -533,192 +589,8 @@
           </div>
         </div>
       </div>
-    </details>
 
-    <!-- ========================== MONITOR EN VIVO ============================ -->
-    <section class="card" id="cardMonitor">
-      <h2>
-        <span>Monitor térmico en vivo</span>
-        <span class="h2-acciones">
-          <span class="sutil" id="txtUltimaLectura">Última lectura: —</span>
-          <button class="btn-mini" onclick="exportarCSV()" title="Descargar el histórico de sondas en CSV">⬇ CSV</button>
-        </span>
-      </h2>
-
-      <div class="monitor-grid">
-        <!-- Sonda 1 -->
-        <div class="probe-card" id="cardS1">
-          <div class="probe-head">
-            <span class="probe-nombre">SONDA 1</span>
-            <label class="probe-alarma" for="alarmaS1">Alarma ≥
-              <input type="number" id="alarmaS1" step="0.5" value="8" oninput="guardarAlarmasMonitor()"> °C
-            </label>
-          </div>
-          <div class="probe-valor" id="valS1">--.- °C</div>
-          <div class="probe-minmax">Mín: <b id="minS1">--.-</b> · Máx: <b id="maxS1">--.-</b></div>
-          <div class="probe-estado" id="estadoS1">Esperando…</div>
-          <label class="probe-map" for="mapS1">Enviar a
-            <select id="mapS1" onchange="cambiarMapeoSondas()">
-              <option value="">— sin uso —</option>
-              <option value="tEvapOut" selected>T. Salida Evap</option>
-              <option value="tSuct">T. Temp Succión</option>
-              <option value="tLiq">T. Tubería Líquido</option>
-              <option value="tDescReal">T. Descarga</option>
-            </select>
-          </label>
-        </div>
-
-        <!-- Sonda 2 -->
-        <div class="probe-card" id="cardS2">
-          <div class="probe-head">
-            <span class="probe-nombre">SONDA 2</span>
-            <label class="probe-alarma" for="alarmaS2">Alarma ≥
-              <input type="number" id="alarmaS2" step="0.5" value="8" oninput="guardarAlarmasMonitor()"> °C
-            </label>
-          </div>
-          <div class="probe-valor" id="valS2">--.- °C</div>
-          <div class="probe-minmax">Mín: <b id="minS2">--.-</b> · Máx: <b id="maxS2">--.-</b></div>
-          <div class="probe-estado" id="estadoS2">Esperando…</div>
-          <label class="probe-map" for="mapS2">Enviar a
-            <select id="mapS2" onchange="cambiarMapeoSondas()">
-              <option value="">— sin uso —</option>
-              <option value="tEvapOut">T. Salida Evap</option>
-              <option value="tSuct" selected>T. Temp Succión</option>
-              <option value="tLiq">T. Tubería Líquido</option>
-              <option value="tDescReal">T. Descarga</option>
-            </select>
-          </label>
-        </div>
-
-        <!-- Diferencial de temperatura -->
-        <div class="probe-card" id="cardDT">
-          <div class="probe-head">
-            <span class="probe-nombre">ΔT (S1 − S2)</span>
-            <label class="probe-alarma" for="alarmaDT">Alarma ≤
-              <input type="number" id="alarmaDT" step="0.5" value="2" oninput="guardarAlarmasMonitor()"> °C
-            </label>
-          </div>
-          <div class="probe-valor" id="valDT">--.- °C</div>
-          <div class="probe-minmax">Mín: <b id="minDT">--.-</b> · Máx: <b id="maxDT">--.-</b></div>
-          <div class="probe-estado" id="estadoDT">Esperando datos…</div>
-        </div>
-
-        <!-- Presión de succión (entrada del motor Mollier, alimentada por API o manual) -->
-        <div class="probe-card" id="grpPSuct">
-          <div class="probe-head">
-            <label class="probe-nombre" for="pSuct" id="lblPSuct">P. Succión (PSI)</label>
-            <span class="badge" id="origenPSuct">manual</span>
-          </div>
-          <div class="presion-row">
-            <input type="number" id="pSuct" value="25" step="1" oninput="marcarPresionManual('pSuct')">
-            <span class="unidad-presion" id="unidadPSuct">PSI</span>
-          </div>
-          <div class="probe-estado" id="tsatPSuct">Tsat: —</div>
-        </div>
-
-        <!-- Presión de descarga -->
-        <div class="probe-card" id="grpPDesc">
-          <div class="probe-head">
-            <label class="probe-nombre" for="pDesc" id="lblPDesc">P. Descarga (PSI)</label>
-            <span class="badge" id="origenPDesc">manual</span>
-          </div>
-          <div class="presion-row">
-            <input type="number" id="pDesc" value="290" step="1" oninput="marcarPresionManual('pDesc')">
-            <span class="unidad-presion" id="unidadPDesc">PSI</span>
-          </div>
-          <div class="probe-estado" id="tsatPDesc">Tsat: —</div>
-        </div>
-      </div>
-
-      <!-- Ventana temporal y navegación del histórico -->
-      <div class="ventana-bar">
-        <span class="sutil">Ventana:</span>
-        <button class="btn-ventana activo" data-horas="2" onclick="cambiarVentanaHoras(2)">2 h</button>
-        <button class="btn-ventana" data-horas="4" onclick="cambiarVentanaHoras(4)">4 h</button>
-        <button class="btn-ventana" data-horas="8" onclick="cambiarVentanaHoras(8)">8 h</button>
-        <button class="btn-ventana" data-horas="12" onclick="cambiarVentanaHoras(12)">12 h</button>
-        <button class="btn-ventana" data-horas="24" onclick="cambiarVentanaHoras(24)">24 h</button>
-        <label class="sutil" for="tipoSensorP" style="margin-left:6px;">Presión del sensor:
-          <select id="tipoSensorP" onchange="cambiarTipoSensorPresion()" style="width:auto;display:inline-block;height:20px;font-size:.56rem;">
-            <option value="manometrica" selected>manométrica</option>
-            <option value="absoluta">absoluta</option>
-          </select>
-        </label>
-        <span class="nav-ventana">
-          <button class="btn-mini" onclick="desplazarVentana(-1)" title="Ventana anterior">‹</button>
-          <span class="sutil" id="txtVentana">Calculando…</span>
-          <button class="btn-mini" onclick="desplazarVentana(1)" title="Ventana siguiente">›</button>
-          <button class="btn-mini" onclick="volverEnVivo()">Actual</button>
-        </span>
-      </div>
-
-      <div id="chartMonitor" class="chart-monitor"></div>
-      <div class="sutil" id="notaVentana" style="margin-top:2px;"></div>
-      <div class="solo-pdf" style="margin-top:5px;">
-        <div class="sutil" style="margin-bottom:2px;">Histórico de sondas de la ventana visible</div>
-        <div id="printMonitor"></div>
-      </div>
-    </section>
-
-    <!-- ===================== INDICADORES Y DIAGNÓSTICO ======================= -->
-    <section class="card" id="cardIndicadores">
-      <h2>
-        <span>Indicadores y diagnóstico</span>
-        <span class="sutil" id="txtFuenteTermo">Motor: —</span>
-      </h2>
-
-      <div class="results-grid">
-        <div class="kpi-box" style="border-left-color:#38bdf8;">
-          <span class="label">SH Útil (Evap)</span>
-          <span class="value" id="kpiSHUtil">0.0 K</span>
-        </div>
-        <div class="kpi-box" style="border-left-color:#0284c7;">
-          <span class="label">SH Total (Succ)</span>
-          <span class="value" id="kpiSHTotal">0.0 K</span>
-        </div>
-        <div class="kpi-box" style="border-left-color:#10b981;">
-          <span class="label">Subenfriam. (SC)</span>
-          <span class="value" id="kpiSC">0.0 K</span>
-        </div>
-        <div class="kpi-box" style="border-left-color:#f59e0b;">
-          <span class="label">Potencia Elec.</span>
-          <span class="value" id="kpiKW">0.00 kW</span>
-        </div>
-        <div class="kpi-box" style="border-left-color:#a855f7;">
-          <span class="label">Cap. Frig. (qn)</span>
-          <span class="value" id="kpiqn">0 kJ/kg</span>
-        </div>
-        <div class="kpi-box" style="border-left-color:#ef4444;">
-          <span class="label">Trabajo Comp (w)</span>
-          <span class="value" id="kpiw">0 kJ/kg</span>
-        </div>
-        <div class="kpi-box" style="border-left-color:#ec4899;">
-          <span class="label">COP Estimado</span>
-          <span class="value" id="kpicop">0.0</span>
-        </div>
-        <div class="kpi-box" style="border-left-color:#64748b;">
-          <span class="label">ΔT Cond - Amb</span>
-          <span class="value" id="kpiDeltaAmb">0.0 K</span>
-        </div>
-      </div>
-
-      <div class="diag-container" id="panelAlertas"></div>
-
-      <div id="confiabilidadDiagnostico" style="margin-top:4px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.56rem;color:var(--sutil);">
-          <span>Confiabilidad del análisis</span>
-          <b id="txtConfiabilidad" style="color:var(--texto);">0%</b>
-        </div>
-        <div style="height:5px;background:var(--borde);border-radius:5px;overflow:hidden;margin-top:2px;">
-          <div id="barraConfiabilidad" style="height:100%;width:0%;background:#64748b;border-radius:5px;transition:width .25s ease,background .25s ease;"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ======================== DATOS DE CAMPO ============================== -->
-    <details class="card" id="cardDatosCampo" open>
-      <summary>Datos de campo del ciclo</summary>
-
+      <div class="sutil" style="margin:5px 0 2px;">Configuración del ciclo</div>
       <div class="config-row">
         <div class="input-group input-group-ref">
           <label for="refSelect">Refrigerante</label>
@@ -801,54 +673,279 @@
           </select>
         </div>
       </div>
+    </section>
 
+    <!-- ========================== MONITOR EN VIVO ============================ -->
+        <!-- ====================== MEDICIONES DEL CICLO ========================= -->
+    <section class="card" id="cardMonitor">
+      <h2>
+        <span>Mediciones del ciclo</span>
+        <span class="h2-acciones"><span class="sutil" id="txtUltimaLectura">Última lectura: —</span></span>
+      </h2>
+
+      <div class="monitor-grid">
+        <div class="caja-doble" id="cajaSuccion">
+          <div class="caja-head">
+            <span class="caja-titulo">SUCCIÓN</span>
+            <span class="badge badge-warn" id="estadoCajaSuccion">esperando</span>
+          </div>
+          <div class="slot" id="slotPsuct">
+            <div class="slot-fila">
+              <span class="slot-nombre" id="lblPSuct">P. Succión</span>
+              <span class="slot-valor"><b id="valPsuct">---.-</b> <span class="unidad" id="uniPsuct">PSI</span></span>
+            </div>
+            <div class="slot-datos">
+              <label class="slot-sel">Sonda
+                <select id="selPsuct" onchange="cambiarAsignacion('psuct')"></select>
+              </label>
+              <label class="slot-alarma">Alarma ≥
+                <input type="number" id="alarmaPsuct" step="1" value="120" oninput="guardarAlarmaSlot('psuct')"> PSI
+              </label>
+            </div>
+            <div class="slot-minmax">Mín <b id="minPsuct">--.-</b> · Máx <b id="maxPsuct">--.-</b></div>
+            <div class="slot-estado" id="estadoPsuct">Esperando…</div>
+          </div>
+          <div class="slot" id="slotTsuct">
+            <div class="slot-fila">
+              <span class="slot-nombre" id="lblTSuct">T. Succión Comp.</span>
+              <span class="slot-valor"><b id="valTsuct">---.-</b> <span class="unidad" id="uniTsuct">°C</span></span>
+            </div>
+            <div class="slot-datos">
+              <label class="slot-sel">Sonda
+                <select id="selTsuct" onchange="cambiarAsignacion('tsuct')"></select>
+              </label>
+              <label class="slot-alarma">Alarma ≥
+                <input type="number" id="alarmaTsuct" step="0.5" value="25" oninput="guardarAlarmaSlot('tsuct')"> °C
+              </label>
+            </div>
+            <div class="slot-minmax">Mín <b id="minTsuct">--.-</b> · Máx <b id="maxTsuct">--.-</b></div>
+            <div class="slot-estado" id="estadoTsuct">Esperando…</div>
+          </div>
+        </div>
+        <div class="caja-doble" id="cajaDescarga">
+          <div class="caja-head">
+            <span class="caja-titulo">DESCARGA</span>
+            <span class="badge badge-warn" id="estadoCajaDescarga">esperando</span>
+          </div>
+          <div class="slot" id="slotPdesc">
+            <div class="slot-fila">
+              <span class="slot-nombre" id="lblPDesc">P. Descarga</span>
+              <span class="slot-valor"><b id="valPdesc">---.-</b> <span class="unidad" id="uniPdesc">PSI</span></span>
+            </div>
+            <div class="slot-datos">
+              <label class="slot-sel">Sonda
+                <select id="selPdesc" onchange="cambiarAsignacion('pdesc')"></select>
+              </label>
+              <label class="slot-alarma">Alarma ≥
+                <input type="number" id="alarmaPdesc" step="1" value="350" oninput="guardarAlarmaSlot('pdesc')"> PSI
+              </label>
+            </div>
+            <div class="slot-minmax">Mín <b id="minPdesc">--.-</b> · Máx <b id="maxPdesc">--.-</b></div>
+            <div class="slot-estado" id="estadoPdesc">Esperando…</div>
+          </div>
+          <div class="slot" id="slotTdesc">
+            <div class="slot-fila">
+              <span class="slot-nombre" id="lblTDescReal">T. Descarga</span>
+              <span class="slot-valor"><b id="valTdesc">---.-</b> <span class="unidad" id="uniTdesc">°C</span></span>
+            </div>
+            <div class="slot-datos">
+              <label class="slot-sel">Sonda
+                <select id="selTdesc" onchange="cambiarAsignacion('tdesc')"></select>
+              </label>
+              <label class="slot-alarma">Alarma ≥
+                <input type="number" id="alarmaTdesc" step="0.5" value="100" oninput="guardarAlarmaSlot('tdesc')"> °C
+              </label>
+            </div>
+            <div class="slot-minmax">Mín <b id="minTdesc">--.-</b> · Máx <b id="maxTdesc">--.-</b></div>
+            <div class="slot-estado" id="estadoTdesc">Esperando…</div>
+          </div>
+        </div>
+        <div class="caja-doble" id="cajaEvapLiq">
+          <div class="caja-head">
+            <span class="caja-titulo">EVAPORADOR / LÍQUIDO</span>
+            <span class="badge badge-warn" id="estadoCajaEvapLiq">esperando</span>
+          </div>
+          <div class="slot" id="slotTevap">
+            <div class="slot-fila">
+              <span class="slot-nombre" id="lblTEvapOut">T. Salida Evap</span>
+              <span class="slot-valor"><b id="valTevap">---.-</b> <span class="unidad" id="uniTevap">°C</span></span>
+            </div>
+            <div class="slot-datos">
+              <label class="slot-sel">Sonda
+                <select id="selTevap" onchange="cambiarAsignacion('tevap')"></select>
+              </label>
+              <label class="slot-alarma">Alarma ≥
+                <input type="number" id="alarmaTevap" step="0.5" value="15" oninput="guardarAlarmaSlot('tevap')"> °C
+              </label>
+            </div>
+            <div class="slot-minmax">Mín <b id="minTevap">--.-</b> · Máx <b id="maxTevap">--.-</b></div>
+            <div class="slot-estado" id="estadoTevap">Esperando…</div>
+          </div>
+          <div class="slot" id="slotTliq">
+            <div class="slot-fila">
+              <span class="slot-nombre" id="lblTLiq">T. Líquido</span>
+              <span class="slot-valor"><b id="valTliq">---.-</b> <span class="unidad" id="uniTliq">°C</span></span>
+            </div>
+            <div class="slot-datos">
+              <label class="slot-sel">Sonda
+                <select id="selTliq" onchange="cambiarAsignacion('tliq')"></select>
+              </label>
+              <label class="slot-alarma">Alarma ≥
+                <input type="number" id="alarmaTliq" step="0.5" value="50" oninput="guardarAlarmaSlot('tliq')"> °C
+              </label>
+            </div>
+            <div class="slot-minmax">Mín <b id="minTliq">--.-</b> · Máx <b id="maxTliq">--.-</b></div>
+            <div class="slot-estado" id="estadoTliq">Esperando…</div>
+          </div>
+        </div>
+        <div class="caja-doble" id="cajaAmbiente">
+          <div class="caja-head">
+            <span class="caja-titulo">AMBIENTE</span>
+            <span class="badge badge-warn" id="estadoCajaAmbiente">esperando</span>
+          </div>
+          <div class="slot" id="slotTamb">
+            <div class="slot-fila">
+              <span class="slot-nombre" id="lblTAmb">T. Ambiente</span>
+              <span class="slot-valor"><b id="valTamb">---.-</b> <span class="unidad" id="uniTamb">°C</span></span>
+            </div>
+            <div class="slot-datos">
+              <label class="slot-sel">Sonda
+                <select id="selTamb" onchange="cambiarAsignacion('tamb')"></select>
+              </label>
+              <label class="slot-alarma">Alarma ≥
+                <input type="number" id="alarmaTamb" step="0.5" value="45" oninput="guardarAlarmaSlot('tamb')"> °C
+              </label>
+            </div>
+            <div class="slot-minmax">Mín <b id="minTamb">--.-</b> · Máx <b id="maxTamb">--.-</b></div>
+            <div class="slot-estado" id="estadoTamb">Esperando…</div>
+          </div>
+        </div>
+        <div class="caja-doble" id="cajaDT">
+          <div class="caja-head">
+            <span class="caja-titulo">ΔT</span>
+            <span class="badge" id="estadoCajaDT">Salida Evap ↔ Descarga</span>
+          </div>
+          <div class="slot" id="slotDt">
+            <div class="slot-fila">
+              <span class="slot-nombre">Diferencia</span>
+              <span class="slot-valor"><b id="valDt">---.-</b> <span class="unidad" id="uniDt">°C</span></span>
+            </div>
+            <div class="slot-datos">
+              <label class="slot-alarma">Alarma ≤
+                <input type="number" id="alarmaDt" step="0.5" value="3" oninput="guardarAlarmaDT()"> °C
+              </label>
+            </div>
+            <div class="slot-minmax">Mín <b id="minDt">--.-</b> · Máx <b id="maxDt">--.-</b></div>
+            <div class="slot-estado" id="estadoDt">Esperando datos…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sutil" style="margin:6px 0 2px;">Variables del ciclo del motor — solo se muestran las que no tienen sonda asignada, para escribirlas a mano</div>
       <div class="controls-grid">
         <div class="input-group" id="grpTEvapOut">
-          <div class="etiqueta-campo">
-            <label for="tEvapOut" id="lblTEvapOut">T. Salida Evap</label>
-            <span class="marca-origen" id="autoTEvapOut" onclick="alternarAuto('tEvapOut')" title="Alternar entre sonda en vivo y edición manual">M</span>
-          </div>
-          <input type="number" id="tEvapOut" value="-12" step="0.5" oninput="marcarTemperaturaManual('tEvapOut')">
+          <label for="tEvapOut" id="lblTEvapOutManual">T. Salida Evap</label>
+          <input type="number" id="tEvapOut" value="-12" step="0.5" oninput="guardarYActualizar()">
         </div>
-
         <div class="input-group" id="grpTSuct">
-          <div class="etiqueta-campo">
-            <label for="tSuct" id="lblTSuct">T. Temp Succión</label>
-            <span class="marca-origen" id="autoTSuct" onclick="alternarAuto('tSuct')" title="Alternar entre sonda en vivo y edición manual">M</span>
-          </div>
-          <input type="number" id="tSuct" value="-10" step="0.5" oninput="marcarTemperaturaManual('tSuct')">
+          <label for="tSuct" id="lblTSuctManual">T. Succión Comp.</label>
+          <input type="number" id="tSuct" value="-10" step="0.5" oninput="guardarYActualizar()">
         </div>
-
         <div class="input-group" id="grpTLiq">
-          <div class="etiqueta-campo">
-            <label for="tLiq" id="lblTLiq">T. Tubería Liq</label>
-            <span class="marca-origen" id="autoTLiq" onclick="alternarAuto('tLiq')" title="Alternar entre sonda en vivo y edición manual">M</span>
-          </div>
-          <input type="number" id="tLiq" value="45" step="0.5" oninput="marcarTemperaturaManual('tLiq')">
+          <label for="tLiq" id="lblTLiqManual">T. Líquido</label>
+          <input type="number" id="tLiq" value="45" step="0.5" oninput="guardarYActualizar()">
         </div>
-
         <div class="input-group" id="grpTDescReal">
-          <div class="etiqueta-campo">
-            <label for="tDescReal" id="lblTDescReal">T. Descarga</label>
-            <span class="marca-origen" id="autoTDescReal" onclick="alternarAuto('tDescReal')" title="Alternar entre sonda en vivo y edición manual">M</span>
-          </div>
-          <input type="number" id="tDescReal" value="90" step="1" oninput="marcarTemperaturaManual('tDescReal')">
+          <label for="tDescReal" id="lblTDescRealManual">T. Descarga</label>
+          <input type="number" id="tDescReal" value="90" step="1" oninput="guardarYActualizar()">
         </div>
-
+        <div class="input-group" id="grpPSuct">
+          <label for="pSuct" id="lblPSuctManual">P. Succión</label>
+          <input type="number" id="pSuct" value="25" step="1" oninput="guardarYActualizar()">
+        </div>
+        <div class="input-group" id="grpPDesc">
+          <label for="pDesc" id="lblPDescManual">P. Descarga</label>
+          <input type="number" id="pDesc" value="290" step="1" oninput="guardarYActualizar()">
+        </div>
         <div class="input-group">
           <label for="vVolt">Voltaje (V)</label>
           <input type="number" id="vVolt" value="220" step="1" oninput="guardarYActualizar()">
         </div>
-
         <div class="input-group">
           <label for="iAmp">Amperaje (A)</label>
           <input type="number" id="iAmp" value="22" step="0.1" oninput="guardarYActualizar()">
         </div>
       </div>
-      <div class="sutil" style="margin-top:3px;">
-        Las temperaturas marcadas <b>A</b> se rellenan solas desde las sondas; al escribir a mano pasan a <b>M</b> y puede volver a <b>A</b> tocando la marca.
+
+      <div class="sutil" style="margin:8px 0 2px;display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+        <span>Cálculo del ciclo</span><span id="txtFuenteTermo">Motor: —</span>
       </div>
-    </details>
+      <div class="results-grid">
+        <div class="kpi-box" style="border-left-color:#38bdf8;"><span class="label">SH Útil (Evap)</span><span class="value" id="kpiSHUtil">0.0 K</span></div>
+        <div class="kpi-box" style="border-left-color:#0284c7;"><span class="label">SH Total (Succ)</span><span class="value" id="kpiSHTotal">0.0 K</span></div>
+        <div class="kpi-box" style="border-left-color:#10b981;"><span class="label">Subenfriam. (SC)</span><span class="value" id="kpiSC">0.0 K</span></div>
+        <div class="kpi-box" style="border-left-color:#f59e0b;"><span class="label">Potencia Elec.</span><span class="value" id="kpiKW">0.00 kW</span></div>
+        <div class="kpi-box" style="border-left-color:#a855f7;"><span class="label">Cap. Frig. (qn)</span><span class="value" id="kpiqn">0 kJ/kg</span></div>
+        <div class="kpi-box" style="border-left-color:#ef4444;"><span class="label">Trabajo Comp (w)</span><span class="value" id="kpiw">0 kJ/kg</span></div>
+        <div class="kpi-box" style="border-left-color:#ec4899;"><span class="label">COP Estimado</span><span class="value" id="kpicop">0.0</span></div>
+        <div class="kpi-box" style="border-left-color:#64748b;"><span class="label">ΔT Cond - Amb</span><span class="value" id="kpiDeltaAmb">0.0 K</span></div>
+      </div>
+
+      <div id="confiabilidadDiagnostico" style="margin-top:4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.56rem;color:var(--sutil);">
+          <span>Confiabilidad del análisis</span><b id="txtConfiabilidad" style="color:var(--texto);">0%</b>
+        </div>
+        <div style="height:5px;background:var(--borde);border-radius:5px;overflow:hidden;margin-top:2px;">
+          <div id="barraConfiabilidad" style="height:100%;width:0%;background:#64748b;border-radius:5px;transition:width .25s ease,background .25s ease;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= GRÁFICA TEMPORAL ========================== -->
+    <section class="card" id="cardGrafica">
+      <h2>
+        <span>Gráfica temporal</span>
+        <span class="h2-acciones">
+          <button class="btn-mini" onclick="abrirZoomGrafica()" title="Ver la gráfica a pantalla completa con zoom">⛶ Zoom</button>
+          <button class="btn-mini" onclick="exportarCSV()" title="Descargar las mediciones en CSV">⬇ CSV</button>
+        </span>
+      </h2>
+
+      <div class="ventana-bar">
+        <span class="sutil">Ventana:</span>
+        <button class="btn-ventana activo" data-horas="2" onclick="cambiarVentanaHoras(2)">2 h</button>
+        <button class="btn-ventana" data-horas="4" onclick="cambiarVentanaHoras(4)">4 h</button>
+        <button class="btn-ventana" data-horas="8" onclick="cambiarVentanaHoras(8)">8 h</button>
+        <button class="btn-ventana" data-horas="12" onclick="cambiarVentanaHoras(12)">12 h</button>
+        <button class="btn-ventana" data-horas="24" onclick="cambiarVentanaHoras(24)">24 h</button>
+        <label class="sutil" for="tipoSensorP" style="margin-left:6px;">Presión del sensor:
+          <select id="tipoSensorP" onchange="cambiarTipoSensorPresion()" style="width:auto;display:inline-block;height:20px;font-size:.56rem;">
+            <option value="manometrica" selected>manométrica</option>
+            <option value="absoluta">absoluta</option>
+          </select>
+        </label>
+        <span class="nav-ventana">
+          <button class="btn-mini" onclick="desplazarVentana(-1)" title="Ventana anterior">‹</button>
+          <span class="sutil" id="txtVentana">Calculando…</span>
+          <button class="btn-mini" onclick="desplazarVentana(1)" title="Ventana siguiente">›</button>
+          <button class="btn-mini" onclick="volverEnVivo()">Actual</button>
+        </span>
+      </div>
+
+      <div class="series-bar" id="seriesBar"></div>
+      <div id="chartMonitor" class="chart-monitor"></div>
+      <div class="sutil" id="notaVentana" style="margin-top:2px;"></div>
+      <div class="solo-pdf" style="margin-top:5px;">
+        <div class="sutil" style="margin-bottom:2px;">Histórico de mediciones de la ventana visible</div>
+        <div id="printMonitor"></div>
+      </div>
+    </section>
+
+    <!-- ===================== DIAGNÓSTICO Y TRAZABILIDAD ==================== -->
+    <section class="card" id="cardIndicadores">
+      <h2><span>Diagnóstico y trazabilidad</span></h2>
+      <div class="diag-container" id="panelAlertas"></div>
+    </section>
 
     <!-- ====================== PRUEBA DE HERMETICIDAD ======================== -->
     <details class="card" id="cardHermeticidad" open>
@@ -932,7 +1029,19 @@
   </div>
 
   <!-- ================= DIAGRAMA DE MOLLIER EN PANTALLA COMPLETA ============= -->
-  <div class="overlay" id="overlayMollier">
+    <!-- ================= GRÁFICA TEMPORAL A PANTALLA COMPLETA ============== -->
+  <div class="overlay" id="overlayGrafica">
+    <div class="overlay-head">
+      <span class="series-bar" id="seriesBarZoom" style="margin:0;flex:1 1 auto;"></span>
+      <span class="overlay-acciones">
+        <button class="btn-mini" onclick="pantallaCompletaNativa()" title="Pantalla completa real del dispositivo">⛶ Full</button>
+        <button class="btn-mini" onclick="cerrarZoomGrafica()" title="Cerrar">✕</button>
+      </span>
+    </div>
+    <div id="chartZoom" class="overlay-grafica" title="Arrastre para desplazar · rueda o dos dedos para zoom · doble toque para reiniciar"></div>
+  </div>
+
+<div class="overlay" id="overlayMollier">
     <div class="overlay-head">
       <span>Diagrama de Mollier (p-h) — pantalla completa</span>
       <span class="overlay-acciones">
@@ -1126,6 +1235,9 @@
     async function obtenerClimaPuntoFijo() {
       const lbl = document.getElementById('txtTempAmb');
       try {
+        /* Si hay una sonda de ambiente asignada manda la sonda: no se consulta
+           el clima de internet ni se pisa la temperatura medida en campo. */
+        if (window.__ambientePorSonda && window.__ambientePorSonda()) return;
         const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=11.7&longitude=-70.2&current_weather=true');
         const data = await res.json();
         if (data && data.current_weather) {
@@ -2153,7 +2265,6 @@
         customdata: [t1Str, t2Str, t3Str, t4Str, t1Str]
       };
 
-
       // Puntos de consulta: uno por tramo.
       // IMPORTANTE: el eje de presión es logarítmico. Para que el punto
       // quede visualmente sobre el 50 % del tramo vertical 1→2, 3→4, etc.,
@@ -2489,10 +2600,19 @@
   </script>
   <script>
 /* ============================================================================
-   MÓDULO MONITOR TÉRMICO · API ESP32 (Cloudflare Worker) · HERMETICIDAD · TEMA
+   MÓDULO MONITOR TÉRMICO Y DE PRESIONES · API ESP32 (Cloudflare Worker)
    ----------------------------------------------------------------------------
-   Se apoya en el motor de Mollier cargado justo más arriba:
-     · refrigerantes, prepareRefrigerant(), saturationAtP()
+   Escenario de campo que implementa:
+     · 2 canales de PRESIÓN  : succión y descarga (manométricas).
+     · 5 canales de TEMPERATURA: descarga, líquido, salida de evaporador,
+       succión del compresor y ambiente.
+   Cada casillero de la pantalla tiene su selector de sonda (por si los sensores
+   quedan montados al revés), la asignación es única y se guarda en caché.
+   El motor de Mollier, cargado justo antes, sigue siendo quien calcula: lee los
+   cuatro casilleros del ciclo y las dos presiones, y resuelve P–T con CoolProp.
+
+   Se apoya en el motor ya cargado arriba:
+     · refrigerantes, prepareRefrigerant(), saturationAtP(), nombreCoolProp()
      · pUnits, pUnitActual, tUnitActual, convertirTemp()
      · actualizarTodo(), guardarYActualizar(), toggleCompresionIdeal(),
        toggleZonaActiva(), descargarPDFReporte()
@@ -2516,25 +2636,82 @@
   const INTERVALO_HISTORICO_MS  = 30000;
   const ATM_PSI                 = 14.696;
   const PA_POR_PSI              = 6894.757293168;
-  const CAMPOS_TEMP             = ['tEvapOut', 'tSuct', 'tLiq', 'tDescReal'];
+  const PSI_POR_BAR             = 14.5038;
 
-  /* Claves de localStorage: se conservan los nombres que ya usaba la app del
-     termómetro para no perder alarmas ni la referencia de hermeticidad
-     guardadas (las dos apps comparten origen en GitHub Pages). */
-  const K_ALARMA1     = 'alarm1-input';
-  const K_ALARMA2     = 'alarm2-input';
+  /* ------------------------- CANALES QUE MANDA EL ESP32 ------------------- */
+  /* Nombres alternativos que se aceptan para cada canal, de modo que un cambio
+     de firmware no obligue a tocar la aplicación. También se aceptan arreglos
+     "temps"/"temperaturas" y "presiones"/"pres". */
+  const ALIAS_TEMP = [
+    ['temp1', 'sonda1', 't1', 'temperatura1'],
+    ['temp2', 'sonda2', 't2', 'temperatura2'],
+    ['temp3', 'sonda3', 't3', 'temperatura3'],
+    ['temp4', 'sonda4', 't4', 'temperatura4'],
+    ['temp5', 'sonda5', 't5', 'temperatura5'],
+    ['temp6', 'sonda6', 't6', 'temperatura6']
+  ];
+  const ALIAS_PRES = [
+    ['presion_succion', 'presionSuccion', 'presion1', 'pres1', 'p_succion', 'pSuccion', 'p1', 'presion_baja'],
+    ['presion_descarga', 'presionDescarga', 'presion2', 'pres2', 'p_descarga', 'pDescarga', 'p2', 'presion_alta'],
+    ['presion3', 'pres3', 'p3']
+  ];
+  const N_TEMP = 5;     /* descarga, líquido, salida evap, succión compresor, ambiente */
+  const N_PRES = 2;     /* succión y descarga */
+
+  /* --------------------------- CASILLEROS DE PANTALLA --------------------- */
+  /*
+   * Cada casillero lee UN canal y lo publica en el motor. "varMotor" es el id
+   * del casillero del motor de Mollier que se alimenta con ese valor.
+   * "tipo" decide qué canales admite su selector (temp o presion).
+   */
+  const SLOTS = [
+    { id: 'psuct', tipo: 'pres', etiqueta: 'P. Succión',        varMotor: 'pSuct',     alarma: 'max', umbral: 120 },
+    { id: 'tsuct', tipo: 'temp', etiqueta: 'T. Succión Comp.',  varMotor: 'tSuct',     alarma: 'max', umbral: 25 },
+    { id: 'pdesc', tipo: 'pres', etiqueta: 'P. Descarga',       varMotor: 'pDesc',     alarma: 'max', umbral: 350 },
+    { id: 'tdesc', tipo: 'temp', etiqueta: 'T. Descarga',       varMotor: 'tDescReal', alarma: 'max', umbral: 100 },
+    { id: 'tevap', tipo: 'temp', etiqueta: 'T. Salida Evap',    varMotor: 'tEvapOut',  alarma: 'max', umbral: 15 },
+    { id: 'tliq',  tipo: 'temp', etiqueta: 'T. Líquido',        varMotor: 'tLiq',      alarma: 'max', umbral: 50 },
+    { id: 'tamb',  tipo: 'temp', etiqueta: 'T. Ambiente',       varMotor: null,        alarma: 'max', umbral: 45 }
+  ];
+  const SLOT_POR_ID = {};
+  SLOTS.forEach(s => { SLOT_POR_ID[s.id] = s; });
+
+  /* Asignación de fábrica: el orden en que el usuario enumeró sus sondas */
+  const ASIGNACION_INICIAL = {
+    psuct: 'pres1', pdesc: 'pres2',
+    tdesc: 'temp1', tliq: 'temp2', tevap: 'temp3', tsuct: 'temp4', tamb: 'temp5'
+  };
+
+  /* Series de la gráfica: se muestran u ocultan a demanda y se recuerda */
+  const SERIES_GRAFICA = [
+    { id: 'tsuct', etiqueta: 'T. Succión',  color: '#f87171', eje: 'y',  porDefecto: true },
+    { id: 'tdesc', etiqueta: 'T. Descarga', color: '#fb923c', eje: 'y',  porDefecto: true },
+    { id: 'tliq',  etiqueta: 'T. Líquido',  color: '#34d399', eje: 'y',  porDefecto: false },
+    { id: 'tevap', etiqueta: 'T. Salida Evap', color: '#38bdf8', eje: 'y', porDefecto: true },
+    { id: 'tamb',  etiqueta: 'T. Ambiente', color: '#a78bfa', eje: 'y',  porDefecto: false },
+    { id: 'dt',    etiqueta: 'ΔT',          color: '#fbbf24', eje: 'y',  porDefecto: false, dash: 'dot' },
+    { id: 'psuct', etiqueta: 'P. Succión',  color: '#818cf8', eje: 'y2', porDefecto: false },
+    { id: 'pdesc', etiqueta: 'P. Descarga', color: '#f472b6', eje: 'y2', porDefecto: false },
+    { id: 'phe',   etiqueta: 'P.H. esperada', color: '#22d3ee', eje: 'y2', porDefecto: false, dash: 'dash' },
+    { id: 'phm',   etiqueta: 'P.H. medida',   color: '#a7f3d0', eje: 'y2', porDefecto: false, modo: 'markers' }
+  ];
+
+  /* ------------------------------- CLAVES DE CACHÉ ------------------------ */
+  /* Se conservan los nombres que ya usaba la app del termómetro para no perder
+     la referencia de hermeticidad ni la ventana elegida. */
+  const K_MODO        = 'work-mode';
   const K_ALARMAD     = 'alarmDeltaMin-input';
   const K_RANGO       = 'selected-hours-range';
-  const K_INVERTIR    = 'probes-inverted';
   const K_PESO1       = 'ph-s1-weight';
   const K_REF_PH      = 'pressure-reference';
   const K_ULT_PH      = 'pressure-last-measured';
   const K_MED_PH      = 'pressure-measurements';
   const K_TEMA        = 'refrig_tema';
   const K_SENSOR_P    = 'refrig_sensor_p';
-  const K_MAP_S1      = 'refrig_map_s1';
-  const K_MAP_S2      = 'refrig_map_s2';
-  const K_AUTO_CAMPOS = 'refrig_auto_campos';
+  const K_ASIGNACION  = 'refrig_asignacion_sondas';
+  const K_UMBRALES    = 'refrig_umbrales_slots';
+  const K_SERIES      = 'refrig_series_grafica';
+  const K_ALARMAS     = 'refrig_alarmas_slots';
 
   /* --------------------------------- ESTADO ------------------------------- */
   const $ = id => document.getElementById(id);
@@ -2543,31 +2720,60 @@
   let rangoHoras = parseInt(localStorage.getItem(K_RANGO), 10);
   if (!VENTANAS_VALIDAS.includes(rangoHoras)) rangoHoras = 2;
 
-  let finVentana      = new Date();
-  let enVivo          = true;
-  let datosCrudos     = [];
-  let ultimaVista     = null;   // última fila procesada de la ventana visible
-  let ultimaAbsoluta  = null;   // última lectura absoluta (batería / wifi)
-  let invertido       = localStorage.getItem(K_INVERTIR) === 'true';
-  let alarmaActiva    = false;
-  let ultimaSenal     = null;
-  let apiOk           = null;
-  let errorApi        = null;
-  let sondeando       = false;
-  let secuencia       = 0;
-  let mapaS1          = localStorage.getItem(K_MAP_S1) || 'tEvapOut';
-  let mapaS2          = localStorage.getItem(K_MAP_S2) || 'tSuct';
-  const autoCampos    = { tEvapOut: true, tSuct: true, tLiq: true, tDescReal: true };
-  const autoPresion   = { pSuct: true, pDesc: true };
-  let sensorAbsoluto  = localStorage.getItem(K_SENSOR_P) === 'absoluta';
-  let temaActual      = localStorage.getItem(K_TEMA) === 'claro' ? 'claro' : 'oscuro';
+  let finVentana     = new Date();
+  let enVivo         = true;
+  let datosCrudos    = [];
+  let ultimaVista    = null;
+  let ultimaAbsoluta = null;
+  let alarmaActiva   = false;
+  let ultimaSenal    = null;
+  let apiOk          = null;
+  let errorApi       = null;
+  let sondeando      = false;
+  let secuencia      = 0;
+  let temaActual     = localStorage.getItem(K_TEMA) === 'claro' ? 'claro' : 'oscuro';
+  let modoActual     = localStorage.getItem(K_MODO) === 'ph' ? 'ph' : 'monitor';
+  let sensorAbsoluto = localStorage.getItem(K_SENSOR_P) === 'absoluta';
 
+  /* Asignación sonda -> casillero (persistida) */
+  let asignacion = {};
+  SLOTS.forEach(s => { asignacion[s.id] = ASIGNACION_INICIAL[s.id] || ''; });
+  try {
+    const guardada = JSON.parse(localStorage.getItem(K_ASIGNACION) || 'null');
+    if (guardada && typeof guardada === 'object') {
+      SLOTS.forEach(s => {
+        if (typeof guardada[s.id] === 'string') asignacion[s.id] = guardada[s.id];
+      });
+    }
+  } catch (e) {}
+
+  /* Umbrales de alarma (en unidad canónica: °C y PSI) y series visibles */
+  const umbrales = {};
+  SLOTS.forEach(s => { umbrales[s.id] = s.umbral; });
+  try {
+    const u = JSON.parse(localStorage.getItem(K_UMBRALES) || 'null');
+    if (u && typeof u === 'object') {
+      SLOTS.forEach(s => { if (Number.isFinite(Number(u[s.id]))) umbrales[s.id] = Number(u[s.id]); });
+    }
+  } catch (e) {}
+
+  let umbralDT = 3;
+  const seriesVisibles = {};
+  SERIES_GRAFICA.forEach(s => { seriesVisibles[s.id] = !!s.porDefecto; });
+  try {
+    const sv = JSON.parse(localStorage.getItem(K_SERIES) || 'null');
+    if (sv && typeof sv === 'object') {
+      SERIES_GRAFICA.forEach(s => { if (typeof sv[s.id] === 'boolean') seriesVisibles[s.id] = sv[s.id]; });
+    }
+  } catch (e) {}
+
+  /* Hermeticidad */
   let pesoEvap = parseInt(localStorage.getItem(K_PESO1), 10);
   if (!Number.isFinite(pesoEvap) || pesoEvap < 0 || pesoEvap > 100) pesoEvap = 60;
   let pesoCond = 100 - pesoEvap;
-  let referenciaPH   = null;
+  let referenciaPH = null;
   let ultimaMedidaPH = null;
-  let medidasPH      = [];
+  let medidasPH = [];
 
   /* ------------------------------- UTILIDADES ----------------------------- */
   function aNumero(v) {
@@ -2575,10 +2781,13 @@
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
-  /* El DS18B20 entrega -127 cuando está desconectado: se descarta */
   function limpiarTemp(v) {
     const n = aNumero(v);
-    return (n !== null && n > -50 && n <= 125) ? n : null;
+    return (n !== null && n > -60 && n <= 200) ? n : null;
+  }
+  function limpiarPresion(v) {
+    const n = aNumero(v);
+    return (n !== null && n > -15 && n < 1500) ? n : null;
   }
   function conTimeout(promesa, ms) {
     let timer;
@@ -2598,11 +2807,120 @@
     return h + ' h ' + (m % 60) + ' min';
   }
   function vibrar(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
+  function guardarJSON(clave, valor) {
+    try { localStorage.setItem(clave, JSON.stringify(valor)); } catch (e) {}
+  }
 
-  /* -------------------------------- TEMA ---------------------------------- */
+  /* ---------------------- LECTURA DE CANALES DEL PAYLOAD ------------------ */
+  function canalTemp(fila, n) {
+    if (!fila) return null;
+    const lista = Array.isArray(fila.temps) ? fila.temps
+                : (Array.isArray(fila.temperaturas) ? fila.temperaturas : null);
+    if (lista && lista.length >= n) return limpiarTemp(lista[n - 1]);
+    const alias = ALIAS_TEMP[n - 1] || [];
+    for (let i = 0; i < alias.length; i++) {
+      const v = fila[alias[i]];
+      if (v !== undefined && v !== null && v !== '') return limpiarTemp(v);
+    }
+    return null;
+  }
+  function canalPres(fila, n) {
+    if (!fila) return null;
+    let bruto = null;
+    const lista = Array.isArray(fila.presiones) ? fila.presiones
+                : (Array.isArray(fila.pres) ? fila.pres : null);
+    if (lista && lista.length >= n) {
+      bruto = limpiarPresion(lista[n - 1]);
+    } else {
+      const alias = ALIAS_PRES[n - 1] || [];
+      for (let i = 0; i < alias.length; i++) {
+        const v = fila[alias[i]];
+        if (v !== undefined && v !== null && v !== '') { bruto = limpiarPresion(v); break; }
+      }
+    }
+    if (bruto === null) return null;
+    /* El motor de diagnóstico razona en presión manométrica; si el transmisor
+       entrega presión absoluta se descuenta la atmosférica (conversión estándar). */
+    return sensorAbsoluto ? (bruto - ATM_PSI) : bruto;
+  }
+  function valorDeCanal(fila, canal) {
+    if (!fila || !canal) return null;
+    const m = /^(temp|pres)(\d+)$/.exec(canal);
+    if (!m) return null;
+    const n = parseInt(m[2], 10);
+    return (m[1] === 'temp') ? canalTemp(fila, n) : canalPres(fila, n);
+  }
+  function etiquetaDeCanal(canal) {
+    const m = /^(temp|pres)(\d+)$/.exec(canal || '');
+    if (!m) return 'manual';
+    return (m[1] === 'temp' ? 'Sonda ' : 'Presión ') + m[2];
+  }
+  /* Canales que existen para un tipo, según lo que haya mandado el equipo */
+  function canalesDeTipo(tipo) {
+    const fila = ultimaAbsoluta || ultimaVista;
+    const lista = [];
+    const n = (tipo === 'pres') ? N_PRES : N_TEMP;
+    for (let i = 1; i <= n; i++) {
+      const id = (tipo === 'pres' ? 'pres' : 'temp') + i;
+      lista.push({ id: id, etiqueta: etiquetaDeCanal(id), valor: valorDeCanal(fila, id) });
+    }
+    return lista;
+  }
+
+  function procesarFila(fila) {
+    if (!fila) return null;
+    const temps = [], pres = [];
+    for (let n = 1; n <= N_TEMP; n++) temps.push(canalTemp(fila, n));
+    for (let n = 1; n <= N_PRES; n++) pres.push(canalPres(fila, n));
+    const vBat = aNumero(fila.bateriaVolt);
+    const out = Object.assign({}, fila, {
+      t: temps, p: pres,
+      bateria: vBat !== null ? voltajeAPorcentaje(vBat) : null,
+      bateriaVolt: vBat,
+      wifi: fila.wifi || fila.ssid || null,
+      ip: fila.ip_local || fila.ip || null
+    });
+    /* ΔT entre salida de evaporador y descarga: es el par que compensa la
+       prueba de hermeticidad (evap/cond) y el que se dibuja como ΔT. */
+    const tEvap = valorSlotDeFila(out, 'tevap');
+    const tDesc = valorSlotDeFila(out, 'tdesc');
+    out.dt = (tEvap !== null && tDesc !== null) ? Math.abs(tEvap - tDesc) : null;
+    return out;
+  }
+  function valorSlotDeFila(fila, slotId) {
+    const s = SLOT_POR_ID[slotId];
+    if (!fila || !s) return null;
+    return valorDeCanal(fila, asignacion[slotId]);
+  }
+  function datosFrescos(fila) {
+    if (!fila || !fila.created_at) return false;
+    const t = new Date(fila.created_at).getTime();
+    return Number.isFinite(t) && (Date.now() - t) <= EDAD_MAX_ESP32_MS;
+  }
+
+  /* --------------------------- CONVERSIÓN DE UNIDADES --------------------- */
+  function factorPresion() {
+    return (pUnitActual === 'psi') ? PSI_POR_BAR : ((pUnitActual === 'kpa') ? 100 : 1.0);
+  }
+  /* El equipo manda PSI manométricos; el motor trabaja en la unidad activa */
+  function presionAMotor(psi) {
+    const valor = aNumero(psi);
+    if (valor === null) return null;
+    return (valor / PSI_POR_BAR) * factorPresion();
+  }
+  function presionDeMotor(valorUnidad) {
+    const v = aNumero(valorUnidad);
+    if (v === null) return null;
+    return (v / factorPresion()) * PSI_POR_BAR;
+  }
+  function presionAbsolutaBar(valorUnidad) {
+    const psi = (valorUnidad === undefined) ? null : presionDeMotor(valorUnidad);
+    if (psi === null) return null;
+    return Math.max((psi + ATM_PSI) / PSI_POR_BAR, 0.005);
+  }
+
+  /* --------------------------------- TEMA --------------------------------- */
   function esTemaClaro() { return document.documentElement.getAttribute('data-tema') === 'claro'; }
-
-  /* Colores que el motor de Mollier consulta en cada render */
   function colorMollier() {
     return esTemaClaro()
       ? { paper: '#ffffff', plot: '#f8fafc', grid: '#cbd5e1', eje: '#334155', titulo: '#475569',
@@ -2611,13 +2929,11 @@
           cicloTexto: '#f8fafc', contraste: '#0f172a', idealTexto: '#ddd6fe', domo: '#38bdf8' };
   }
   window.__colorMollier = colorMollier;
-
   function colorMonitor() {
     return esTemaClaro()
       ? { papel: '#ffffff', fondo: '#f8fafc', rejilla: '#e2e8f0', eje: '#475569', titulo: '#334155' }
       : { papel: '#1e293b', fondo: '#0f172a', rejilla: '#334155', eje: '#cbd5e1', titulo: '#94a3b8' };
   }
-
   function aplicarTema(nuevo, silencioso) {
     temaActual = (nuevo === 'claro') ? 'claro' : 'oscuro';
     document.documentElement.setAttribute('data-tema', temaActual);
@@ -2632,26 +2948,57 @@
   }
   window.alternarTema = function () { aplicarTema(temaActual === 'claro' ? 'oscuro' : 'claro'); };
 
-  /* --------------------------- PANTALLA COMPLETA -------------------------- */
-  function abrirMollier() {
-    const ov = $('overlayMollier');
+  /* ------------------------------ MODO DE TRABAJO ------------------------- */
+  /* Monitor y prueba de hermeticidad no conviven: se cambia de modo. */
+  function aplicarModo(nuevo) {
+    modoActual = (nuevo === 'ph') ? 'ph' : 'monitor';
+    document.body.setAttribute('data-modo', modoActual);
+    try { localStorage.setItem(K_MODO, modoActual); } catch (e) {}
+    const bm = $('btnModoMonitor'), bp = $('btnModoPH');
+    if (bm) bm.classList.toggle('activo', modoActual === 'monitor');
+    if (bp) bp.classList.toggle('activo', modoActual === 'ph');
+    if (modoActual === 'ph') actualizarPanelPH();
+  }
+  window.cambiarModo = function (nuevo) {
+    aplicarModo(nuevo);
+    vibrar(10);
+    setTimeout(() => { try { if (window.Plotly) Plotly.Plots.resize('chartMonitor'); } catch (e) {} }, 80);
+  };
+
+  /* ----------------------- PANTALLAS COMPLETAS (overlays) ----------------- */
+  function abrirOverlay(id) {
+    const ov = $(id);
     if (!ov) return;
     ov.classList.add('abierto');
     document.body.classList.add('con-overlay');
+  }
+  function cerrarOverlay(id) {
+    const ov = $(id);
+    if (!ov) return;
+    ov.classList.remove('abierto');
+    if (!document.querySelector('.overlay.abierto')) document.body.classList.remove('con-overlay');
+  }
+  function abrirMollier() {
+    abrirOverlay('overlayMollier');
     try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
     const ajustar = () => { try { if (window.Plotly) Plotly.Plots.resize('mollierPlot'); } catch (e) {} };
     setTimeout(ajustar, 60);
     setTimeout(ajustar, 380);
     vibrar(10);
   }
-  function cerrarMollier() {
-    const ov = $('overlayMollier');
-    if (!ov) return;
-    ov.classList.remove('abierto');
-    document.body.classList.remove('con-overlay');
-    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  function abrirZoomGrafica() {
+    abrirOverlay('overlayGrafica');
+    const ajustar = () => { try { if (window.Plotly) Plotly.Plots.resize('chartZoom'); } catch (e) {} };
+    dibujarZoom();
+    setTimeout(ajustar, 60);
+    setTimeout(ajustar, 380);
+    vibrar(10);
   }
-  function pantallaCompletaNativa() {
+  window.abrirMollier = abrirMollier;
+  window.cerrarMollier = function () { cerrarOverlay('overlayMollier'); };
+  window.abrirZoomGrafica = abrirZoomGrafica;
+  window.cerrarZoomGrafica = function () { cerrarOverlay('overlayGrafica'); };
+  window.pantallaCompletaNativa = function () {
     const raiz = document.documentElement;
     if (!document.fullscreenElement) {
       if (raiz.requestFullscreen) raiz.requestFullscreen().catch(() => {});
@@ -2659,205 +3006,249 @@
     } else if (document.exitFullscreen) {
       document.exitFullscreen().catch(() => {});
     }
-    setTimeout(() => { try { if (window.Plotly) Plotly.Plots.resize('mollierPlot'); } catch (e) {} }, 400);
-  }
-  window.abrirMollier = abrirMollier;
-  window.cerrarMollier = cerrarMollier;
-  window.pantallaCompletaNativa = pantallaCompletaNativa;
-
-  /* --------------------- MAPEO SONDA -> CAMPO DEL MOTOR ------------------- */
-  function idMarca(campo) { return 'auto' + campo.charAt(0).toUpperCase() + campo.slice(1); }
-
-  function pintarMarcaAuto(campo) {
-    const el = $(idMarca(campo));
-    if (!el) return;
-    const activo = !!autoCampos[campo];
-    el.textContent = activo ? 'A' : 'M';
-    el.classList.toggle('auto', activo);
-    el.title = activo
-      ? 'Se rellena desde la sonda en vivo. Toque para pasar a manual.'
-      : 'Edición manual. Toque para volver a la sonda en vivo.';
-  }
-  function guardarAutoCampos() {
-    try { localStorage.setItem(K_AUTO_CAMPOS, JSON.stringify(autoCampos)); } catch (e) {}
-  }
-  function cargarAutoCampos() {
-    try {
-      const s = JSON.parse(localStorage.getItem(K_AUTO_CAMPOS) || 'null');
-      if (s && typeof s === 'object') {
-        CAMPOS_TEMP.forEach(c => { if (typeof s[c] === 'boolean') autoCampos[c] = s[c]; });
-      }
-    } catch (e) {}
-    CAMPOS_TEMP.forEach(pintarMarcaAuto);
-  }
-
-  function datosFrescos(fila) {
-    if (!fila || !fila.created_at) return false;
-    const t = new Date(fila.created_at).getTime();
-    return Number.isFinite(t) && (Date.now() - t) <= EDAD_MAX_ESP32_MS;
-  }
-
-  /* Escribe las sondas en los campos del motor respetando el modo de cada campo */
-  function aplicarSondasAlMotor() {
-    const fila = ultimaVista;
-    if (!fila || !datosFrescos(fila)) return false;
-    let cambio = false;
-    [[mapaS1, fila.s1], [mapaS2, fila.s2]].forEach(par => {
-      const campo = par[0], valor = par[1];
-      if (!campo || valor === null || valor === undefined) return;
-      if (!autoCampos[campo]) return;
-      const el = $(campo);
-      if (!el) return;
-      const nuevo = convertirTemp(valor).toFixed(1);
-      if (el.value !== nuevo) { el.value = nuevo; cambio = true; }
-    });
-    if (cambio) guardarYActualizar();
-    return cambio;
-  }
-
-  window.cambiarMapeoSondas = function () {
-    const s1 = $('mapS1'), s2 = $('mapS2');
-    mapaS1 = s1 ? s1.value : '';
-    mapaS2 = s2 ? s2.value : '';
-    try {
-      localStorage.setItem(K_MAP_S1, mapaS1);
-      localStorage.setItem(K_MAP_S2, mapaS2);
-    } catch (e) {}
-    /* Al reasignar una sonda, sus campos vuelven a modo automático */
-    CAMPOS_TEMP.forEach(c => { autoCampos[c] = true; pintarMarcaAuto(c); });
-    guardarAutoCampos();
-    aplicarSondasAlMotor();
-  };
-
-  window.alternarAuto = function (campo) {
-    autoCampos[campo] = !autoCampos[campo];
-    pintarMarcaAuto(campo);
-    guardarAutoCampos();
-    if (autoCampos[campo]) aplicarSondasAlMotor();
-    else guardarYActualizar();
-  };
-
-  window.marcarTemperaturaManual = function (campo) {
-    autoCampos[campo] = false;
-    pintarMarcaAuto(campo);
-    guardarAutoCampos();
-    guardarYActualizar();
-  };
-
-  /* ------------------------------ PRESIONES ------------------------------- */
-  function factorPresion() {
-    return (pUnitActual === 'psi') ? 14.5038 : ((pUnitActual === 'kpa') ? 100 : 1.0);
-  }
-  function presionAbsolutaBar(id) {
-    const el = $(id);
-    if (!el) return null;
-    const v = aNumero(el.value);
-    if (v === null) return null;
-    return Math.max((v / factorPresion()) + 1.01325, 0.005);
-  }
-  /* El motor trabaja en presión MANOMÉTRICA en la unidad activa */
-  function presionApiAUnidad(psiBruto) {
-    const psi = aNumero(psiBruto);
-    if (psi === null) return null;
-    const psiMan = sensorAbsoluto ? psi - ATM_PSI : psi;
-    return (psiMan / 14.5038) * pUnits[pUnitActual].factor;
-  }
-  function extraerPresionesApi(fila) {
-    if (!fila) return { suct: null, desc: null };
-    const buscar = nombres => {
-      for (let i = 0; i < nombres.length; i++) {
-        const v = fila[nombres[i]];
-        if (v !== undefined && v !== null && v !== '') return v;
-      }
-      return null;
-    };
-    return {
-      suct: buscar(['presion_succion', 'presionSuccion', 'presion1', 'pres1', 'p_succion', 'pSuccion', 'p1', 'presion_baja', 'presBaja']),
-      desc: buscar(['presion_descarga', 'presionDescarga', 'presion2', 'pres2', 'p_descarga', 'pDescarga', 'p2', 'presion_alta', 'presAlta'])
-    };
-  }
-  function pintarOrigenPresion(id) {
-    const badge = $(id === 'pSuct' ? 'origenPSuct' : 'origenPDesc');
-    if (!badge) return;
-    const auto = !!autoPresion[id];
-    badge.textContent = auto ? 'API' : 'manual';
-    badge.className = 'badge' + (auto ? ' badge-ok' : '');
-    badge.title = auto
-      ? 'Valor tomado del API del ESP32. Toque para pasar a manual.'
-      : 'Valor manual. Toque para volver al API.';
-    badge.onclick = () => window.alternarPresionAuto(id);
-  }
-  window.alternarPresionAuto = function (id) {
-    autoPresion[id] = true;
-    pintarOrigenPresion(id);
-    aplicarPresionesAlMotor();
-  };
-  window.marcarPresionManual = function (id) {
-    autoPresion[id] = false;
-    pintarOrigenPresion(id);
-    guardarYActualizar();
-  };
-  window.cambiarTipoSensorPresion = function () {
-    const sel = $('tipoSensorP');
-    sensorAbsoluto = !!(sel && sel.value === 'absoluta');
-    try { localStorage.setItem(K_SENSOR_P, sensorAbsoluto ? 'absoluta' : 'manometrica'); } catch (e) {}
-    aplicarPresionesAlMotor();
-    actualizarTsat();
-  };
-
-  function aplicarPresionesAlMotor() {
-    const fila = ultimaVista;
-    if (!fila || !datosFrescos(fila)) return false;
-    const p = extraerPresionesApi(fila);
-    let cambio = false;
-    [['pSuct', p.suct], ['pDesc', p.desc]].forEach(par => {
-      const id = par[0], bruto = par[1];
-      if (bruto === null || !autoPresion[id]) return;
-      const v = presionApiAUnidad(bruto);
-      if (v === null) return;
-      const el = $(id);
-      if (!el) return;
-      const nuevo = v.toFixed(v >= 100 ? 0 : 1);
-      if (el.value !== nuevo) { el.value = nuevo; cambio = true; }
-    });
-    if (cambio) guardarYActualizar();
-    return cambio;
-  }
-
-  /* Temperaturas de saturación P–T resueltas con CoolProp (o tabla local) */
-  function actualizarTsat() {
-    const sel = $('refSelect');
-    const refData = (typeof refrigerantes !== 'undefined' && sel) ? refrigerantes[sel.value] : null;
-    const u = '°' + tUnitActual;
-
-    const pintar = (id, pBarAbs) => {
-      if (!refData || pBarAbs === null) { poner(id, 'Tsat: —'); return; }
+    setTimeout(() => {
       try {
-        const sat = saturationAtP(refData, pBarAbs);
-        const tDew = Number.isFinite(sat.tDew) ? sat.tDew : sat.tSat;
-        const tBub = Number.isFinite(sat.tBubble) ? sat.tBubble : sat.tSat;
-        if (!Number.isFinite(tDew)) { poner(id, 'Tsat: —'); return; }
-        const zeo = Number.isFinite(tBub) && Math.abs(tDew - tBub) > 0.15;
-        const fuente = (sat.source || '').indexOf('CoolProp') === 0 ? 'CoolProp' : 'tabla';
-        poner(id, zeo
-          ? `Tsat rocío ${convertirTemp(tDew).toFixed(1)} ${u} · burbuja ${convertirTemp(tBub).toFixed(1)} ${u} · ${fuente}`
-          : `Tsat ${convertirTemp(tDew).toFixed(1)} ${u} · ${fuente}`);
-      } catch (e) {
-        poner(id, 'Tsat: —');
-      }
-    };
+        if (!window.Plotly) return;
+        Plotly.Plots.resize('mollierPlot');
+        Plotly.Plots.resize('chartZoom');
+      } catch (e) {}
+    }, 400);
+  };
+  /* ==================== CASILLEROS: SELECTORES Y VALORES ================== */
+  let ventanaProcesada = [];      /* filas de la ventana visible, ya procesadas */
 
-    pintar('tsatPSuct', presionAbsolutaBar('pSuct'));
-    pintar('tsatPDesc', presionAbsolutaBar('pDesc'));
-    poner('unidadPSuct', pUnits[pUnitActual].label);
-    poner('unidadPDesc', pUnits[pUnitActual].label);
-
-    /* Etiqueta de la tarjeta de indicadores: qué motor termodinámico resuelve */
-    const motor = (window.CoolProp && refData && refData.coolprop)
-      ? nombreCoolProp()
-      : 'tablas locales de respaldo';
-    poner('txtFuenteTermo', 'Motor: ' + motor);
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function slotQueUsaCanal(canal) {
+    const ids = Object.keys(asignacion);
+    for (let i = 0; i < ids.length; i++) if (asignacion[ids[i]] === canal) return ids[i];
+    return null;
   }
+  /* Opciones de cada selector: TODOS los canales de su tipo, marcando en qué
+     casillero está cada uno. Así se pueden intercambiar sondas cuando quedan
+     montadas al revés: al elegir una sonda que estaba en otro casillero, las
+     dos se intercambian de lugar. */
+  function pintarSelectores() {
+    SLOTS.forEach(s => {
+      const sel = $('sel' + cap(s.id));
+      if (!sel) return;
+      const actual = asignacion[s.id];
+      const canales = canalesDeTipo(s.tipo);
+      const opciones = ['<option value="">— manual —</option>'];
+      let encontrado = (actual === '');
+      canales.forEach(c => {
+        const duenio = slotQueUsaCanal(c.id);
+        const enOtro = duenio && duenio !== s.id;
+        if (c.id === actual) encontrado = true;
+        const notas = [];
+        if (enOtro) notas.push('en ' + SLOT_POR_ID[duenio].etiqueta);
+        if (c.valor === null) notas.push('sin datos');
+        opciones.push('<option value="' + c.id + '"' + (c.id === actual ? ' selected' : '') + '>' +
+                      escaparHtml(c.etiqueta) + (notas.length ? ' (' + escaparHtml(notas.join(', ')) + ')' : '') +
+                      '</option>');
+      });
+      if (!encontrado && actual) {
+        opciones.push('<option value="' + actual + '" selected>' + escaparHtml(etiquetaDeCanal(actual)) + ' (no llega)</option>');
+      }
+      sel.innerHTML = opciones.join('');
+    });
+  }
+
+  window.cambiarAsignacion = function (slotId) {
+    const s = SLOT_POR_ID[slotId];
+    const sel = $('sel' + cap(slotId));
+    if (!s || !sel) return;
+    const elegido = sel.value;
+    const anterior = asignacion[slotId];
+    const duenio = elegido ? slotQueUsaCanal(elegido) : null;
+    if (duenio && duenio !== slotId) {
+      /* Intercambio: la sonda que estaba aquí pasa al casillero de donde salió */
+      asignacion[duenio] = anterior || '';
+      pintarSlot(duenio);
+    }
+    asignacion[slotId] = elegido;
+    guardarJSON(K_ASIGNACION, asignacion);
+    pintarSlot(slotId);
+    pintarSelectores();
+    actualizarTodoElMonitor();
+  };
+
+  /* Valores en unidad canónica: temperatura en °C, presión en PSI manométricos */
+  function valorSlotActual(slotId) {
+    return ultimaVista ? valorSlotDeFila(ultimaVista, slotId) : null;
+  }
+  function aUnidadSlot(s, canonico) {
+    if (canonico === null || canonico === undefined) return null;
+    if (s.tipo === 'pres') return presionAMotor(canonico);
+    return convertirTemp(canonico);
+  }
+  function formatearSlot(s, canonico, decimales) {
+    const v = aUnidadSlot(s, canonico);
+    if (v === null) return '---.-';
+    const d = (decimales !== undefined) ? decimales : (s.tipo === 'pres' ? (v >= 100 ? 0 : 1) : 1);
+    return v.toFixed(d);
+  }
+  function unidadSlot(s) {
+    return (s.tipo === 'pres') ? pUnits[pUnitActual].label : ('°' + tUnitActual);
+  }
+  function estadisticasSlot(slotId) {
+    const s = SLOT_POR_ID[slotId];
+    let min = null, max = null;
+    if (!s) return { min: null, max: null };
+    ventanaProcesada.forEach(f => {
+      const v = valorSlotDeFila(f, slotId);
+      if (v === null) return;
+      if (min === null || v < min) min = v;
+      if (max === null || v > max) max = v;
+    });
+    return { min: min, max: max };
+  }
+  function alarmaDeSlot(slotId) {
+    const s = SLOT_POR_ID[slotId];
+    const fila = ultimaVista;
+    if (!s || !enVivo || !fila || !datosFrescos(fila)) return false;
+    const v = valorSlotDeFila(fila, slotId);
+    const u = umbrales[slotId];
+    if (v === null || !Number.isFinite(u)) return false;
+    return (s.alarma === 'max') ? (v >= u) : (v <= u);
+  }
+  function alarmaDeDT() {
+    const fila = ultimaVista;
+    if (!enVivo || !fila || !datosFrescos(fila)) return false;
+    return (fila.dt !== null && Number.isFinite(umbralDT) && fila.dt <= umbralDT);
+  }
+
+  function pintarSlot(slotId) {
+    const s = SLOT_POR_ID[slotId];
+    if (!s) return;
+    const canonico = valorSlotActual(slotId);
+    const activa = alarmaDeSlot(slotId);
+    const st = estadisticasSlot(slotId);
+
+    poner('val' + cap(slotId), formatearSlot(s, canonico));
+    poner('uni' + cap(slotId), unidadSlot(s));
+    poner('min' + cap(slotId), st.min !== null ? formatearSlot(s, st.min) : '--.-');
+    poner('max' + cap(slotId), st.max !== null ? formatearSlot(s, st.max) : '--.-');
+
+    const inpAl = $('alarma' + cap(slotId));
+    if (inpAl && document.activeElement !== inpAl) inpAl.value = formatearSlot(s, umbrales[s.id]);
+
+    const cont = $('slot' + cap(slotId));
+    if (cont) {
+      cont.classList.toggle('sin-sonda', !asignacion[slotId]);
+      cont.classList.toggle('alarma', activa);
+    }
+    const msg = $('estado' + cap(slotId));
+    if (msg) {
+      const nombre = asignacion[slotId] ? etiquetaDeCanal(asignacion[slotId]) : 'entrada manual';
+      if (!asignacion[slotId]) msg.textContent = 'Entrada manual';
+      else if (canonico === null) msg.textContent = 'Sin datos de la ' + nombre;
+      else if (activa) msg.textContent = '¡ALARMA! ' + formatearSlot(s, canonico) + ' ' + unidadSlot(s) +
+                                          ' ≥ ' + formatearSlot(s, umbrales[s.id]) + ' ' + unidadSlot(s);
+      else msg.textContent = nombre + ' · ' + ((ultimaVista && datosFrescos(ultimaVista)) ? 'en vivo' : 'atrasada');
+      msg.classList.toggle('alarma', activa);
+    }
+  }
+
+  function pintarDT() {
+    const fila = ultimaVista;
+    const dt = fila ? fila.dt : null;
+    const st = (function () {
+      let min = null, max = null;
+      ventanaProcesada.forEach(f => {
+        if (f.dt === null) return;
+        if (min === null || f.dt < min) min = f.dt;
+        if (max === null || f.dt > max) max = f.dt;
+      });
+      return { min: min, max: max };
+    })();
+    const activa = alarmaDeDT();
+    poner('valDt', dt !== null ? convertirTemp(dt).toFixed(1) : '--.-');
+    poner('uniDt', '°' + tUnitActual);
+    poner('minDt', st.min !== null ? convertirTemp(st.min).toFixed(1) : '--.-');
+    poner('maxDt', st.max !== null ? convertirTemp(st.max).toFixed(1) : '--.-');
+    const inp = $('alarmaDt');
+    const canonicoDt = (tUnitActual === 'F') ? (umbralDT - 32) * 5 / 9 : umbralDT;
+    if (inp && document.activeElement !== inp) inp.value = convertirTemp(canonicoDt).toFixed(1);
+    const cont = $('slotDt');
+    if (cont) cont.classList.toggle('alarma', activa);
+    poner('estadoDt', !fila ? 'Esperando datos…'
+      : (dt === null ? 'Falta una de las dos temperaturas'
+      : (activa ? '¡ALARMA! ΔT ' + convertirTemp(dt).toFixed(1) + ' ≤ ' + convertirTemp(canonicoDt).toFixed(1)
+                : 'Salida Evap ↔ Descarga')));
+  }
+
+  window.guardarAlarmaSlot = function (slotId) {
+    const s = SLOT_POR_ID[slotId];
+    const el = $('alarma' + cap(slotId));
+    if (!s || !el) return;
+    const v = aNumero(el.value);
+    if (v === null) return;
+    umbrales[s.id] = (s.tipo === 'pres') ? presionDeMotor(v)
+                   : (tUnitActual === 'F' ? (v - 32) * 5 / 9 : v);
+    guardarJSON(K_UMBRALES, umbrales);
+    pintarSlot(slotId);
+    actualizarFilasMonitorEnTabla();
+  };
+  window.guardarAlarmaDT = function () {
+    const el = $('alarmaDt');
+    const v = aNumero(el ? el.value : null);
+    if (v === null) return;
+    umbralDT = (tUnitActual === 'F') ? (v - 32) * 5 / 9 : v;
+    guardarJSON(K_ALARMAS, { dt: umbralDT, slots: umbrales });
+    pintarDT();
+    actualizarFilasMonitorEnTabla();
+  };
+
+  /* ------------------- ALIMENTAR EL MOTOR DE DIAGNÓSTICO ------------------ */
+  function alimentarMotor() {
+    const fila = ultimaVista;
+    if (!fila || !datosFrescos(fila)) return false;
+    let cambio = false;
+    SLOTS.forEach(s => {
+      if (!s.varMotor) return;
+      const crudo = valorSlotDeFila(fila, s.id);
+      if (crudo === null) return;
+      const el = $(s.varMotor);
+      if (!el) return;
+      const nuevo = (s.tipo === 'pres')
+        ? (function () { const v = presionAMotor(crudo); return v === null ? null : v.toFixed(v >= 100 ? 0 : 1); })()
+        : convertirTemp(crudo).toFixed(1);
+      if (nuevo === null) return;
+      if (el.value !== nuevo) { el.value = nuevo; cambio = true; }
+    });
+    /* La sonda de ambiente reemplaza al clima de internet en ΔT Cond-Amb */
+    const tamb = valorSlotDeFila(fila, 'tamb');
+    if (tamb !== null) {
+      try {
+        if (tempAmbientePuntoFijoC !== tamb) {
+          tempAmbientePuntoFijoC = tamb;
+          poner('txtTempAmb', convertirTemp(tamb).toFixed(1) + ' °' + tUnitActual);
+          cambio = true;
+        }
+      } catch (e) { /* motor ausente */ }
+    }
+    if (cambio) guardarYActualizar();
+    return cambio;
+  }
+  /* El motor consulta esto para no pisar la lectura de la sonda con el clima */
+  window.__ambientePorSonda = function () { return valorSlotActual('tamb') !== null; };
+
+  /* --------------------- CAMPOS MANUALES DEL CICLO ----------------------- */
+  /* Si una sonda alimenta una variable del motor, su casillero manual se
+     oculta: el número ya está a la vista en la caja de esa sonda. */
+  function slotDeVariable(variable) {
+    for (let i = 0; i < SLOTS.length; i++) if (SLOTS[i].varMotor === variable) return SLOTS[i];
+    return null;
+  }
+  function pintarCamposManuales() {
+    ['tEvapOut', 'tSuct', 'tLiq', 'tDescReal', 'pSuct', 'pDesc'].forEach(variable => {
+      const slot = slotDeVariable(variable);
+      const alimentado = !!(slot && asignacion[slot.id]);
+      const grp = $('grp' + cap(variable));
+      if (grp) grp.classList.toggle('oculto', alimentado);
+    });
+  }
+
   /* ------------------------------ API DEL ESP32 --------------------------- */
   async function traerJSON(ruta) {
     const res = await conTimeout(fetch(API_URL + ruta, {
@@ -2882,12 +3273,10 @@
     return msg;
   }
   function nota(txt) { poner('notaVentana', txt || ''); }
-
   function ventanaActual() {
     const fin = enVivo ? Date.now() : finVentana.getTime();
     return { inicio: fin - rangoHoras * 3600000, fin: fin };
   }
-
   async function traerVentana(inicioMs, finMs) {
     if (WORKER_SOPORTA_FROM_TO) {
       return traerJSON('/range?from=' + encodeURIComponent(new Date(inicioMs).toISOString()) +
@@ -2902,7 +3291,6 @@
     nota('');
     return traerRango(horas);
   }
-
   async function cargarHistorico() {
     const miSecuencia = ++secuencia;
     const v = ventanaActual();
@@ -2920,7 +3308,6 @@
     }
     renderMonitor();
   }
-
   function anotarSenal(createdAt) {
     const d = new Date(createdAt);
     if (isNaN(d.getTime())) return;
@@ -2932,7 +3319,6 @@
     actualizarBadgeConexion();
     pintarBannerSistema();
   }
-
   async function sondearUltima() {
     if (sondeando || document.hidden) return;
     sondeando = true;
@@ -2953,7 +3339,6 @@
       pintarBannerSistema();
     }
   }
-
   function fusionarEnVivo(fila) {
     const t = new Date(fila.created_at).getTime();
     if (!Number.isFinite(t)) return;
@@ -2975,8 +3360,7 @@
   function voltajeAPorcentaje(v) {
     if (!Number.isFinite(v)) return null;
     if (v >= CURVA_BATERIA[0][0]) return 100;
-    const fin = CURVA_BATERIA[CURVA_BATERIA.length - 1];
-    if (v <= fin[0]) return 0;
+    if (v <= CURVA_BATERIA[CURVA_BATERIA.length - 1][0]) return 0;
     for (let i = 0; i < CURVA_BATERIA.length - 1; i++) {
       const vAlto = CURVA_BATERIA[i][0], pAlto = CURVA_BATERIA[i][1];
       const vBajo = CURVA_BATERIA[i + 1][0], pBajo = CURVA_BATERIA[i + 1][1];
@@ -2988,52 +3372,20 @@
     return 0;
   }
 
-  function procesarFila(fila) {
-    if (!fila) return null;
-    const crudo1 = limpiarTemp(fila.temp1);
-    const crudo2 = limpiarTemp(fila.temp2);
-    const s1 = invertido ? crudo2 : crudo1;
-    const s2 = invertido ? crudo1 : crudo2;
-    const delta = (s1 !== null && s2 !== null) ? Math.abs(s1 - s2) : null;
-    const vBat = aNumero(fila.bateriaVolt);
-    return Object.assign({}, fila, {
-      s1: s1,
-      s2: s2,
-      delta: delta,
-      bateria: vBat !== null ? voltajeAPorcentaje(vBat) : null,
-      bateriaVolt: vBat,
-      wifi: fila.wifi || fila.ssid || null,
-      ip: fila.ip_local || fila.ip || null
-    });
-  }
-
-  /* --------------------------- ESTADO / AVISOS ---------------------------- */
   function actualizarBadgeConexion() {
     const badge = $('estadoDispositivo');
     if (!badge) return;
     const edad = ultimaSenal ? Math.max(0, Date.now() - ultimaSenal.getTime()) : null;
     let texto = 'ESP32: verificando…', clase = 'badge badge-warn', tip = 'Comprobando el API del termómetro…';
-    if (!enVivo) {
-      texto = 'Modo historial'; clase = 'badge';
-      tip = 'Viendo datos históricos. Toque «Actual» para volver al presente.';
-    } else if (apiOk === null) {
-      texto = 'ESP32: verificando…'; clase = 'badge badge-warn'; tip = 'Comprobando el API del termómetro…';
-    } else if (apiOk === false) {
-      texto = 'API: sin respuesta'; clase = 'badge badge-warn';
-      tip = errorApi ? interpretarError(errorApi) : 'No se puede leer el Worker.';
-    } else if (edad !== null && edad <= EDAD_MAX_ESP32_MS) {
-      texto = 'ESP32: en línea'; clase = 'badge badge-ok';
-      tip = 'Transmitiendo · última lectura hace ' + formatearEdad(edad);
-    } else {
-      texto = 'ESP32: sin datos' + (edad !== null ? ' (' + formatearEdad(edad) + ')' : '');
-      clase = 'badge badge-off';
-      tip = edad !== null ? 'Sin lecturas desde hace ' + formatearEdad(edad) : 'No hay lecturas registradas del ESP32.';
-    }
+    if (apiOk === null) { texto = 'ESP32: verificando…'; clase = 'badge badge-warn'; tip = 'Comprobando el API del termómetro…'; }
+    else if (apiOk === false) { texto = 'API: sin respuesta'; clase = 'badge badge-warn'; tip = errorApi ? interpretarError(errorApi) : 'No se puede leer el Worker.'; }
+    else if (!enVivo) { texto = 'Modo historial'; clase = 'badge'; tip = 'Viendo datos históricos. Toque «Actual» para volver.'; }
+    else if (edad !== null && edad <= EDAD_MAX_ESP32_MS) { texto = 'ESP32: en línea'; clase = 'badge badge-ok'; tip = 'Transmitiendo · última lectura hace ' + formatearEdad(edad); }
+    else { texto = 'ESP32: sin datos' + (edad !== null ? ' (' + formatearEdad(edad) + ')' : ''); clase = 'badge badge-off'; tip = edad !== null ? 'Sin lecturas desde hace ' + formatearEdad(edad) : 'No hay lecturas registradas del ESP32.'; }
     badge.textContent = texto;
     badge.className = clase;
     badge.title = tip;
   }
-
   function pintarBateriaWifi() {
     const badge = $('badgeBateria');
     if (badge) {
@@ -3042,11 +3394,7 @@
         badge.textContent = '🔋 ' + pct + '%';
         badge.className = 'badge ' + (pct <= 20 ? 'badge-off' : (pct <= 50 ? 'badge-warn' : 'badge-ok'));
         badge.title = 'Batería del ESP32: ' + pct + '% · ' + v.toFixed(2) + ' V';
-      } else {
-        badge.textContent = '🔋 —';
-        badge.className = 'badge';
-        badge.title = 'Sin dato de batería.';
-      }
+      } else { badge.textContent = '🔋 —'; badge.className = 'badge'; badge.title = 'Sin dato de batería.'; }
     }
     const w = $('wifiValor');
     if (w) {
@@ -3056,12 +3404,9 @@
         w.textContent = txt;
         const rssi = aNumero(ultimaAbsoluta.rssi);
         w.title = rssi !== null ? 'Señal: ' + rssi + ' dBm' : '';
-      } else {
-        w.textContent = 'Wifi: "—"';
-      }
+      } else { w.textContent = 'Wifi: "—"'; }
     }
   }
-
   function pintarBannerSistema() {
     const b = $('bannerSistema');
     if (!b) return;
@@ -3074,7 +3419,7 @@
     } else if (enVivo && ultimaSenal && !datosFrescos(ultimaAbsoluta)) {
       texto = '⏸ Datos congelados: sin lecturas nuevas desde hace ' +
               formatearEdad(Date.now() - ultimaSenal.getTime()) +
-              '. Las alarmas de sonda quedan en pausa hasta recibir datos nuevos.';
+              '. Las alarmas quedan en pausa hasta recibir datos nuevos.';
     } else if (pct !== null && (pct <= 20 || (v !== null && v <= 3.10))) {
       texto = (v !== null && v <= 3.10)
         ? '🔋 Batería crítica del ESP32 (' + v.toFixed(2) + ' V): entrará en protección.'
@@ -3085,170 +3430,95 @@
   }
 
   /* ------------------------------- ALARMAS -------------------------------- */
-  function leerUmbral(id) {
-    const el = $(id);
-    return el ? aNumero(el.value) : null;
-  }
-  function marcarTarjeta(id, activa) {
-    const el = $(id);
-    if (el) el.classList.toggle('alarma', !!activa);
-  }
-
-  function estadoAlarmas() {
-    const al1 = leerUmbral('alarmaS1');
-    const al2 = leerUmbral('alarmaS2');
-    const ald = leerUmbral('alarmaDT');
-    const fila = ultimaVista;
-    const fresco = !!(enVivo && fila && datosFrescos(fila));
-    return {
-      fresco: fresco,
-      fila: fila,
-      al1: al1, al2: al2, ald: ald,
-      a1: fresco && fila.s1 !== null && al1 !== null && fila.s1 >= al1,
-      a2: fresco && fila.s2 !== null && al2 !== null && fila.s2 >= al2,
-      ad: fresco && fila.delta !== null && ald !== null && fila.delta <= ald
-    };
-  }
-
   function evaluarAlarmas() {
-    const e = estadoAlarmas();
-    marcarTarjeta('cardS1', e.a1);
-    marcarTarjeta('cardS2', e.a2);
-    marcarTarjeta('cardDT', e.ad);
-
-    const f = e.fila;
-    const texto = (valor, activa, umbral, signo) => {
-      if (!f) return 'Esperando datos…';
-      if (valor === null) return 'Sonda sin lectura válida (¿desconectada?)';
-      if (activa) return '¡ALARMA! ' + valor.toFixed(1) + ' °C ' + signo + ' ' + umbral + ' °C';
-      return 'Normal (' + valor.toFixed(1) + ' °C)';
-    };
-    const s1 = f ? f.s1 : null, s2 = f ? f.s2 : null, dt = f ? f.delta : null;
-    const e1 = $('estadoS1'), e2 = $('estadoS2'), ed = $('estadoDT');
-    if (e1) { e1.textContent = texto(s1, e.a1, e.al1, '≥'); e1.classList.toggle('alarma', e.a1); }
-    if (e2) { e2.textContent = texto(s2, e.a2, e.al2, '≥'); e2.classList.toggle('alarma', e.a2); }
-    if (ed) {
-      ed.textContent = !f ? 'Esperando datos…'
-        : (dt === null ? 'Falta una sonda'
-        : (e.ad ? '¡ALARMA! ΔT ' + dt.toFixed(1) + ' °C ≤ ' + e.ald + ' °C' : 'Normal (ΔT ' + dt.toFixed(1) + ' °C)'));
-      ed.classList.toggle('alarma', e.ad);
-    }
-
-    const nueva = e.a1 || e.a2 || e.ad;
+    let nueva = false;
+    SLOTS.forEach(s => {
+      const activa = alarmaDeSlot(s.id);
+      if (activa) nueva = true;
+      const cont = $('caja' + cap(s.id));
+      if (cont) cont.classList.toggle('con-alarma', activa);
+    });
+    if (alarmaDeDT()) nueva = true;
     if (nueva && !alarmaActiva) vibrar(600);
     alarmaActiva = nueva;
   }
 
-  window.guardarAlarmasMonitor = function () {
-    try {
-      localStorage.setItem(K_ALARMA1, ($('alarmaS1') || {}).value || '');
-      localStorage.setItem(K_ALARMA2, ($('alarmaS2') || {}).value || '');
-      localStorage.setItem(K_ALARMAD, ($('alarmaDT') || {}).value || '');
-    } catch (e) {}
-    evaluarAlarmas();
-    dibujarMonitor();
-    actualizarFilasMonitorEnTabla();
-  };
-
-  function cargarAlarmas() {
-    const a1 = localStorage.getItem(K_ALARMA1);
-    const a2 = localStorage.getItem(K_ALARMA2);
-    const ad = localStorage.getItem(K_ALARMAD);
-    if (a1 !== null && $('alarmaS1')) $('alarmaS1').value = a1;
-    if (a2 !== null && $('alarmaS2')) $('alarmaS2').value = a2;
-    if (ad !== null && $('alarmaDT')) $('alarmaDT').value = ad;
-  }
-
-  /* ------------------- FILAS DEL MONITOR EN LA TABLA DIAGNÓSTICO ---------- */
+  /* ------------------- FILAS DEL MONITOR EN LA TABLA DE DIAGNÓSTICO ------- */
   function filaDiagHtml(icono, titulo, texto, esAlarma) {
     return '<tr class="' + (esAlarma ? 'diag-monitor-alarma' : 'diag-monitor') + '">' +
            '<td class="diag-status">' + icono + '</td>' +
            '<td class="diag-title">' + escaparHtml(titulo) + '</td>' +
            '<td class="diag-text">' + texto + '</td></tr>';
   }
-
   function filasDiagnosticoMonitor() {
     const filas = [];
-    const e = estadoAlarmas();
-    const f = e.fila;
+    const fila = ultimaVista;
+    const fresco = !!(enVivo && fila && datosFrescos(fila));
 
     if (apiOk === false) {
       filas.push(filaDiagHtml('⚠️', 'Monitor — API',
         'Sin respuesta del API del termómetro: ' + escaparHtml(interpretarError(errorApi)) +
-        ' Los valores de sonda mostrados pueden estar atrasados.', true));
+        ' Los valores mostrados pueden estar atrasados.', true));
     }
-    if (enVivo && !e.fresco) {
+    if (enVivo && !fresco) {
       filas.push(filaDiagHtml('🟠', 'Monitor — datos congelados',
-        ultimaSenal
-          ? 'Sin lecturas nuevas desde hace ' + formatearEdad(Date.now() - ultimaSenal.getTime()) +
-            ' (umbral ' + Math.round(EDAD_MAX_ESP32_MS / 1000) + ' s). Alarmas de sonda en pausa.'
-          : 'Todavía no llegó ninguna lectura del ESP32.', true));
+        ultimaSenal ? 'Sin lecturas nuevas desde hace ' + formatearEdad(Date.now() - ultimaSenal.getTime()) +
+                      ' (umbral ' + Math.round(EDAD_MAX_ESP32_MS / 1000) + ' s). Alarmas en pausa.'
+                    : 'Todavía no llegó ninguna lectura del ESP32.', true));
     }
-    if (e.a1) {
-      filas.push(filaDiagHtml('🔴', 'Alarma Sonda 1',
-        'Lectura ' + f.s1.toFixed(1) + ' °C ≥ umbral ' + e.al1 + ' °C. ' +
-        '<span style="color:#fca5a5;">Umbral configurado en el monitor; verifique el punto de medición antes de concluir.</span>', true));
-    }
-    if (e.a2) {
-      filas.push(filaDiagHtml('🔴', 'Alarma Sonda 2',
-        'Lectura ' + f.s2.toFixed(1) + ' °C ≥ umbral ' + e.al2 + ' °C. ' +
-        '<span style="color:#fca5a5;">Umbral configurado en el monitor; verifique el punto de medición antes de concluir.</span>', true));
-    }
-    if (e.ad) {
+    SLOTS.forEach(s => {
+      if (!alarmaDeSlot(s.id)) return;
+      const unidad = unidadSlot(s);
+      filas.push(filaDiagHtml('🔴', 'Alarma ' + s.etiqueta,
+        'Lectura ' + formatearSlot(s, valorSlotActual(s.id)) + ' ' + unidad +
+        ' ≥ umbral ' + formatearSlot(s, umbrales[s.id]) + ' ' + unidad +
+        ' <span style="color:#fca5a5;">(sonda: ' + escaparHtml(etiquetaDeCanal(asignacion[s.id])) +
+        '). Verifique el punto de medición antes de concluir.</span>', true));
+    });
+    if (alarmaDeDT()) {
       filas.push(filaDiagHtml('🔴', 'Alarma ΔT',
-        'ΔT ' + f.delta.toFixed(1) + ' °C ≤ mínimo ' + e.ald + ' °C. ' +
-        '<span style="color:#fca5a5;">Poca separación térmica entre sondas: revise ubicación y contacto.</span>', true));
+        'ΔT ' + convertirTemp(fila.dt).toFixed(1) + ' °C ≤ mínimo ' + convertirTemp(umbralDT).toFixed(1) +
+        ' °C <span style="color:#fca5a5;">(Salida Evap ↔ Descarga). Poca separación térmica: revise ubicación y contacto de las sondas.</span>', true));
     }
-
-    if (e.fresco && f) {
+    if (fresco) {
       const pct = ultimaAbsoluta ? ultimaAbsoluta.bateria : null;
       const v = ultimaAbsoluta ? ultimaAbsoluta.bateriaVolt : null;
       if (pct !== null && (pct <= 20 || (v !== null && v <= 3.10))) {
         filas.push(filaDiagHtml('🟠', 'Batería del ESP32',
-          pct + '%' + (v !== null ? ' · ' + v.toFixed(2) + ' V' : '') + '. Cargue el dispositivo: con batería baja la transmisión puede cortarse.', true));
+          pct + '%' + (v !== null ? ' · ' + v.toFixed(2) + ' V' : '') + '. Cargue el dispositivo.', true));
       }
-      const pr = extraerPresionesApi(f);
-      const origen = (pr.suct !== null || pr.desc !== null)
-        ? 'Presiones leídas del transmisor del ESP32'
-        : 'Presiones introducidas a mano';
-      filas.push(filaDiagHtml('🔵', 'Monitor — origen de datos',
-        origen + (sensorAbsoluto ? ' (sensor absoluto: se descuenta la atmosférica)' : ' (sensor manométrico)') +
-        ' · sondas ' + (invertido ? 'invertidas' : 'sin invertir') + '.', false));
+      const usadas = SLOTS.filter(s => asignacion[s.id]).length;
+      const detalle = SLOTS.map(s => s.etiqueta.split('. ').pop() + '←' + etiquetaDeCanal(asignacion[s.id])).join(' · ');
+      filas.push(filaDiagHtml('🔵', 'Canales asignados (' + usadas + '/' + SLOTS.length + ')',
+        escaparHtml(detalle) + '. Presiones ' + (sensorAbsoluto ? 'absolutas' : 'manométricas') +
+        ', convertidas a absoluta para la tabla P–T.', false));
     }
 
-    /* Referencias P–T resueltas con CoolProp para las dos presiones medidas */
+    /* Referencias P–T (CoolProp) de las dos presiones medidas */
     try {
       const sel = $('refSelect');
       const refData = (typeof refrigerantes !== 'undefined' && sel) ? refrigerantes[sel.value] : null;
-      const pS = presionAbsolutaBar('pSuct');
-      const pD = presionAbsolutaBar('pDesc');
+      const pS = presionAbsolutaBar(valorSlotActual('psuct'));
+      const pD = presionAbsolutaBar(valorSlotActual('pdesc'));
       if (refData && pS !== null && pD !== null) {
         const satS = saturationAtP(refData, pS);
         const satD = saturationAtP(refData, pD);
         const u = '°' + tUnitActual;
         const tS = Number.isFinite(satS.tDew) ? satS.tDew : satS.tSat;
         const tD = Number.isFinite(satD.tBubble) ? satD.tBubble : satD.tSat;
-        const fuente = (String(satS.source).indexOf('CoolProp') === 0) ? String(satS.source) : 'tabla local de respaldo';
         if (Number.isFinite(tS) && Number.isFinite(tD)) {
-          filas.push(filaDiagHtml('⚙', 'Referencia P–T (' + refData.nombre + ')',
+          filas.push(filaDiagHtml('⚙', 'Tabla P–T (' + refData.nombre + ')',
             'Tsat succión ' + convertirTemp(tS).toFixed(1) + ' ' + u +
             ' · Tsat descarga ' + convertirTemp(tD).toFixed(1) + ' ' + u +
-            ' · fuente: ' + fuente + '.', false));
+            ' · fuente: ' + escaparHtml(String(satS.source)) + '.', false));
         }
       }
-    } catch (err) { /* si el motor aún no está listo, se omite la fila */ }
+    } catch (err) { /* motor aún no listo */ }
 
     return filas;
   }
   window.__monitorFilasDiag = filasDiagnosticoMonitor;
 
-  /*
-   * Refresca SOLO las filas que aporta el monitor dentro de la tabla del motor.
-   * OJO: no se guarda ninguna caché del HTML generado. Antes se comparaba con
-   * una copia y, si coincidía, se salía sin reinsertar: como las filas ya se
-   * habían borrado unas líneas antes, desaparecían de la tabla (lo detectó la
-   * prueba en navegador). Borrar y reinsertar siempre es idempotente.
-   */
   function actualizarFilasMonitorEnTabla() {
     const tbody = document.querySelector('#panelAlertas tbody');
     if (!tbody) return;
@@ -3256,120 +3526,218 @@
     const html = filasDiagnosticoMonitor().join('');
     if (html) tbody.insertAdjacentHTML('beforeend', html);
   }
-
   /* ------------------------------- GRÁFICA -------------------------------- */
-  let ultimaSerie = {
-    x: [], s1: [], s2: [], dt: [], pe: [], ps: [], pd: [], xPH: [], yPH: [],
-    hayPH: false, hayPresionApi: false, inicio: Date.now(), fin: Date.now(), refT: null
-  };
+  let ultimaSerie = { x: [], datos: {}, dt: [], xPH: [], yPH: [], pe: [],
+                      inicio: Date.now(), fin: Date.now(), refT: null,
+                      hayPresion: false, hayPH: false };
 
-  function reducir(pts, maxPts) {
-    if (pts.length <= maxPts) return pts;
-    const k = Math.ceil(pts.length / maxPts);
-    const salida = [];
-    for (let i = 0; i < pts.length; i += k) {
-      const g = pts.slice(i, i + k);
-      const prom = clave => {
-        const vals = g.map(p => p[clave]).filter(x => x !== null && x !== undefined);
-        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-      };
-      salida.push({
-        t: g.reduce((a, p) => a + p.t, 0) / g.length,
-        s1: prom('s1'), s2: prom('s2'), delta: prom('delta'), ps: prom('ps'), pd: prom('pd')
+  function hayOverlayAbierto() { return !!document.querySelector('.overlay.abierto'); }
+
+  function reducirFilas(filas, maxPts) {
+    /* Normaliza SIEMPRE cada punto a { t, <canal>..., dt }: si se devolvieran
+       las filas crudas (cuando hay pocas) el campo t no existiría y el insertor
+       de huecos de la gráfica rompía con una fecha inválida. */
+    const normalizar = g => {
+      const out = { t: g.reduce((a, f) => a + new Date(f.created_at).getTime(), 0) / g.length };
+      SLOTS.forEach(s => {
+        const vals = g.map(f => valorSlotDeFila(f, s.id)).filter(v => v !== null);
+        out[s.id] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
       });
-    }
+      const dts = g.map(f => f.dt).filter(v => v !== null);
+      out.dt = dts.length ? dts.reduce((a, b) => a + b, 0) / dts.length : null;
+      return out;
+    };
+    if (filas.length <= maxPts) return filas.map(f => normalizar([f]));
+    const k = Math.ceil(filas.length / maxPts);
+    const salida = [];
+    for (let i = 0; i < filas.length; i += k) salida.push(normalizar(filas.slice(i, i + k)));
     return salida;
   }
 
-  function trazasMonitor() {
+  function construirSeries(filas, inicio, fin) {
+    const puntos = reducirFilas(filas, MAX_PUNTOS_GRAFICA);
+    const x = [], datos = {}, dtSerie = [], pe = [];
+    SLOTS.forEach(s => { datos[s.id] = []; });
+
+    /* Presión esperada de la prueba de hermeticidad, calculada por fila */
+    const tRef = temperaturaRefPH();
+    const refT = referenciaPH ? new Date(referenciaPH.timestamp).getTime() : null;
+    const gas = gasPH();
+    const esperadaDe = p => {
+      if (!referenciaPH || tRef === null || p.t < refT - 60000) return null;
+      const tEf = temperaturaEfectivaDe(p.tevap, p.tdesc);
+      if (tEf === null) return null;
+      const r = presionEsperada(referenciaPH.pressureGauge, tRef, tEf, gas);
+      return (r.psi !== null) ? Number(r.psi.toFixed(1)) : null;
+    };
+
+    let prevT = null;
+    puntos.forEach(p => {
+      if (prevT !== null && (p.t - prevT) > HUECO_MS) {
+        x.push(new Date((p.t + prevT) / 2).toISOString());
+        SLOTS.forEach(s => datos[s.id].push(null));
+        dtSerie.push(null);
+        pe.push(null);
+      }
+      x.push(new Date(p.t).toISOString());
+      SLOTS.forEach(s => datos[s.id].push(p[s.id]));
+      dtSerie.push(p.dt);
+      pe.push(esperadaDe(p));
+      prevT = p.t;
+    });
+
+    const xPH = [], yPH = [];
+    medidasPH.forEach(m => {
+      const t = new Date(m.timestamp).getTime();
+      if (!Number.isFinite(t) || t < inicio || t > fin + 60000) return;
+      xPH.push(new Date(t).toISOString());
+      yPH.push(Number(m.pressureGauge));
+    });
+
+    ultimaSerie = {
+      x: x, datos: datos, dt: dtSerie, pe: pe, xPH: xPH, yPH: yPH,
+      inicio: inicio, fin: fin, refT: refT,
+      hayPresion: datos.psuct.some(v => v !== null) || datos.pdesc.some(v => v !== null),
+      hayPH: !!referenciaPH
+    };
+  }
+
+  function trazasMonitor(paraZoom) {
     const s = ultimaSerie;
-    const t = [
-      { x: s.x, y: s.s1, type: 'scatter', mode: 'lines', name: 'Sonda 1', connectgaps: false,
-        line: { color: '#38bdf8', width: 2, shape: 'spline' },
-        hovertemplate: 'Sonda 1: %{y:.1f}<br>%{x|%d/%m %H:%M}<extra></extra>' },
-      { x: s.x, y: s.s2, type: 'scatter', mode: 'lines', name: 'Sonda 2', connectgaps: false,
-        line: { color: '#f87171', width: 2, shape: 'spline' },
-        hovertemplate: 'Sonda 2: %{y:.1f}<br>%{x|%d/%m %H:%M}<extra></extra>' },
-      { x: s.x, y: s.dt, type: 'scatter', mode: 'lines', name: 'ΔT', connectgaps: false,
-        line: { color: '#fbbf24', width: 1.5, dash: 'dot' },
-        hovertemplate: 'ΔT: %{y:.1f}<br>%{x|%d/%m %H:%M}<extra></extra>' }
-    ];
-    if (s.hayPH) {
-      t.push({ x: s.x, y: s.pe, type: 'scatter', mode: 'lines', name: 'P. esperada (P.H.)', yaxis: 'y2', connectgaps: false,
-        line: { color: '#34d399', width: 1.5, dash: 'dash' },
-        hovertemplate: 'P. esperada: %{y:.1f} PSI<br>%{x|%d/%m %H:%M}<extra></extra>' });
-      t.push({ x: s.xPH, y: s.yPH, type: 'scatter', mode: 'markers', name: 'P. medida (P.H.)', yaxis: 'y2',
-        marker: { size: 9, color: '#a7f3d0', line: { color: '#059669', width: 1 } },
-        hovertemplate: 'P. medida: %{y:.1f} PSI<br>%{x|%d/%m %H:%M}<extra></extra>' });
-    }
-    if (s.hayPresionApi) {
-      t.push({ x: s.x, y: s.ps, type: 'scatter', mode: 'lines', name: 'P. succión (API)', yaxis: 'y2', connectgaps: false,
-        line: { color: '#818cf8', width: 1.4 },
-        hovertemplate: 'P. succión: %{y:.1f} PSI<br>%{x|%d/%m %H:%M}<extra></extra>' });
-      t.push({ x: s.x, y: s.pd, type: 'scatter', mode: 'lines', name: 'P. descarga (API)', yaxis: 'y2', connectgaps: false,
-        line: { color: '#f472b6', width: 1.4 },
-        hovertemplate: 'P. descarga: %{y:.1f} PSI<br>%{x|%d/%m %H:%M}<extra></extra>' });
-    }
+    const t = [];
+    const grosor = paraZoom ? 2.4 : 1.8;
+    SERIES_GRAFICA.forEach(def => {
+      if (!seriesVisibles[def.id]) return;
+      const esSlot = !!SLOT_POR_ID[def.id];
+      const esPresion = esSlot && SLOT_POR_ID[def.id].tipo === 'pres';
+      let x = s.x, y = null;
+      if (esSlot) {
+        y = (s.datos[def.id] || []).map(v => {
+          if (v === null) return null;
+          return esPresion ? v : convertirTemp(v);
+        });
+      } else if (def.id === 'dt') {
+        y = s.dt.map(v => v === null ? null : convertirTemp(v));
+      } else if (def.id === 'phe') {
+        y = s.pe;
+      } else if (def.id === 'phm') {
+        x = s.xPH; y = s.yPH;
+      }
+      if (!y) return;
+      const traza = {
+        x: x, y: y, type: 'scatter',
+        mode: def.modo || 'lines',
+        name: def.etiqueta,
+        connectgaps: false,
+        line: { color: def.color, width: grosor, dash: def.dash || 'solid', shape: def.modo ? 'linear' : 'spline' },
+        hovertemplate: def.etiqueta + ': %{y:.1f}<br>%{x|%d/%m %H:%M}<extra></extra>',
+        yaxis: def.eje
+      };
+      if (def.modo === 'markers') {
+        traza.marker = { size: paraZoom ? 11 : 9, color: def.color, line: { color: '#059669', width: 1 } };
+        delete traza.line;
+      }
+      t.push(traza);
+    });
     return t;
   }
 
-  function layoutMonitor() {
+  function layoutMonitor(paraZoom) {
     const c = colorMonitor();
     const s = ultimaSerie;
     const paso = PASO_MARCA_MIN[rangoHoras] || 60;
     const formas = [];
-    const al1 = leerUmbral('alarmaS1'), al2 = leerUmbral('alarmaS2'), ald = leerUmbral('alarmaDT');
-    if (al1 !== null) formas.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: al1, y1: al1, line: { color: '#38bdf8', width: 1, dash: 'dot' } });
-    if (al2 !== null) formas.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: al2, y1: al2, line: { color: '#f87171', width: 1, dash: 'dot' } });
-    if (ald !== null) formas.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: ald, y1: ald, line: { color: '#fbbf24', width: 1, dash: 'dot' } });
-    if (s.refT !== null) formas.push({ type: 'line', xref: 'x', x0: new Date(s.refT).toISOString(), x1: new Date(s.refT).toISOString(), yref: 'paper', y0: 0, y1: 1, line: { color: '#34d399', width: 1.2, dash: 'dash' } });
+
+    /* Líneas de umbral: solo de los canales de temperatura visibles */
+    SLOTS.forEach(slot => {
+      if (!seriesVisibles[slot.id] || slot.tipo !== 'temp') return;
+      if (!Number.isFinite(umbrales[slot.id])) return;
+      const y = convertirTemp(umbrales[slot.id]);
+      formas.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: y, y1: y,
+                    line: { color: '#f87171', width: 1, dash: 'dot' } });
+    });
+    if (s.refT !== null) {
+      formas.push({ type: 'line', xref: 'x', x0: new Date(s.refT).toISOString(), x1: new Date(s.refT).toISOString(),
+                    yref: 'paper', y0: 0, y1: 1, line: { color: '#22d3ee', width: 1.2, dash: 'dash' } });
+    }
 
     const rangoX = (Number.isFinite(s.inicio) && Number.isFinite(s.fin) && s.fin > s.inicio)
       ? [new Date(s.inicio).toISOString(), new Date(s.fin).toISOString()]
       : undefined;
+    const ft = paraZoom ? 12 : 7.5;
 
+    /* Sin leyenda ni títulos de eje: las series se identifican por la barra de
+       chips (con su color) y el trazado se queda con todo el espacio posible. */
     return {
-      margin: { l: 36, r: 40, t: 6, b: 26 },
+      margin: paraZoom ? { l: 48, r: 16, t: 6, b: 30 } : { l: 34, r: 38, t: 4, b: 22 },
       paper_bgcolor: c.papel,
       plot_bgcolor: c.fondo,
-      showlegend: true,
-      legend: { orientation: 'h', y: 1.14, x: 0, font: { size: 8, color: c.eje } },
+      showlegend: false,
       dragmode: 'pan',
       hovermode: 'x unified',
-      xaxis: {
-        type: 'date', range: rangoX, gridcolor: c.rejilla,
-        tickfont: { size: 7.5, color: c.eje }, tickformat: '%H:%M', dtick: paso * 60000
-      },
-      yaxis: {
-        title: { text: 'Temperatura (°' + tUnitActual + ')', font: { size: 8, color: c.titulo } },
-        gridcolor: c.rejilla, tickfont: { size: 7.5, color: c.eje }, zeroline: false
-      },
-      yaxis2: {
-        title: { text: 'Presión (PSI man.)', font: { size: 8, color: c.titulo } },
-        overlaying: 'y', side: 'right', showgrid: false,
-        tickfont: { size: 7.5, color: c.eje }, zeroline: false,
-        visible: !!(s.hayPH || s.hayPresionApi)
-      },
+      xaxis: { type: 'date', range: rangoX, gridcolor: c.rejilla,
+               tickfont: { size: ft, color: c.eje }, tickformat: '%H:%M', dtick: paso * 60000,
+               showline: false, zeroline: false },
+      yaxis: { gridcolor: c.rejilla, tickfont: { size: ft, color: c.eje },
+               zeroline: false, showline: false, automargin: true,
+               title: paraZoom ? undefined : { text: '°' + tUnitActual, font: { size: 8, color: c.titulo } } },
+      yaxis2: { overlaying: 'y', side: 'right', showgrid: false,
+                tickfont: { size: ft, color: c.eje }, zeroline: false, automargin: true,
+                title: paraZoom ? undefined : { text: 'PSI', font: { size: 8, color: c.titulo } },
+                visible: !!(seriesVisibles.psuct || seriesVisibles.pdesc || seriesVisibles.phe || seriesVisibles.phm) },
       shapes: formas
     };
   }
 
+  const CONFIG_GRAFICA = { responsive: true, displayModeBar: false, scrollZoom: true, doubleClick: 'reset' };
+  const CONFIG_ZOOM = {
+    responsive: true, displayModeBar: true, scrollZoom: true, doubleClick: 'reset',
+    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'hoverCompareCartesian'],
+    displaylogo: false
+  };
+
   let reintentoPlotly = false;
+  function cuandoPlotly(accion) {
+    if (typeof Plotly !== 'undefined') { accion(); return; }
+    if (!reintentoPlotly) {
+      reintentoPlotly = true;
+      setTimeout(() => { reintentoPlotly = false; accion(); }, 800);
+    }
+  }
   function dibujarMonitor() {
     const cont = $('chartMonitor');
     if (!cont) return;
-    if (typeof Plotly === 'undefined') {
-      if (!reintentoPlotly) {
-        reintentoPlotly = true;
-        setTimeout(() => { reintentoPlotly = false; dibujarMonitor(); }, 800);
-      }
-      return;
-    }
-    try {
-      Plotly.react('chartMonitor', trazasMonitor(), layoutMonitor(),
-        { responsive: true, displayModeBar: false, scrollZoom: true, doubleClick: 'reset' });
-    } catch (e) { console.warn('Gráfica del monitor no disponible:', e); }
+    cuandoPlotly(() => {
+      try { Plotly.react('chartMonitor', trazasMonitor(false), layoutMonitor(false), CONFIG_GRAFICA); }
+      catch (e) { console.warn('Gráfica del monitor no disponible:', e); }
+    });
   }
+  function dibujarZoom() {
+    const cont = $('chartZoom');
+    if (!cont) return;
+    cuandoPlotly(() => {
+      try { Plotly.react('chartZoom', trazasMonitor(true), layoutMonitor(true), CONFIG_ZOOM); }
+      catch (e) { console.warn('Gráfica en zoom no disponible:', e); }
+    });
+  }
+
+  /* La barra de chips se pinta en la tarjeta y también dentro del zoom, para
+     prender y apagar líneas sin salir de la pantalla completa. */
+  function pintarSelectoresSeries() {
+    const html = SERIES_GRAFICA.map(def =>
+      '<label class="serie-chip' + (seriesVisibles[def.id] ? ' activo' : '') + '" style="--color-serie:' + def.color + '">' +
+      '<input type="checkbox"' + (seriesVisibles[def.id] ? ' checked' : '') +
+      ' onchange="alternarSerie(\'' + def.id + '\')"> ' + escaparHtml(def.etiqueta) + '</label>'
+    ).join('');
+    document.querySelectorAll('.series-bar').forEach(cont => { cont.innerHTML = html; });
+  }
+  window.alternarSerie = function (id) {
+    seriesVisibles[id] = !seriesVisibles[id];
+    guardarJSON(K_SERIES, seriesVisibles);
+    pintarSelectoresSeries();
+    dibujarMonitor();
+    if (hayOverlayAbierto()) dibujarZoom();
+  };
 
   /* ------------------------------ VENTANA --------------------------------- */
   function actualizarEtiquetaVentana() {
@@ -3408,16 +3776,21 @@
     cargarHistorico();
     sondearUltima();
   };
+  window.cambiarTipoSensorPresion = function () {
+    const sel = $('tipoSensorP');
+    sensorAbsoluto = !!(sel && sel.value === 'absoluta');
+    try { localStorage.setItem(K_SENSOR_P, sensorAbsoluto ? 'absoluta' : 'manometrica'); } catch (e) {}
+    renderMonitor();
+  };
 
   /* --------------------------- RENDER PRINCIPAL --------------------------- */
   function renderMonitor() {
     if (enVivo) finVentana = new Date();
     actualizarEtiquetaVentana();
     const v = ventanaActual();
-
-    /* Tolerancia de 60 s en vivo: el reloj del ESP32 puede ir ligeramente adelantado */
     const tolerancia = enVivo ? 60000 : 0;
-    const procesadas = datosCrudos
+
+    ventanaProcesada = datosCrudos
       .map(procesarFila)
       .filter(Boolean)
       .filter(f => {
@@ -3425,134 +3798,77 @@
         return t >= v.inicio && t <= v.fin + tolerancia;
       });
 
-    let minS1 = Infinity, maxS1 = -Infinity;
-    let minS2 = Infinity, maxS2 = -Infinity;
-    let minD = Infinity, maxD = -Infinity;
-    procesadas.forEach(f => {
-      if (f.s1 !== null) { if (f.s1 < minS1) minS1 = f.s1; if (f.s1 > maxS1) maxS1 = f.s1; }
-      if (f.s2 !== null) { if (f.s2 < minS2) minS2 = f.s2; if (f.s2 > maxS2) maxS2 = f.s2; }
-      if (f.delta !== null) { if (f.delta < minD) minD = f.delta; if (f.delta > maxD) maxD = f.delta; }
-    });
-
-    const base = procesadas.map(f => {
-      const pr = extraerPresionesApi(f);
-      return {
-        t: new Date(f.created_at).getTime(),
-        s1: f.s1, s2: f.s2, delta: f.delta,
-        ps: aNumero(pr.suct), pd: aNumero(pr.desc)
-      };
-    });
-    const pts = reducir(base, MAX_PUNTOS_GRAFICA);
-
-    const x = [], y1 = [], y2 = [], yd = [], ype = [], yps = [], ypd = [];
-    const tRef = temperaturaRefPH();
-    const refT = referenciaPH ? new Date(referenciaPH.timestamp).getTime() : null;
-    const gas = gasPH();
-
-    pts.forEach(p => {
-      x.push(new Date(p.t).toISOString());
-      y1.push(p.s1); y2.push(p.s2); yd.push(p.delta);
-      yps.push(p.ps); ypd.push(p.pd);
-      let pe = null;
-      if (referenciaPH && tRef !== null && p.t >= refT - 60000 && p.s1 !== null && p.s2 !== null) {
-        const tEf = temperaturaEfectiva(p.s1, p.s2);
-        const r = presionEsperada(referenciaPH.pressureGauge, tRef, tEf, gas);
-        pe = (r.psi !== null) ? Number(r.psi.toFixed(1)) : null;
-      }
-      ype.push(pe);
-    });
-
-    /* Corte de línea cuando hay más de 5 minutos sin datos */
-    for (let i = x.length - 1; i > 0; i--) {
-      const t1 = new Date(x[i]).getTime(), t0 = new Date(x[i - 1]).getTime();
-      if (t1 - t0 > HUECO_MS) {
-        const medio = new Date((t0 + t1) / 2).toISOString();
-        x.splice(i, 0, medio);
-        y1.splice(i, 0, null); y2.splice(i, 0, null); yd.splice(i, 0, null);
-        ype.splice(i, 0, null); yps.splice(i, 0, null); ypd.splice(i, 0, null);
-      }
-    }
-
-    const xPH = [], yPH = [];
-    medidasPH.forEach(m => {
-      const t = new Date(m.timestamp).getTime();
-      if (!Number.isFinite(t) || t < v.inicio || t > v.fin + 60000) return;
-      xPH.push(new Date(t).toISOString());
-      yPH.push(Number(m.pressureGauge));
-    });
-
-    ultimaSerie = {
-      x: x, s1: y1, s2: y2, dt: yd, pe: ype, ps: yps, pd: ypd, xPH: xPH, yPH: yPH,
-      hayPH: !!referenciaPH,
-      hayPresionApi: yps.some(n => n !== null) || ypd.some(n => n !== null),
-      inicio: v.inicio, fin: v.fin, refT: refT
-    };
-
-    const ultima = procesadas.length ? procesadas[procesadas.length - 1] : null;
+    const ultima = ventanaProcesada.length ? ventanaProcesada[ventanaProcesada.length - 1] : null;
     ultimaVista = ultima;
 
-    const aviso = $('notaVentana');
-    if (!enVivo && !procesadas.length && aviso && !aviso.textContent) {
-      nota('Sin datos en esta ventana: el ESP32 no envió lecturas o el Worker no llega tan atrás.');
-    }
+    construirSeries(ventanaProcesada, v.inicio, v.fin);
 
+    /* Casilleros */
+    pintarSelectores();
+    SLOTS.forEach(s => pintarSlot(s.id));
+    pintarDT();
+    pintarCamposManuales();
+
+    /* Encabezado del monitor */
     if (ultima) {
-      poner('valS1', ultima.s1 !== null ? ultima.s1.toFixed(1) + ' °C' : '--.- °C');
-      poner('valS2', ultima.s2 !== null ? ultima.s2.toFixed(1) + ' °C' : '--.- °C');
-      poner('valDT', ultima.delta !== null ? ultima.delta.toFixed(1) + ' °C' : '--.- °C');
       poner('txtUltimaLectura', 'Última lectura: ' +
         new Date(ultima.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } else {
-      poner('valS1', '--.- °C');
-      poner('valS2', '--.- °C');
-      poner('valDT', '--.- °C');
       poner('txtUltimaLectura', enVivo ? 'Última lectura: —' : 'Sin datos en esta ventana');
     }
-    poner('minS1', minS1 !== Infinity ? minS1.toFixed(1) : '--.-');
-    poner('maxS1', maxS1 !== -Infinity ? maxS1.toFixed(1) : '--.-');
-    poner('minS2', minS2 !== Infinity ? minS2.toFixed(1) : '--.-');
-    poner('maxS2', maxS2 !== -Infinity ? maxS2.toFixed(1) : '--.-');
-    poner('minDT', minD !== Infinity ? minD.toFixed(1) : '--.-');
-    poner('maxDT', maxD !== -Infinity ? maxD.toFixed(1) : '--.-');
+
+    const aviso = $('notaVentana');
+    if (!enVivo && !ventanaProcesada.length && aviso && !aviso.textContent) {
+      nota('Sin datos en esta ventana: el ESP32 no envió lecturas o el Worker no llega tan atrás.');
+    }
+
+    /* Etiqueta del motor termodinámico que resuelve la tabla P–T */
+    try {
+      const nombre = (window.CoolProp && typeof nombreCoolProp === 'function')
+        ? nombreCoolProp()
+        : 'tablas locales de respaldo';
+      poner('txtFuenteTermo', 'Motor: ' + nombre);
+    } catch (e) {}
+
+    /* Encabezado de estado de cada caja doble */
+    actualizarResumenCajas();
 
     evaluarAlarmas();
-    aplicarSondasAlMotor();
-    aplicarPresionesAlMotor();
-    actualizarTsat();
+    alimentarMotor();
     actualizarPanelPH();
     dibujarMonitor();
+    if (hayOverlayAbierto()) dibujarZoom();
     actualizarFilasMonitorEnTabla();
     pintarBannerSistema();
     actualizarBadgeConexion();
   }
+  function actualizarTodoElMonitor() { renderMonitor(); }
 
-  /* --------- GANCHO DE PRUEBA (para revisar la app sin el ESP32) ----------
-     Inyecta una lectura con el MISMO formato que devuelve el Worker y la hace
-     pasar por el circuito normal (sondas, presiones, alarmas, gráfica y tabla
-     de diagnóstico). Desde la consola del navegador, por ejemplo:
-
-       __monitorInyectarLectura({ temp1: -12.4, temp2: -9.1, bateriaVolt: 3.9,
-                                  presion_succion: 38, presion_descarga: 300 })
-
-     Sirve para demostración y para verificar la interfaz en banco. No se usa
-     en la operación normal. */
-  window.__monitorInyectarLectura = function (parcial) {
-    const fila = Object.assign({}, parcial || {});
-    if (!fila.created_at) fila.created_at = new Date().toISOString();
-    if (!Number.isFinite(new Date(fila.created_at).getTime())) return 'created_at inválido';
-    anotarSenal(fila.created_at);
-    ultimaSenal = new Date(fila.created_at);
-    ultimaAbsoluta = procesarFila(fila);
-    pintarBateriaWifi();
-    marcarApi(true);
-    const v = ventanaActual();
-    datosCrudos = datosCrudos.filter(f => new Date(f.created_at).getTime() >= v.inicio);
-    datosCrudos.push(fila);
-    datosCrudos.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    enVivo = true;
-    renderMonitor();
-    return 'lectura inyectada';
-  };
+  const CAJAS = [
+    { id: 'Succion', slots: ['psuct', 'tsuct'], titulo: 'SUCCIÓN' },
+    { id: 'Descarga', slots: ['pdesc', 'tdesc'], titulo: 'DESCARGA' },
+    { id: 'EvapLiq', slots: ['tevap', 'tliq'], titulo: 'EVAPORADOR / LÍQUIDO' },
+    { id: 'Ambiente', slots: ['tamb'], titulo: 'AMBIENTE' }
+  ];
+  function actualizarResumenCajas() {
+    CAJAS.forEach(caja => {
+      const el = $('caja' + caja.id);
+      if (!el) return;
+      let conDatos = 0, enAlarma = 0;
+      caja.slots.forEach(id => {
+        if (valorSlotActual(id) !== null) conDatos++;
+        if (alarmaDeSlot(id)) enAlarma++;
+      });
+      const badge = $('estadoCaja' + caja.id);
+      if (badge) {
+        badge.textContent = enAlarma ? ('¡' + enAlarma + ' en alarma!')
+                          : (conDatos ? (conDatos + '/' + caja.slots.length + ' en vivo') : 'esperando');
+        badge.className = 'badge ' + (enAlarma ? 'badge-off' : (conDatos ? 'badge-ok' : 'badge-warn'));
+      }
+      /* El borde de la caja también avisa cuando alguno de sus casilleros alarma */
+      el.classList.toggle('con-alarma', enAlarma > 0);
+    });
+  }
 
   /* --------------------------- EXPORTAR CSV ------------------------------- */
   window.exportarCSV = function () {
@@ -3562,33 +3878,34 @@
       return;
     }
     nota('');
-    const cabecera = ['created_at', 'sonda1_C', 'sonda2_C', 'deltaT_C', 'p_succion_PSI', 'p_descarga_PSI',
-                      'bateria_V', 'bateria_%', 'wifi', 'ip', 'rssi'];
+    const columnas = SLOTS.map(s => ({
+      s: s,
+      titulo: s.etiqueta.replace(/[.\s]+/g, '_') + (s.tipo === 'pres' ? '_psi' : '_C')
+    }));
+    const cabecera = ['created_at'].concat(columnas.map(c => c.titulo))
+      .concat(['deltaT_C', 'bateria_V', 'bateria_pct', 'wifi', 'ip', 'rssi']);
     const lineas = [cabecera.join(';')];
     procesadas.forEach(f => {
-      const pr = extraerPresionesApi(f);
       const celda = v => (v === null || v === undefined) ? '' : String(v).replace(/;/g, ',');
-      lineas.push([
-        celda(f.created_at),
-        celda(f.s1 !== null ? f.s1.toFixed(2) : ''),
-        celda(f.s2 !== null ? f.s2.toFixed(2) : ''),
-        celda(f.delta !== null ? f.delta.toFixed(2) : ''),
-        celda(aNumero(pr.suct) !== null ? aNumero(pr.suct).toFixed(2) : ''),
-        celda(aNumero(pr.desc) !== null ? aNumero(pr.desc).toFixed(2) : ''),
-        celda(f.bateriaVolt !== null ? f.bateriaVolt.toFixed(2) : ''),
-        celda(f.bateria !== null ? f.bateria : ''),
-        celda(f.wifi || ''),
-        celda(f.ip || ''),
-        celda(aNumero(f.rssi) !== null ? aNumero(f.rssi) : '')
-      ].join(';'));
+      const fila = [celda(f.created_at)];
+      columnas.forEach(c => {
+        const v = valorSlotDeFila(f, c.s.id);
+        fila.push(celda(v === null ? '' : v.toFixed(2)));
+      });
+      fila.push(celda(f.dt === null || f.dt === undefined ? '' : f.dt.toFixed(2)));
+      fila.push(celda(f.bateriaVolt !== null ? f.bateriaVolt.toFixed(2) : ''));
+      fila.push(celda(f.bateria !== null ? f.bateria : ''));
+      fila.push(celda(f.wifi || ''));
+      fila.push(celda(f.ip || ''));
+      fila.push(celda(aNumero(f.rssi) !== null ? aNumero(f.rssi) : ''));
+      lineas.push(fila.join(';'));
     });
     const marca = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const nombre = 'historico_sondas_' + marca + '.csv';
     const blob = new Blob(['\ufeff' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = nombre;
+    a.download = 'mediciones_ciclo_' + marca + '.csv';
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
@@ -3598,40 +3915,37 @@
     const sel = $('phGas');
     return (sel && sel.value) ? sel.value : 'Nitrogen';
   }
-  function temperaturaEfectiva(s1, s2) {
-    const a = aNumero(s1), b = aNumero(s2);
+  function temperaturaEfectivaDe(tEvap, tDesc) {
+    const a = aNumero(tEvap), b = aNumero(tDesc);
     if (a === null || b === null) return null;
     return (pesoEvap / 100) * a + (pesoCond / 100) * b;
   }
-  function temperaturaEfectivaCruda(raw1, raw2) {
-    const r1 = aNumero(raw1), r2 = aNumero(raw2);
-    const s1 = invertido ? r2 : r1;
-    const s2 = invertido ? r1 : r2;
-    return temperaturaEfectiva(s1, s2);
+  function temperaturaEfectivaActual(fila) {
+    if (!fila) return null;
+    return temperaturaEfectivaDe(valorSlotDeFila(fila, 'tevap'), valorSlotDeFila(fila, 'tdesc'));
   }
+  /* La referencia guarda las dos temperaturas crudas (evap y descarga), así el
+     balance se puede recalcular con el peso actual sin desajustes. */
   function temperaturaRefPH() {
     if (!referenciaPH) return null;
     const r = referenciaPH;
-    const r1 = aNumero(r.raw1) !== null ? aNumero(r.raw1) : aNumero(r.tempS1C);
-    const r2 = aNumero(r.raw2) !== null ? aNumero(r.raw2) : aNumero(r.tempS2C);
-    const t = temperaturaEfectivaCruda(r1, r2);
+    const tEvap = aNumero(r.rawEvap) !== null ? aNumero(r.rawEvap) : aNumero(r.raw1);
+    const tDesc = aNumero(r.rawDesc) !== null ? aNumero(r.rawDesc) : aNumero(r.raw2);
+    const t = temperaturaEfectivaDe(tEvap, tDesc);
     return t !== null ? t : aNumero(r.tempRefC);
   }
   function temperaturaMedidaPH(m) {
     if (!m) return null;
-    const r1 = aNumero(m.raw1), r2 = aNumero(m.raw2);
-    if (r1 !== null && r2 !== null) {
-      const t = temperaturaEfectivaCruda(r1, r2);
+    const tEvap = aNumero(m.rawEvap) !== null ? aNumero(m.rawEvap) : aNumero(m.raw1);
+    const tDesc = aNumero(m.rawDesc) !== null ? aNumero(m.rawDesc) : aNumero(m.raw2);
+    if (tEvap !== null && tDesc !== null) {
+      const t = temperaturaEfectivaDe(tEvap, tDesc);
       if (t !== null) return t;
     }
     return aNumero(m.tempC);
   }
-
-  /* Presión esperada a VOLUMEN CONSTANTE.
-     Con CoolProp se resuelve la densidad molar real del gas a la referencia y
-     con ella la presión a la temperatura actual (proceso isocórico). Es más
-     exacto que el gas ideal cuando la presión es alta. Si CoolProp no puede
-     resolver el estado (p. ej. cambio de fase), se cae a Gay-Lussac. */
+  /* Presión esperada a VOLUMEN CONSTANTE con la EOS de CoolProp (isocórico).
+     Si CoolProp no puede resolver el estado, se cae al gas ideal (Gay-Lussac). */
   function presionEsperada(pGaugeRef, tRefC, tActualC, fluido) {
     const pGauge = aNumero(pGaugeRef);
     const tRef = aNumero(tRefC);
@@ -3644,8 +3958,7 @@
     const ideal = pAbsPsi * (actK / refK) - ATM_PSI;
     try {
       if (window.CoolProp && fluido) {
-        const pRefPa = pAbsPsi * PA_POR_PSI;
-        const rho = window.CoolProp.PropsSI('Dmolar', 'P', pRefPa, 'T', refK, fluido);
+        const rho = window.CoolProp.PropsSI('Dmolar', 'P', pAbsPsi * PA_POR_PSI, 'T', refK, fluido);
         if (Number.isFinite(rho) && rho > 0) {
           const pPa = window.CoolProp.PropsSI('P', 'T', actK, 'Dmolar', rho, fluido);
           if (Number.isFinite(pPa) && pPa > 0) {
@@ -3653,10 +3966,9 @@
           }
         }
       }
-    } catch (e) { /* fuera de rango o cambio de fase: se usa gas ideal */ }
+    } catch (e) { /* fuera de rango o cambio de fase: gas ideal */ }
     return { psi: ideal, modelo: 'gas ideal (Gay-Lussac)' };
   }
-
   function veredictoPH(diff, pRef) {
     if (diff === null) return '—';
     const tolerancia = Math.max(1.5, 0.01 * Math.abs(aNumero(pRef) || 0));
@@ -3664,7 +3976,6 @@
     if (diff >= -3 * tolerancia) return 'Caída leve: vigilar';
     return 'Caída mayor a lo esperado: posible fuga';
   }
-
   function mensajePH(texto, nivel) {
     const el = $('phMsg');
     if (!el) return;
@@ -3679,7 +3990,6 @@
     const t = new Date(referenciaPH.timestamp).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     mensajePH('Referencia fijada el ' + t + ' · ' + medidasPH.length + ' medición(es) registradas.');
   }
-
   function actualizarPanelPH() {
     poner('phPeso1val', pesoEvap + ' %');
     poner('phPeso2val', pesoCond + ' %');
@@ -3687,29 +3997,28 @@
     poner('phMediciones', medidasPH.length + ' medición(es)');
 
     const ref = referenciaPH;
-    const f = ultimaVista;
+    const fila = ultimaVista;
     if (!ref) {
-      poner('phPref', '---.- PSI'); poner('phTref', 'T ref: --.- °C');
-      poner('phPcalc', '---.- PSI'); poner('phPcalcT', 'T efectiva: --.- °C');
+      poner('phPref', '---.- PSI'); poner('phTref', 'T efectiva ref.: --.- °C');
+      poner('phPcalc', '---.- PSI'); poner('phPcalcT', 'T efectiva ahora: --.- °C');
       poner('phPlast', '---.- PSI'); poner('phModeloCalc', 'modelo: —');
       poner('phDiff', '--.- PSI'); poner('phVeredicto', '—');
       poner('phTiempo', '--');
       return;
     }
-
     const tRef = temperaturaRefPH();
     poner('phPref', Number(ref.pressureGauge).toFixed(1) + ' PSI');
-    poner('phTref', 'T ref: ' + (tRef !== null ? tRef.toFixed(1) : '--.-') + ' °C');
+    poner('phTref', 'T efectiva ref.: ' + (tRef !== null ? tRef.toFixed(1) : '--.-') + ' °C');
 
     let tEf = null, pCalc = null, modelo = '—';
-    if (f && f.s1 !== null && f.s2 !== null && tRef !== null) {
-      tEf = temperaturaEfectiva(f.s1, f.s2);
-      const r = presionEsperada(ref.pressureGauge, tRef, tEf, gasPH());
+    if (fila && tRef !== null) {
+      tEf = temperaturaEfectivaActual(fila);
+      const r = (tEf !== null) ? presionEsperada(ref.pressureGauge, tRef, tEf, gasPH()) : { psi: null, modelo: '—' };
       pCalc = r.psi;
       modelo = r.modelo;
     }
     poner('phPcalc', pCalc !== null ? pCalc.toFixed(1) + ' PSI' : '---.- PSI');
-    poner('phPcalcT', 'T efectiva: ' + (tEf !== null ? tEf.toFixed(1) : '--.-') + ' °C');
+    poner('phPcalcT', 'T efectiva ahora: ' + (tEf !== null ? tEf.toFixed(1) : '--.-') + ' °C');
 
     if (ultimaMedidaPH) {
       poner('phPlast', Number(ultimaMedidaPH.pressureGauge).toFixed(1) + ' PSI');
@@ -3721,16 +4030,12 @@
       poner('phDiff', diff !== null ? (diff >= 0 ? '+' : '') + diff.toFixed(1) + ' PSI' : '--.- PSI');
       poner('phVeredicto', veredictoPH(diff, ref.pressureGauge));
     } else {
-      poner('phPlast', '---.- PSI');
-      poner('phDiff', '--.- PSI');
-      poner('phVeredicto', '—');
+      poner('phPlast', '---.- PSI'); poner('phDiff', '--.- PSI'); poner('phVeredicto', '—');
     }
     poner('phModeloCalc', 'modelo: ' + modelo);
-
     const ms = Date.now() - new Date(ref.timestamp).getTime();
     poner('phTiempo', Number.isFinite(ms) && ms > 0 ? (ms / 3600000).toFixed(1) + ' h' : '--');
   }
-
   function guardarEstadoPH() {
     try {
       if (referenciaPH) localStorage.setItem(K_REF_PH, JSON.stringify(referenciaPH));
@@ -3740,7 +4045,6 @@
       localStorage.setItem(K_MED_PH, JSON.stringify(medidasPH));
     } catch (e) {}
   }
-
   window.cambiarPesoPH = function (valor) {
     let v = parseInt(valor, 10);
     if (!Number.isFinite(v)) v = 60;
@@ -3756,15 +4060,13 @@
     actualizarPanelPH();
     renderMonitor();
   };
-
   window.guardarPH = function () {
     try {
       const sel = $('phGas');
       if (sel) localStorage.setItem('refrig_ph_gas', sel.value);
     } catch (e) {}
-    renderMonitor();
+    actualizarPanelPH();
   };
-
   function cargarPH() {
     try {
       const ref = JSON.parse(localStorage.getItem(K_REF_PH) || 'null');
@@ -3774,15 +4076,11 @@
         ? med.filter(m => m && Number.isFinite(Number(m.pressureGauge)) && Number.isFinite(new Date(m.timestamp).getTime()))
         : [];
       referenciaPH = (ref && Number.isFinite(Number(ref.pressureGauge)) &&
-                      Number.isFinite(Number(ref.tempRefC)) &&
                       Number.isFinite(new Date(ref.timestamp).getTime())) ? ref : null;
       ultimaMedidaPH = (ult && Number.isFinite(Number(ult.pressureGauge)) &&
-                        Number.isFinite(Number(ult.tempC)) &&
                         Number.isFinite(new Date(ult.timestamp).getTime())) ? ult : null;
     } catch (e) {
-      referenciaPH = null;
-      ultimaMedidaPH = null;
-      medidasPH = [];
+      referenciaPH = null; ultimaMedidaPH = null; medidasPH = [];
     }
     const gas = localStorage.getItem('refrig_ph_gas');
     if (gas && $('phGas')) $('phGas').value = gas;
@@ -3793,7 +4091,6 @@
     if (bc) bc.style.width = pesoCond + '%';
     pistaPH();
   }
-
   window.aceptarMedidaPH = function () {
     if (!enVivo) { mensajePH('Vuelva a «Actual» antes de registrar una medición.', 'err'); return; }
     const p = aNumero(($('phPresionInicial') || {}).value);
@@ -3801,23 +4098,22 @@
     const fila = ultimaVista;
     if (!fila) { mensajePH('Esperando lecturas del ESP32.', 'err'); return; }
     if (!datosFrescos(fila)) { mensajePH('Los datos están atrasados: espere una lectura nueva antes de aceptar.', 'err'); return; }
-    const crudo1 = limpiarTemp(fila.temp1);
-    const crudo2 = limpiarTemp(fila.temp2);
-    if (crudo1 === null || crudo2 === null) { mensajePH('Se necesitan lecturas válidas de Sonda 1 y Sonda 2.', 'err'); return; }
-    const tEf = temperaturaEfectivaCruda(crudo1, crudo2);
+    const tEvap = valorSlotDeFila(fila, 'tevap');
+    const tDesc = valorSlotDeFila(fila, 'tdesc');
+    if (tEvap === null || tDesc === null) {
+      mensajePH('Se necesitan las temperaturas de salida de evaporador y de descarga.', 'err');
+      return;
+    }
+    const tEf = temperaturaEfectivaDe(tEvap, tDesc);
     if (tEf === null) { mensajePH('No se pudo calcular la temperatura efectiva del gas.', 'err'); return; }
 
     const timestamp = new Date().toISOString();
-    const punto = { timestamp: timestamp, pressureGauge: p, tempC: tEf, raw1: crudo1, raw2: crudo2 };
+    const punto = { timestamp: timestamp, pressureGauge: p, tempC: tEf, rawEvap: tEvap, rawDesc: tDesc };
 
     if (!referenciaPH) {
       referenciaPH = {
-        timestamp: timestamp,
-        pressureGauge: p,
-        tempS1C: invertido ? crudo2 : crudo1,
-        tempS2C: invertido ? crudo1 : crudo2,
-        raw1: crudo1, raw2: crudo2,
-        tempRefC: tEf,
+        timestamp: timestamp, pressureGauge: p,
+        rawEvap: tEvap, rawDesc: tDesc, tempRefC: tEf,
         modelo: pesoEvap + '/' + pesoCond
       };
       medidasPH = [punto];
@@ -3840,17 +4136,14 @@
     guardarEstadoPH();
     renderMonitor();
   };
-
   window.usarPresionEnVivoPH = function () {
     const el = $('phPresionInicial');
     if (!el) return;
-    const p = aNumero(($('pSuct') || {}).value);
-    if (p === null) { mensajePH('No hay presión de succión disponible.', 'err'); return; }
-    const enPsi = (p / pUnits[pUnitActual].factor) * 14.5038;
-    el.value = enPsi.toFixed(1);
-    mensajePH('Copiada la presión de succión actual (' + enPsi.toFixed(1) + ' PSI). Confirme con el manómetro y pulse Aceptar.');
+    const psi = valorSlotActual('psuct');
+    if (psi === null) { mensajePH('No hay lectura de presión de succión todavía.', 'err'); return; }
+    el.value = psi.toFixed(1);
+    mensajePH('Copiada la presión de succión actual (' + psi.toFixed(1) + ' PSI). Confirme con el manómetro y pulse Aceptar.');
   };
-
   window.reiniciarPH = function () {
     if (!confirm('¿Borrar la referencia y las mediciones de la prueba actual?')) return;
     referenciaPH = null;
@@ -3864,25 +4157,20 @@
   /* ------------------------------- REPORTE PDF ---------------------------- */
   async function rasterizarParaPDF() {
     if (typeof Plotly === 'undefined') return;
-    /* 1) Gráfica del monitor */
     try {
       const cont = $('chartMonitor');
       if (cont && cont.data) {
         const url = await Plotly.toImage('chartMonitor', { format: 'png', width: 900, height: 470, scale: 2 });
         const destino = $('printMonitor');
-        if (destino) destino.innerHTML = '<img src="' + url + '" alt="Histórico de sondas" style="width:100%;border:1px solid #cbd5e1;border-radius:4px;">';
+        if (destino) destino.innerHTML = '<img src="' + url + '" alt="Histórico de mediciones" style="width:100%;border:1px solid #cbd5e1;border-radius:4px;">';
       }
-    } catch (e) { console.warn('No se pudo rasterizar el monitor para el PDF:', e); }
+    } catch (e) { console.warn('No se pudo rasterizar la gráfica para el PDF:', e); }
 
-    /* 2) Diagrama de Mollier: se abre un instante para que tenga tamaño real */
     const ov = $('overlayMollier');
     const estabaAbierto = ov ? ov.classList.contains('abierto') : false;
     try {
       if (ov && $('mollierPlot') && $('mollierPlot').data) {
-        if (!estabaAbierto) {
-          ov.classList.add('abierto');
-          document.body.classList.add('con-overlay');
-        }
+        if (!estabaAbierto) { ov.classList.add('abierto'); document.body.classList.add('con-overlay'); }
         await esperar(90);
         try { Plotly.Plots.resize('mollierPlot'); } catch (e) {}
         await esperar(280);
@@ -3891,24 +4179,22 @@
         if (destino) destino.innerHTML = '<img src="' + url + '" alt="Diagrama de Mollier" style="width:100%;border:1px solid #cbd5e1;border-radius:4px;">';
       }
     } catch (e) { console.warn('No se pudo rasterizar el Mollier para el PDF:', e); }
-    if (ov && !estabaAbierto) {
-      ov.classList.remove('abierto');
-      document.body.classList.remove('con-overlay');
-    }
+    if (ov && !estabaAbierto) { ov.classList.remove('abierto'); document.body.classList.remove('con-overlay'); }
   }
-
   window.__monitorAntesPDF = async function () {
     document.querySelectorAll('details').forEach(d => {
       d.dataset.abiertoAntes = d.open ? '1' : '0';
       d.open = true;
     });
+    /* El reporte lleva las dos pantallas: monitor y prueba de N₂ */
+    document.body.setAttribute('data-modo', 'reporte');
     await rasterizarParaPDF();
   };
-
   window.__monitorDespuesPDF = function () {
     document.querySelectorAll('details').forEach(d => {
       if (d.dataset.abiertoAntes === '0') d.open = false;
     });
+    document.body.setAttribute('data-modo', modoActual);
     const a = $('printMonitor'), b = $('pdfMollier');
     if (a) a.innerHTML = '';
     if (b) b.innerHTML = '';
@@ -3916,43 +4202,55 @@
     dibujarMonitor();
   };
 
+  /* -------------------- GANCHO DE PRUEBA (sin el ESP32) ------------------- */
+  /* Inyecta una lectura con el mismo formato del Worker:
+       __monitorInyectarLectura({ temp1: 88, temp2: 42, temp3: -8, temp4: -5,
+                                  temp5: 31, presion_succion: 38, presion_descarga: 300 }) */
+  window.__monitorInyectarLectura = function (parcial) {
+    const fila = Object.assign({}, parcial || {});
+    if (!fila.created_at) fila.created_at = new Date().toISOString();
+    if (!Number.isFinite(new Date(fila.created_at).getTime())) return 'created_at inválido';
+    anotarSenal(fila.created_at);
+    ultimaSenal = new Date(fila.created_at);
+    ultimaAbsoluta = procesarFila(fila);
+    pintarBateriaWifi();
+    marcarApi(true);
+    const v = ventanaActual();
+    datosCrudos = datosCrudos.filter(f => new Date(f.created_at).getTime() >= v.inicio);
+    datosCrudos.push(fila);
+    datosCrudos.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    enVivo = true;
+    renderMonitor();
+    return 'lectura inyectada';
+  };
+
   /* ---------------------------------- INIT -------------------------------- */
   function conectarControles() {
-    const s1 = $('mapS1'), s2 = $('mapS2');
-    if (s1) s1.value = mapaS1;
-    if (s2) s2.value = mapaS2;
     const tp = $('tipoSensorP');
     if (tp) tp.value = sensorAbsoluto ? 'absoluta' : 'manometrica';
-    pintarOrigenPresion('pSuct');
-    pintarOrigenPresion('pDesc');
-    CAMPOS_TEMP.forEach(pintarMarcaAuto);
     actualizarBotonesVentana();
+    pintarSelectoresSeries();
+
+    /* Cambios del motor (refrigerante, aplicación, expansión, unidades) obligan
+       a repintar casilleros, etiquetas y filas de diagnóstico. */
+    ['refSelect', 'modoEvapSelect', 'expansionSelect', 'pUnitSelect', 'tUnitSelect'].forEach(id => {
+      const el = $(id);
+      if (el) el.addEventListener('change', () => setTimeout(actualizarTodoElMonitor, 0));
+    });
   }
 
   function init() {
+    aplicarModo(modoActual);
     aplicarTema(temaActual, true);
-    cargarAutoCampos();
-    cargarAlarmas();
     cargarPH();
     conectarControles();
-    actualizarEtiquetaVentana();
-    pintarBateriaWifi();
-    actualizarBadgeConexion();
+    pintarSelectores();
     renderMonitor();
     sondearUltima();
     cargarHistorico();
 
-    /* CoolProp llega por WASM después del primer render. Cuando está listo hay
-       que recalcular los tiles P–T (y las filas de diagnóstico) para que dejen
-       de mostrar la tabla local de respaldo. */
-    window.addEventListener('coolprop-ready', () => {
-      actualizarTsat();
-      actualizarFilasMonitorEnTabla();
-    });
-    window.addEventListener('coolprop-failed', () => {
-      actualizarTsat();
-      actualizarFilasMonitorEnTabla();
-    });
+    window.addEventListener('coolprop-ready', () => { actualizarTodoElMonitor(); });
+    window.addEventListener('coolprop-failed', () => { actualizarTodoElMonitor(); });
 
     setInterval(() => { if (enVivo) cargarHistorico(); }, INTERVALO_HISTORICO_MS);
     setInterval(sondearUltima, INTERVALO_SONDEO_MS);
@@ -3961,6 +4259,7 @@
       evaluarAlarmas();
       actualizarFilasMonitorEnTabla();
       pintarBannerSistema();
+      actualizarResumenCajas();
     }, 2000);
     setInterval(() => { if (alarmaActiva) vibrar(1000); }, 10000);
 
@@ -3971,9 +4270,18 @@
       }
     });
     window.addEventListener('resize', () => {
-      try { if (window.Plotly) Plotly.Plots.resize('chartMonitor'); } catch (e) {}
+      cuandoPlotly(() => {
+        try {
+          Plotly.Plots.resize('chartMonitor');
+          if (hayOverlayAbierto()) Plotly.Plots.resize('chartZoom');
+        } catch (e) {}
+      });
     });
-    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') cerrarMollier(); });
+    document.addEventListener('keydown', ev => {
+      if (ev.key !== 'Escape') return;
+      if ($('overlayGrafica') && $('overlayGrafica').classList.contains('abierto')) { window.cerrarZoomGrafica(); return; }
+      window.cerrarMollier();
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
