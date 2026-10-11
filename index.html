@@ -518,8 +518,25 @@
     .caja-doble.con-alarma { border-color: var(--peligro); }
     .caja-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
     .caja-titulo { font-size: .62rem; font-weight: 800; color: var(--acento); letter-spacing: .4px; }
-    .slot { border-top: 1px solid var(--borde); padding-top: 3px; }
-    .slot:first-of-type { border-top: none; padding-top: 0; }
+    /* Filas de altura fija: así todos los casilleros de una caja tienen el
+       valor y el selector a la misma altura y no parecen escalones. */
+    .slot {
+      border-top: 1px solid var(--borde); padding-top: 3px;
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .slot-nombre { height: 13px; line-height: 13px; }
+    .slot-valor { height: 26px; line-height: 26px; }
+    .slot-datos { height: 22px; align-items: center; }
+    .slot-alarma-fila { height: 20px; }
+    .slot-minmax { height: 14px; line-height: 14px; }
+    .slot-estado { height: 12px; line-height: 12px; }
+    /* Una sola línea por fila: si la etiqueta se parte, el selector deja de
+       quedar alineado con el de al lado. */
+    .slot-nombre, .slot-minmax, .slot-estado {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .caja-2 .slot-ancho { grid-column: 1 / -1; }
+    .slot:first-of-type { border-top-color: transparent; }
     .slot.alarma { animation: parpadeo-alarma .8s infinite alternate; border-radius: 5px; padding-left: 3px; padding-right: 3px; }
     .slot-fila { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
     .slot-nombre { font-size: .52rem; font-weight: 700; color: var(--sutil); }
@@ -795,12 +812,12 @@
             </div>
           </div>
         </div>
-        <div class="caja-doble" id="cajaTermicas">
+                <div class="caja-doble" id="cajaTermicas">
           <div class="caja-head">
             <span class="caja-titulo">TEMPERATURAS</span>
             <span class="badge badge-warn" id="estadoCajaTermicas">esperando</span>
           </div>
-          <div class="caja-slots caja-3">
+          <div class="caja-slots caja-2">
             <div class="slot" id="slotTevap">
               <div class="slot-fila">
                 <span class="slot-nombre" id="lblTEvapOut">T. Salida Evap</span>
@@ -809,10 +826,6 @@
               <div class="slot-datos">
                 <label class="slot-sel">Sonda <select id="selTevap" onchange="cambiarAsignacion('tevap')"></select></label>
               </div>
-              <div class="slot-alarma-fila">
-                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaTevap" step="0.5" value="15" oninput="guardarAlarmaSlot('tevap')"> °C</label>
-              </div>
-              <div class="slot-minmax">Mín <b id="minTevap">--.-</b> · Máx <b id="maxTevap">--.-</b></div>
               <div class="slot-estado" id="estadoTevap">Esperando…</div>
             </div>
             <div class="slot" id="slotTliq">
@@ -823,13 +836,9 @@
               <div class="slot-datos">
                 <label class="slot-sel">Sonda <select id="selTliq" onchange="cambiarAsignacion('tliq')"></select></label>
               </div>
-              <div class="slot-alarma-fila">
-                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaTliq" step="0.5" value="50" oninput="guardarAlarmaSlot('tliq')"> °C</label>
-              </div>
-              <div class="slot-minmax">Mín <b id="minTliq">--.-</b> · Máx <b id="maxTliq">--.-</b></div>
               <div class="slot-estado" id="estadoTliq">Esperando…</div>
             </div>
-            <div class="slot" id="slotTamb">
+            <div class="slot slot-ancho" id="slotTamb">
               <div class="slot-fila">
                 <span class="slot-nombre" id="lblTAmb">T. Ambiente</span>
                 <span class="slot-valor"><b id="valTamb">---.-</b> <span class="unidad" id="uniTamb">°C</span></span>
@@ -837,10 +846,6 @@
               <div class="slot-datos">
                 <label class="slot-sel">Sonda <select id="selTamb" onchange="cambiarAsignacion('tamb')"></select></label>
               </div>
-              <div class="slot-alarma-fila">
-                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaTamb" step="0.5" value="45" oninput="guardarAlarmaSlot('tamb')"> °C</label>
-              </div>
-              <div class="slot-minmax">Mín <b id="minTamb">--.-</b> · Máx <b id="maxTamb">--.-</b></div>
               <div class="slot-estado" id="estadoTamb">Esperando…</div>
             </div>
           </div>
@@ -889,6 +894,7 @@
       <div class="results-grid">
         <div class="kpi-box" style="border-left-color:#38bdf8;"><span class="label">SH Útil (Evap)</span><span class="value" id="kpiSHUtil">0.0 K</span></div>
         <div class="kpi-box" style="border-left-color:#0284c7;"><span class="label">SH Total (Succ)</span><span class="value" id="kpiSHTotal">0.0 K</span></div>
+        <div class="kpi-box" style="border-left-color:#0ea5e9;"><span class="label">SH Descarga</span><span class="value" id="kpiSHDescarga">0.0 K</span></div>
         <div class="kpi-box" style="border-left-color:#10b981;"><span class="label">Subenfriam. (SC)</span><span class="value" id="kpiSC">0.0 K</span></div>
         <div class="kpi-box" style="border-left-color:#f59e0b;"><span class="label">Potencia Elec.</span><span class="value" id="kpiKW">0.00 kW</span></div>
         <div class="kpi-box" style="border-left-color:#a855f7;"><span class="label">Cap. Frig. (qn)</span><span class="value" id="kpiqn">0 kJ/kg</span></div>
@@ -2171,6 +2177,8 @@
 
       document.getElementById('kpiSHUtil').innerText = `${superHeatUtilK.toFixed(1)} K`;
       document.getElementById('kpiSHTotal').innerText = `${superHeatTotalK.toFixed(1)} K`;
+      const kpiSHDescargaEl = document.getElementById('kpiSHDescarga');
+      if (kpiSHDescargaEl) kpiSHDescargaEl.innerText = `${Number.isFinite(dischargeSuperHeatK) ? dischargeSuperHeatK.toFixed(1) : '--'} K`;
       document.getElementById('kpiSC').innerText = `${subCoolK.toFixed(1)} K`;
       document.getElementById('kpiKW').innerText = `${pKw.toFixed(2)} kW`;
       document.getElementById('kpiqn').innerText = `${qn.toFixed(1)} kJ/kg`;
@@ -2683,9 +2691,11 @@
     { id: 'tsuct', tipo: 'temp', etiqueta: 'T. Succión Comp.',  varMotor: 'tSuct',     alarma: 'max', umbral: 25 },
     { id: 'pdesc', tipo: 'pres', etiqueta: 'P. Descarga',       varMotor: 'pDesc',     alarma: 'max', umbral: 350 },
     { id: 'tdesc', tipo: 'temp', etiqueta: 'T. Descarga',       varMotor: 'tDescReal', alarma: 'max', umbral: 100 },
-    { id: 'tevap', tipo: 'temp', etiqueta: 'T. Salida Evap',    varMotor: 'tEvapOut',  alarma: 'max', umbral: 15 },
-    { id: 'tliq',  tipo: 'temp', etiqueta: 'T. Líquido',        varMotor: 'tLiq',      alarma: 'max', umbral: 50 },
-    { id: 'tamb',  tipo: 'temp', etiqueta: 'T. Ambiente',       varMotor: null,        alarma: 'max', umbral: 45 }
+    /* Los tres casilleros de la caja de temperaturas son solo de lectura: sin
+       alarma y sin mín/máx, para que la caja quede compacta y alineada. */
+    { id: 'tevap', tipo: 'temp', etiqueta: 'T. Salida Evap',    varMotor: 'tEvapOut',  sinAlarma: true },
+    { id: 'tliq',  tipo: 'temp', etiqueta: 'T. Líquido',        varMotor: 'tLiq',      sinAlarma: true },
+    { id: 'tamb',  tipo: 'temp', etiqueta: 'T. Ambiente',       varMotor: null,        sinAlarma: true }
   ];
   const SLOT_POR_ID = {};
   SLOTS.forEach(s => { SLOT_POR_ID[s.id] = s; });
@@ -3164,7 +3174,8 @@
   function alarmaDeSlot(slotId) {
     const s = SLOT_POR_ID[slotId];
     const fila = ultimaVista;
-    if (!s || !enVivo || !fila || !datosFrescos(fila)) return false;
+    if (!s || s.sinAlarma) return false;
+    if (!enVivo || !fila || !datosFrescos(fila)) return false;
     const v = valorSlotDeFila(fila, slotId);
     const u = umbrales[slotId];
     if (v === null || !Number.isFinite(u)) return false;
