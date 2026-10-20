@@ -413,6 +413,9 @@
     .ph-barra { height: 8px; border-radius: 6px; overflow: hidden; display: flex; background: var(--panel2); border: 1px solid var(--borde); }
     .ph-barra .evap { background: var(--acento); }
     .ph-barra .cond { background: var(--alerta); }
+    .ph-progreso { height: 6px; background: var(--panel2); border: 1px solid var(--borde); border-radius: 4px; overflow: hidden; margin: 7px 0 3px; }
+    .ph-progreso > div { height: 100%; width: 0%; background: linear-gradient(90deg, var(--acento), #22c55e); transition: width .4s ease; }
+    .btn-mini:disabled { opacity: .4; cursor: not-allowed; }
     .ph-msg { font-size: .52rem; font-weight: 700; color: var(--sutil); margin-top: 2px; }
     .ph-msg.err { color: var(--peligro); }
     .ph-msg.warn { color: var(--alerta); }
@@ -967,7 +970,9 @@
 
     <!-- ===================== DIAGNÓSTICO Y TRAZABILIDAD ==================== -->
     <section class="card" id="cardIndicadores">
-      <h2><span>Diagnóstico y trazabilidad</span></h2>
+      <h2><span>Diagnóstico y trazabilidad</span>
+        <button class="btn-mini" id="btnDiagVer" onclick="alternarDiagnostico()" title="Ocultar el motor de diagnóstico">👁 Ocultar</button>
+      </h2>
       <div class="diag-container" id="panelAlertas"></div>
     </section>
 
@@ -988,54 +993,89 @@
           </select>
         </div>
         <div class="ph-medida">
-          <span class="label">Presión medida (PSI man.)</span>
-          <div class="presion-row">
-            <input type="number" id="phPresionInicial" step="1" value="0">
-            <button class="btn-mini" onclick="aceptarMedidaPH()" title="Fija la referencia o registra una nueva medición">Aceptar</button>
-          </div>
+          <span class="label">Presión de la prueba (PSI man.)</span>
+          <select id="phCanalPresion" onchange="guardarPH()">
+            <option value="psuct">P. Succión</option>
+            <option value="pdesc">P. Descarga</option>
+          </select>
+          <span class="valor" id="phValPres">---.- PSI</span>
         </div>
         <div class="ph-medida">
-          <span class="label">Referencia fijada</span>
-          <span class="valor" id="phPref">---.- PSI</span>
-          <span class="sutil" id="phTref">T ref: --.- °C</span>
+          <span class="label">Temperatura interna (recinto)</span>
+          <select id="phCanalTInt" onchange="guardarPH()">
+            <option value="tamb">T. Ambiente</option>
+            <option value="tsuct">T. Succión Comp.</option>
+            <option value="tdesc">T. Descarga</option>
+            <option value="tliq">T. Líquido</option>
+            <option value="tevap" selected>T. Salida Evap</option>
+          </select>
+          <span class="valor" id="phValTInt">---.- °C</span>
         </div>
         <div class="ph-medida">
-          <span class="label">Presión esperada ahora</span>
-          <span class="valor" id="phPcalc">---.- PSI</span>
-          <span class="sutil" id="phPcalcT">T efectiva: --.- °C</span>
+          <span class="label">Temperatura externa (ambiente)</span>
+          <select id="phCanalTExt" onchange="guardarPH()">
+            <option value="tamb" selected>T. Ambiente</option>
+            <option value="tsuct">T. Succión Comp.</option>
+            <option value="tdesc">T. Descarga</option>
+            <option value="tliq">T. Líquido</option>
+            <option value="tevap">T. Salida Evap</option>
+          </select>
+          <span class="valor" id="phValTExt">---.- °C</span>
         </div>
         <div class="ph-medida">
-          <span class="label">Última medida aceptada</span>
-          <span class="valor" id="phPlast">---.- PSI</span>
-          <span class="sutil" id="phModeloCalc">modelo: —</span>
+          <span class="label">ANTES · presión inicial</span>
+          <span class="valor" id="phPInicial">---.- PSI</span>
+          <span class="sutil" id="phTref">T inicial: --.- °C</span>
         </div>
         <div class="ph-medida">
-          <span class="label">Δ real (medida − esperada)</span>
-          <span class="valor" id="phDiff">--.- PSI</span>
+          <span class="label">DESPUÉS · presión actual</span>
+          <span class="valor" id="phPFinal">---.- PSI</span>
+          <span class="sutil" id="phTactual">T ahora: --.- °C</span>
+        </div>
+        <div class="ph-medida">
+          <span class="label">ΔP (después − antes)</span>
+          <span class="valor" id="phDeltaP">--.- PSI</span>
           <span class="sutil" id="phVeredicto">—</span>
         </div>
         <div class="ph-medida">
-          <span class="label">Tiempo transcurrido</span>
-          <span class="valor" id="phTiempo">--</span>
-          <span class="sutil" id="phMediciones">0 mediciones</span>
+          <span class="label">ΔP compensado por temperatura</span>
+          <span class="valor" id="phDeltaPC">--.- PSI</span>
+          <span class="sutil" id="phModeloCalc">lo que no explica la temperatura</span>
+        </div>
+        <div class="ph-medida">
+          <span class="label">Fuga estimada</span>
+          <span class="valor" id="phFuga">--.- PSI/h</span>
+          <span class="sutil" id="phMediciones">0 medición(es)</span>
+        </div>
+        <div class="ph-medida">
+          <span class="label">Duración prevista</span>
+          <select id="phDuracion" onchange="guardarPH()">
+            <option value="1">1 hora</option>
+            <option value="6">6 horas</option>
+            <option value="24" selected>24 horas</option>
+            <option value="48">48 horas</option>
+          </select>
+          <span class="sutil" id="phProgresoTxt">sin prueba activa</span>
         </div>
       </div>
 
       <div style="margin-top:6px;">
-        <div class="sutil">Balance de temperatura Evap/Cond — peso de cada sonda en la temperatura efectiva del gas</div>
-        <input type="range" id="phPeso1" class="deslizador" min="0" max="100" value="60" oninput="cambiarPesoPH(this.value)">
-        <div class="ph-barra">
-          <div class="evap" id="phBarraEvap" style="width:60%"></div>
-          <div class="cond" id="phBarraCond" style="width:40%"></div>
-        </div>
-        <div class="sutil">Evap <b id="phPeso1val">60 %</b> · Cond <b id="phPeso2val">40 %</b> · modelo <b id="phModelo">60/40</b></div>
+        <div class="sutil">Área del sistema en contacto con el recinto (intercambio de calor)</div>
+        <input type="range" id="phPesoInt" class="deslizador" min="0" max="100" value="70"
+               oninput="cambiarPesoIntPH(this.value)"
+               title="0 % = todo el sistema contra el ambiente · 100 % = todo dentro del recinto">
+        <div class="sutil"><b id="phPesoIntVal">dentro 70 % · fuera 30 %</b> · T efectiva del gas <b id="phDataTef">--.- °C</b> · tiempo <b id="phTiempo">--</b></div>
+        <div class="sutil">La presión se compensa con esa temperatura efectiva: el ΔP compensado es lo que no explica el cambio térmico.</div>
       </div>
 
-      <div class="ph-msg" id="phMsg">Sin referencia: la primera medición que acepte fija la referencia de la prueba.</div>
+      <div class="ph-progreso"><div id="phProgreso"></div></div>
+
+      <div class="ph-msg" id="phMsg">Sin prueba activa: elija los canales y pulse «Iniciar prueba».</div>
 
       <div class="action-bar" style="margin-top:5px;">
-        <button class="btn btn-mini" onclick="usarPresionEnVivoPH()" title="Copia la última presión de succión leída del API al casillero de la prueba">↧ Usar presión en vivo</button>
-        <button class="btn btn-mini" onclick="reiniciarPH()">🗑 Nueva prueba (borrar referencia)</button>
+        <button class="btn btn-mini" id="phIniciar" onclick="iniciarPH()" title="Fija el antes con las lecturas actuales y arranca el registro automático">▶ Iniciar prueba</button>
+        <button class="btn btn-mini" id="phFinalizar" onclick="finalizarPH()" disabled title="Cierra la prueba y deja el resultado">⏹ Finalizar</button>
+        <button class="btn btn-mini" onclick="reiniciarPH()" title="Borra la referencia y las mediciones">🗑 Borrar</button>
       </div>
     </details>
 
@@ -2741,6 +2781,7 @@
   const K_ALARMAD     = 'alarmDeltaMin-input';
   const K_VENTANA_MIN = 'refrig_ventana_min';
   const K_PESO1       = 'ph-s1-weight';
+  const K_DIAG_VISIBLE = 'refrig_diag_visible';
   const K_REF_PH      = 'pressure-reference';
   const K_ULT_PH      = 'pressure-last-measured';
   const K_MED_PH      = 'pressure-measurements';
@@ -2993,6 +3034,7 @@
   function aplicarModo(nuevo) {
     modoActual = (nuevo === 'ph') ? 'ph' : 'monitor';
     document.body.setAttribute('data-modo', modoActual);
+    aplicarEstadoDiag();
     try { localStorage.setItem(K_MODO, modoActual); } catch (e) {}
     const bm = $('btnModoMonitor'), bp = $('btnModoPH');
     if (bm) bm.classList.toggle('activo', modoActual === 'monitor');
@@ -3706,7 +3748,10 @@
     const gas = gasPH();
     const esperadaDe = p => {
       if (!referenciaPH || tRef === null || p.t < refT - 60000) return null;
-      const tEf = temperaturaEfectivaDe(p.tevap, p.tdesc);
+      const tEf = tempEfectivaDe(
+        p[referenciaPH.canalTInt || 'tevap'],
+        p[referenciaPH.canalTExt || 'tamb'],
+        referenciaPH.pesoInt);
       if (tEf === null) return null;
       const r = presionEsperada(referenciaPH.pressureGauge, tRef, tEf, gas);
       return (r.psi !== null) ? Number(r.psi.toFixed(1)) : null;
@@ -4026,6 +4071,7 @@
 
     evaluarAlarmas();
     alimentarMotor();
+    registrarMedidaAutomaticaPH();
     actualizarPanelPH();
     dibujarMonitor();
     if (hayOverlayAbierto()) dibujarZoom();
@@ -4102,39 +4148,80 @@
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
   };
   /* ------------------- PRUEBA DE HERMETICIDAD / PRESIÓN ------------------- */
+  /* Todo automático: se elige de qué canal sale la presión y de cuál la
+     temperatura, se fija la referencia con el botón y desde ahí la app registra
+     una lectura cada 5 minutos y compensa la presión por temperatura. No se
+     escribe ningún valor a mano. */
+  const K_CANAL_PRES_PH = 'refrig_ph_canal_pres';
+  const K_CANAL_TINT_PH = 'refrig_ph_canal_tint';
+  const K_CANAL_TEXT_PH = 'refrig_ph_canal_text';
+  const K_PESO_INT_PH   = 'refrig_ph_peso_int';
+  const K_DURACION_PH   = 'refrig_ph_duracion';
+  const INTERVALO_MEDIDA_PH = 5 * 60000;
+
   function gasPH() {
     const sel = $('phGas');
     return (sel && sel.value) ? sel.value : 'Nitrogen';
   }
+  function canalPresionPH() {
+    const sel = $('phCanalPresion');
+    const v = (sel && sel.value) || (referenciaPH && referenciaPH.canalPres) || 'psuct';
+    return (v === 'pdesc') ? 'pdesc' : 'psuct';
+  }
+  function canalTIntPH() {
+    const sel = $('phCanalTInt');
+    const v = (sel && sel.value) || (referenciaPH && referenciaPH.canalTInt) || 'tevap';
+    return SLOT_POR_ID[v] ? v : 'tevap';
+  }
+  function canalTExtPH() {
+    const sel = $('phCanalTExt');
+    const v = (sel && sel.value) || (referenciaPH && referenciaPH.canalTExt) || 'tamb';
+    return SLOT_POR_ID[v] ? v : 'tamb';
+  }
+  /* Peso de la temperatura interna en la temperatura efectiva del gas */
+  function pesoIntPH() {
+    if (referenciaPH && Number.isFinite(Number(referenciaPH.pesoInt))) return Number(referenciaPH.pesoInt);
+    const r = $('phPesoInt');
+    const v = parseInt(r && r.value, 10);
+    return (Number.isFinite(v) && v >= 0 && v <= 100) ? v : 70;
+  }
+  /* Temperatura efectiva del gas a partir de las dos sondas.
+     Si una de las dos no informa, se usa la otra sin inventar nada. */
+  function tempEfectivaDe(tInt, tExt, peso) {
+    const a = aNumero(tInt), b = aNumero(tExt);
+    const w = (Number.isFinite(Number(peso)) ? Number(peso) : 70) / 100;
+    if (a !== null && b !== null) return w * a + (1 - w) * b;
+    return (a !== null) ? a : b;
+  }
+  function tempEfectivaActual() {
+    return tempEfectivaDe(valorSlotActual(canalTIntPH()), valorSlotActual(canalTExtPH()), pesoIntPH());
+  }
+  function tempEfectivaDeMedida(m) {
+    if (!m) return null;
+    if (m.tInt !== undefined || m.tExt !== undefined) return tempEfectivaDe(m.tInt, m.tExt, pesoIntPH());
+    return aNumero(m.tempC);
+  }
+  function duracionPH() {
+    const sel = $('phDuracion');
+    const v = parseInt(sel && sel.value, 10);
+    return (Number.isFinite(v) && v > 0) ? v : 24;
+  }
+  function valorPH(slotId) { return valorSlotActual(slotId); }
+  /* Promedio ponderado histórico: solo se usa si la prueba no eligió sonda */
   function temperaturaEfectivaDe(tEvap, tDesc) {
     const a = aNumero(tEvap), b = aNumero(tDesc);
     if (a === null || b === null) return null;
     return (pesoEvap / 100) * a + (pesoCond / 100) * b;
   }
-  function temperaturaEfectivaActual(fila) {
-    if (!fila) return null;
-    return temperaturaEfectivaDe(valorSlotDeFila(fila, 'tevap'), valorSlotDeFila(fila, 'tdesc'));
-  }
-  /* La referencia guarda las dos temperaturas crudas (evap y descarga), así el
-     balance se puede recalcular con el peso actual sin desajustes. */
   function temperaturaRefPH() {
     if (!referenciaPH) return null;
-    const r = referenciaPH;
-    const tEvap = aNumero(r.rawEvap) !== null ? aNumero(r.rawEvap) : aNumero(r.raw1);
-    const tDesc = aNumero(r.rawDesc) !== null ? aNumero(r.rawDesc) : aNumero(r.raw2);
-    const t = temperaturaEfectivaDe(tEvap, tDesc);
-    return t !== null ? t : aNumero(r.tempRefC);
+    return aNumero(referenciaPH.tempRefC);
   }
-  function temperaturaMedidaPH(m) {
-    if (!m) return null;
-    const tEvap = aNumero(m.rawEvap) !== null ? aNumero(m.rawEvap) : aNumero(m.raw1);
-    const tDesc = aNumero(m.rawDesc) !== null ? aNumero(m.rawDesc) : aNumero(m.raw2);
-    if (tEvap !== null && tDesc !== null) {
-      const t = temperaturaEfectivaDe(tEvap, tDesc);
-      if (t !== null) return t;
-    }
-    return aNumero(m.tempC);
+  function nombreCanalPH(slotId) {
+    const s = SLOT_POR_ID[slotId];
+    return s ? s.etiqueta : slotId;
   }
+
   /* Presión esperada a VOLUMEN CONSTANTE con la EOS de CoolProp (isocórico).
      Si CoolProp no puede resolver el estado, se cae al gas ideal (Gay-Lussac). */
   function presionEsperada(pGaugeRef, tRefC, tActualC, fluido) {
@@ -4160,6 +4247,7 @@
     } catch (e) { /* fuera de rango o cambio de fase: gas ideal */ }
     return { psi: ideal, modelo: 'gas ideal (Gay-Lussac)' };
   }
+
   function veredictoPH(diff, pRef) {
     if (diff === null) return '—';
     const tolerancia = Math.max(1.5, 0.01 * Math.abs(aNumero(pRef) || 0));
@@ -4167,6 +4255,35 @@
     if (diff >= -3 * tolerancia) return 'Caída leve: vigilar';
     return 'Caída mayor a lo esperado: posible fuga';
   }
+
+  /* Fuga estimada: pendiente de (presión medida − esperada) en PSI por hora.
+     Es lo que se usa en campo: una caída de 2 PSI en 3 horas son 0,67 PSI/h. */
+  function fugaEstimadaPH() {
+    if (!referenciaPH || medidasPH.length < 2) return null;
+    const p0 = aNumero(referenciaPH.pressureGauge), t0 = aNumero(referenciaPH.tempRefC);
+    if (p0 === null || t0 === null) return null;
+    const puntos = [];
+    medidasPH.forEach(m => {
+      const tm = new Date(m.timestamp).getTime();
+      const p = aNumero(m.pressureGauge), t = tempEfectivaDeMedida(m);
+      if (!Number.isFinite(tm) || p === null || t === null) return;
+      const esp = presionEsperada(p0, t0, t, gasPH()).psi;
+      if (esp === null) return;
+      puntos.push({ t: tm, d: p - esp });
+    });
+    if (puntos.length < 2) return null;
+    const n = puntos.length;
+    const mt = puntos.reduce((a, p) => a + p.t, 0) / n;
+    const md = puntos.reduce((a, p) => a + p.d, 0) / n;
+    let num = 0, den = 0;
+    puntos.forEach(p => {
+      num += (p.t - mt) * (p.d - md);
+      den += (p.t - mt) * (p.t - mt);
+    });
+    if (!den) return null;
+    return (num / den) * 3600000;
+  }
+
   function mensajePH(texto, nivel) {
     const el = $('phMsg');
     if (!el) return;
@@ -4174,59 +4291,115 @@
     el.className = 'ph-msg' + (nivel ? ' ' + nivel : '');
   }
   function pistaPH() {
+    const el = $('phMsg');
     if (!referenciaPH) {
-      mensajePH('Sin referencia: la primera medición que acepte fija la referencia de la prueba.');
+      mensajePH('Sin prueba activa: elija los canales y pulse «Iniciar prueba».');
       return;
     }
-    const t = new Date(referenciaPH.timestamp).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    mensajePH('Referencia fijada el ' + t + ' · ' + medidasPH.length + ' medición(es) registradas.');
+    if (!el) return;
+    const ref = referenciaPH;
+    const t = new Date(ref.timestamp).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const estado = (ref.activa === false) ? 'finalizada' : 'en curso';
+    mensajePH('Prueba ' + estado + ' · referencia del ' + t + ' · ' + nombreCanalPH(ref.canalPres) +
+              ' · ' + nombreCanalPH(ref.canalTInt || 'tevap') + ' / ' + nombreCanalPH(ref.canalTExt || 'tamb') +
+              ' · ' + medidasPH.length + ' lectura(s).');
   }
+
+  /* Registro automático: una lectura cada 5 minutos mientras la prueba corre */
+  function registrarMedidaAutomaticaPH() {
+    if (!referenciaPH || referenciaPH.activa === false) return;
+    const fila = ultimaVista;
+    if (!fila || !datosFrescos(fila)) return;
+    const p = valorPH(referenciaPH.canalPres || 'psuct');
+    const tI = valorPH(referenciaPH.canalTInt || 'tevap');
+    const tE = valorPH(referenciaPH.canalTExt || 'tamb');
+    if (p === null || tempEfectivaDe(tI, tE, referenciaPH.pesoInt) === null) return;
+    const ultimaMs = medidasPH.length ? new Date(medidasPH[medidasPH.length - 1].timestamp).getTime() : 0;
+    if (Date.now() - ultimaMs < INTERVALO_MEDIDA_PH) return;
+    medidasPH.push({ timestamp: new Date().toISOString(), pressureGauge: p, tInt: tI, tExt: tE });
+    if (medidasPH.length > 500) medidasPH = medidasPH.slice(-500);
+    ultimaMedidaPH = medidasPH[medidasPH.length - 1];
+    guardarEstadoPH();
+  }
+
   function actualizarPanelPH() {
-    poner('phPeso1val', pesoEvap + ' %');
-    poner('phPeso2val', pesoCond + ' %');
-    poner('phModelo', pesoEvap + '/' + pesoCond);
+    const canalP = canalPresionPH(), canalI = canalTIntPH(), canalE = canalTExtPH();
+    const pVivo = valorPH(canalP);
+    const tInt = valorPH(canalI), tExt = valorPH(canalE);
+    poner('phValPres', pVivo !== null ? pVivo.toFixed(1) + ' PSI' : '---.- PSI');
+    poner('phValTInt', tInt !== null ? tInt.toFixed(1) + ' °C' : '---.- °C');
+    poner('phValTExt', tExt !== null ? tExt.toFixed(1) + ' °C' : '---.- °C');
     poner('phMediciones', medidasPH.length + ' medición(es)');
 
     const ref = referenciaPH;
-    const fila = ultimaVista;
+    const dur = (ref && ref.duracionH) ? ref.duracionH : duracionPH();
+    poner('phDuracionTxt', 'de ' + dur + ' h');
+    const peso = pesoIntPH();
+    poner('phPesoIntVal', 'dentro ' + peso + ' % · fuera ' + (100 - peso) + ' %');
+
     if (!ref) {
-      poner('phPref', '---.- PSI'); poner('phTref', 'T efectiva ref.: --.- °C');
-      poner('phPcalc', '---.- PSI'); poner('phPcalcT', 'T efectiva ahora: --.- °C');
-      poner('phPlast', '---.- PSI'); poner('phModeloCalc', 'modelo: —');
-      poner('phDiff', '--.- PSI'); poner('phVeredicto', '—');
+      poner('phPInicial', '---.- PSI');
+      poner('phTref', 'T efectiva inicial: --.- °C');
+      poner('phPFinal', '---.- PSI');
+      poner('phTactual', 'T efectiva ahora: --.- °C');
+      poner('phDataTef', '--.- °C');
+      poner('phDeltaP', '--.- PSI');
+      poner('phDeltaPC', '--.- PSI');
+      poner('phVeredicto', '—');
+      poner('phFuga', '--.- PSI/h');
       poner('phTiempo', '--');
+      poner('phProgresoTxt', 'sin prueba activa');
+      const b0 = $('phProgreso'); if (b0) b0.style.width = '0%';
+      const bi0 = $('phIniciar'); if (bi0) bi0.textContent = '▶ Iniciar prueba';
+      const bf0 = $('phFinalizar'); if (bf0) bf0.disabled = true;
       return;
     }
-    const tRef = temperaturaRefPH();
-    poner('phPref', Number(ref.pressureGauge).toFixed(1) + ' PSI');
-    poner('phTref', 'T efectiva ref.: ' + (tRef !== null ? tRef.toFixed(1) : '--.-') + ' °C');
 
-    let tEf = null, pCalc = null, modelo = '—';
-    if (fila && tRef !== null) {
-      tEf = temperaturaEfectivaActual(fila);
-      const r = (tEf !== null) ? presionEsperada(ref.pressureGauge, tRef, tEf, gasPH()) : { psi: null, modelo: '—' };
-      pCalc = r.psi;
-      modelo = r.modelo;
-    }
-    poner('phPcalc', pCalc !== null ? pCalc.toFixed(1) + ' PSI' : '---.- PSI');
-    poner('phPcalcT', 'T efectiva ahora: ' + (tEf !== null ? tEf.toFixed(1) : '--.-') + ' °C');
+    const pIni = aNumero(ref.pressureGauge);
+    const tRef = aNumero(ref.tempRefC);
 
-    if (ultimaMedidaPH) {
-      poner('phPlast', Number(ultimaMedidaPH.pressureGauge).toFixed(1) + ' PSI');
-      const tMed = temperaturaMedidaPH(ultimaMedidaPH);
-      const rMed = (tRef !== null && tMed !== null)
-        ? presionEsperada(ref.pressureGauge, tRef, tMed, gasPH())
-        : { psi: null };
-      const diff = (rMed.psi !== null) ? Number(ultimaMedidaPH.pressureGauge) - rMed.psi : null;
-      poner('phDiff', diff !== null ? (diff >= 0 ? '+' : '') + diff.toFixed(1) + ' PSI' : '--.- PSI');
-      poner('phVeredicto', veredictoPH(diff, ref.pressureGauge));
-    } else {
-      poner('phPlast', '---.- PSI'); poner('phDiff', '--.- PSI'); poner('phVeredicto', '—');
-    }
-    poner('phModeloCalc', 'modelo: ' + modelo);
+    /* Después: la mejor lectura disponible (en vivo, o la última registrada) */
+    let pFin = pVivo, tFin = tempEfectivaDe(tInt, tExt, ref.pesoInt);
+    if (pFin === null && ultimaMedidaPH) pFin = aNumero(ultimaMedidaPH.pressureGauge);
+    if (tFin === null && ultimaMedidaPH) tFin = tempEfectivaDeMedida(ultimaMedidaPH);
+
+    poner('phPInicial', pIni !== null ? pIni.toFixed(1) + ' PSI' : '---.- PSI');
+    poner('phTref', 'T efectiva inicial: ' + (tRef !== null ? tRef.toFixed(1) : '--.-') + ' °C');
+    poner('phPFinal', pFin !== null ? pFin.toFixed(1) + ' PSI' : '---.- PSI');
+    poner('phTactual', 'T efectiva ahora: ' + (tFin !== null ? tFin.toFixed(1) : '--.-') + ' °C');
+    poner('phDataTef', tFin !== null ? tFin.toFixed(1) + ' °C' : '--.- °C');
+
+    /* Diferencial de presión directo (antes → después) */
+    const deltaP = (pIni !== null && pFin !== null) ? pFin - pIni : null;
+    poner('phDeltaP', deltaP !== null ? (deltaP >= 0 ? '+' : '') + deltaP.toFixed(1) + ' PSI' : '--.- PSI');
+
+    /* Diferencial compensado: lo que cambió sin explicación térmica */
+    const r = (tFin !== null && tRef !== null && pIni !== null)
+      ? presionEsperada(pIni, tRef, tFin, gasPH())
+      : { psi: null, modelo: '—' };
+    const deltaPC = (r.psi !== null && pFin !== null) ? pFin - r.psi : null;
+    poner('phDeltaPC', deltaPC !== null ? (deltaPC >= 0 ? '+' : '') + deltaPC.toFixed(1) + ' PSI' : '--.- PSI');
+    poner('phVeredicto', veredictoPH(deltaPC, pIni));
+
+    const fuga = fugaEstimadaPH();
+    poner('phFuga', fuga !== null ? (fuga >= 0 ? '+' : '') + fuga.toFixed(2) + ' PSI/h' : '--.- PSI/h');
+
     const ms = Date.now() - new Date(ref.timestamp).getTime();
-    poner('phTiempo', Number.isFinite(ms) && ms > 0 ? (ms / 3600000).toFixed(1) + ' h' : '--');
+    const horas = Number.isFinite(ms) && ms > 0 ? ms / 3600000 : 0;
+    poner('phTiempo', horas > 0 ? horas.toFixed(1) + ' h' : '--');
+    const pct = dur > 0 ? Math.max(0, Math.min(100, (horas / dur) * 100)) : 0;
+    const barra = $('phProgreso');
+    if (barra) barra.style.width = pct.toFixed(1) + '%';
+    poner('phProgresoTxt', ref.activa === false
+      ? 'finalizada · ' + horas.toFixed(1) + ' h'
+      : horas.toFixed(1) + ' h de ' + dur + ' h (' + Math.round(pct) + '%)');
+
+    const bi = $('phIniciar');
+    if (bi) bi.textContent = '▶ Reiniciar referencia';
+    const bf = $('phFinalizar');
+    if (bf) bf.disabled = (ref.activa === false);
   }
+
   function guardarEstadoPH() {
     try {
       if (referenciaPH) localStorage.setItem(K_REF_PH, JSON.stringify(referenciaPH));
@@ -4236,28 +4409,19 @@
       localStorage.setItem(K_MED_PH, JSON.stringify(medidasPH));
     } catch (e) {}
   }
-  window.cambiarPesoPH = function (valor) {
-    let v = parseInt(valor, 10);
-    if (!Number.isFinite(v)) v = 60;
-    v = Math.max(0, Math.min(100, v));
-    pesoEvap = v;
-    pesoCond = 100 - v;
-    try { localStorage.setItem(K_PESO1, String(v)); } catch (e) {}
-    const r = $('phPeso1');
-    if (r && Number(r.value) !== v) r.value = String(v);
-    const be = $('phBarraEvap'), bc = $('phBarraCond');
-    if (be) be.style.width = pesoEvap + '%';
-    if (bc) bc.style.width = pesoCond + '%';
-    actualizarPanelPH();
-    renderMonitor();
-  };
+
   window.guardarPH = function () {
     try {
-      const sel = $('phGas');
-      if (sel) localStorage.setItem('refrig_ph_gas', sel.value);
+      const gas = $('phGas'), cp = $('phCanalPresion'), ci = $('phCanalTInt'), ce = $('phCanalTExt'), du = $('phDuracion');
+      if (gas) localStorage.setItem('refrig_ph_gas', gas.value);
+      if (cp) localStorage.setItem(K_CANAL_PRES_PH, cp.value);
+      if (ci) localStorage.setItem(K_CANAL_TINT_PH, ci.value);
+      if (ce) localStorage.setItem(K_CANAL_TEXT_PH, ce.value);
+      if (du) localStorage.setItem(K_DURACION_PH, du.value);
     } catch (e) {}
     actualizarPanelPH();
   };
+
   function cargarPH() {
     try {
       const ref = JSON.parse(localStorage.getItem(K_REF_PH) || 'null');
@@ -4273,68 +4437,79 @@
     } catch (e) {
       referenciaPH = null; ultimaMedidaPH = null; medidasPH = [];
     }
+    /* Restaurar selectores */
     const gas = localStorage.getItem('refrig_ph_gas');
     if (gas && $('phGas')) $('phGas').value = gas;
-    const r = $('phPeso1');
-    if (r) r.value = String(pesoEvap);
-    const be = $('phBarraEvap'), bc = $('phBarraCond');
-    if (be) be.style.width = pesoEvap + '%';
-    if (bc) bc.style.width = pesoCond + '%';
+    const cp = localStorage.getItem(K_CANAL_PRES_PH);
+    if (cp && $('phCanalPresion')) $('phCanalPresion').value = cp;
+    const ci = localStorage.getItem(K_CANAL_TINT_PH);
+    if (ci && $('phCanalTInt')) $('phCanalTInt').value = ci;
+    const ce = localStorage.getItem(K_CANAL_TEXT_PH);
+    if (ce && $('phCanalTExt')) $('phCanalTExt').value = ce;
+    const pi = localStorage.getItem(K_PESO_INT_PH);
+    if (pi !== null && $('phPesoInt')) $('phPesoInt').value = pi;
+    const du = localStorage.getItem(K_DURACION_PH);
+    if (du && $('phDuracion')) $('phDuracion').value = du;
+    /* Compatibilidad: la referencia vieja no tenía canal de temperatura */
+    if (referenciaPH && !referenciaPH.canalTInt) referenciaPH.canalTInt = canalTIntPH();
+    if (referenciaPH && !referenciaPH.canalTExt) referenciaPH.canalTExt = canalTExtPH();
+    if (referenciaPH && !referenciaPH.canalPres) referenciaPH.canalPres = 'psuct';
+    if (referenciaPH && referenciaPH.activa === undefined) referenciaPH.activa = true;
     pistaPH();
   }
-  window.aceptarMedidaPH = function () {
-    if (!enVivo) { mensajePH('Vuelva a «Actual» antes de registrar una medición.', 'err'); return; }
-    const p = aNumero(($('phPresionInicial') || {}).value);
-    if (p === null || p < 0) { mensajePH('Presión no válida.', 'err'); return; }
+
+  window.iniciarPH = function () {
+    if (!enVivo) { mensajePH('Vuelva a «Actual» antes de iniciar la prueba.', 'err'); return; }
     const fila = ultimaVista;
-    if (!fila) { mensajePH('Esperando lecturas del ESP32.', 'err'); return; }
-    if (!datosFrescos(fila)) { mensajePH('Los datos están atrasados: espere una lectura nueva antes de aceptar.', 'err'); return; }
-    const tEvap = valorSlotDeFila(fila, 'tevap');
-    const tDesc = valorSlotDeFila(fila, 'tdesc');
-    if (tEvap === null || tDesc === null) {
-      mensajePH('Se necesitan las temperaturas de salida de evaporador y de descarga.', 'err');
-      return;
-    }
-    const tEf = temperaturaEfectivaDe(tEvap, tDesc);
-    if (tEf === null) { mensajePH('No se pudo calcular la temperatura efectiva del gas.', 'err'); return; }
+    if (!fila) { mensajePH('Esperando lecturas del equipo.', 'err'); return; }
+    if (!datosFrescos(fila)) { mensajePH('Los datos están atrasados: espere una lectura nueva del equipo.', 'err'); return; }
 
-    const timestamp = new Date().toISOString();
-    const punto = { timestamp: timestamp, pressureGauge: p, tempC: tEf, rawEvap: tEvap, rawDesc: tDesc };
+    const cp = canalPresionPH(), ci = canalTIntPH(), ce = canalTExtPH();
+    const p = valorPH(cp);
+    const tI = valorPH(ci), tE = valorPH(ce);
+    const tEf = tempEfectivaDe(tI, tE, pesoIntPH());
+    if (p === null) { mensajePH('El canal de presión elegido (' + nombreCanalPH(cp) + ') no está informando.', 'err'); return; }
+    if (tEf === null) { mensajePH('Ninguna de las dos sondas de temperatura está informando.', 'err'); return; }
+    if (referenciaPH && referenciaPH.activa !== false &&
+        !confirm('Ya hay una prueba en curso. ¿Reiniciar la referencia con las lecturas actuales?')) return;
 
-    if (!referenciaPH) {
-      referenciaPH = {
-        timestamp: timestamp, pressureGauge: p,
-        rawEvap: tEvap, rawDesc: tDesc, tempRefC: tEf,
-        modelo: pesoEvap + '/' + pesoCond
-      };
-      medidasPH = [punto];
-      mensajePH('Referencia fijada: ' + p.toFixed(1) + ' PSI a ' + tEf.toFixed(1) + ' °C.');
-    } else {
-      medidasPH.push(punto);
-      if (medidasPH.length > 500) medidasPH = medidasPH.slice(-500);
-      const tRef = temperaturaRefPH();
-      const r = (tRef !== null) ? presionEsperada(referenciaPH.pressureGauge, tRef, tEf, gasPH()) : { psi: null };
-      const diff = (r.psi !== null) ? p - r.psi : null;
-      mensajePH(
-        diff !== null
-          ? 'Medición registrada: ' + p.toFixed(1) + ' PSI a ' + tEf.toFixed(1) + ' °C · ' +
-            veredictoPH(diff, referenciaPH.pressureGauge) + ' (' + (diff >= 0 ? '+' : '') + diff.toFixed(1) + ' PSI).'
-          : 'Medición registrada: ' + p.toFixed(1) + ' PSI.',
-        (diff !== null && diff < -3) ? 'warn' : ''
-      );
-    }
-    ultimaMedidaPH = punto;
+    const ahora = new Date().toISOString();
+    referenciaPH = {
+      timestamp: ahora, pressureGauge: p, tempRefC: tEf,
+      canalPres: cp, canalTInt: ci, canalTExt: ce, pesoInt: pesoIntPH(),
+      tIntRef: tI, tExtRef: tE,
+      gas: gasPH(), duracionH: duracionPH(), activa: true
+    };
+    medidasPH = [{ timestamp: ahora, pressureGauge: p, tInt: tI, tExt: tE }];
+    ultimaMedidaPH = medidasPH[0];
     guardarEstadoPH();
+    mensajePH('Prueba iniciada. Antes: ' + p.toFixed(1) + ' PSI con el gas a ' + tEf.toFixed(1) +
+              ' °C (' + nombreCanalPH(ci) + ' / ' + nombreCanalPH(ce) + '). Se registra una lectura cada 5 minutos.', '');
     renderMonitor();
   };
-  window.usarPresionEnVivoPH = function () {
-    const el = $('phPresionInicial');
-    if (!el) return;
-    const psi = valorSlotActual('psuct');
-    if (psi === null) { mensajePH('No hay lectura de presión de succión todavía.', 'err'); return; }
-    el.value = psi.toFixed(1);
-    mensajePH('Copiada la presión de succión actual (' + psi.toFixed(1) + ' PSI). Confirme con el manómetro y pulse Aceptar.');
+
+  window.cambiarPesoIntPH = function (valor) {
+    let v = parseInt(valor, 10);
+    if (!Number.isFinite(v)) v = 70;
+    v = Math.max(0, Math.min(100, v));
+    const r = $('phPesoInt');
+    if (r && Number(r.value) !== v) r.value = String(v);
+    try { localStorage.setItem(K_PESO_INT_PH, String(v)); } catch (e) {}
+    if (referenciaPH) referenciaPH.pesoInt = v;   // recalcula el historial con el peso nuevo
+    guardarEstadoPH();
+    actualizarPanelPH();
+    renderMonitor();
   };
+  window.finalizarPH = function () {
+    if (!referenciaPH) return;
+    referenciaPH.activa = false;
+    guardarEstadoPH();
+    const fuga = fugaEstimadaPH();
+    mensajePH('Prueba finalizada tras ' + ((Date.now() - new Date(referenciaPH.timestamp).getTime()) / 3600000).toFixed(1) +
+              ' h' + (fuga !== null ? ' · fuga estimada ' + fuga.toFixed(2) + ' PSI/h' : '') + '.', '');
+    renderMonitor();
+  };
+
   window.reiniciarPH = function () {
     if (!confirm('¿Borrar la referencia y las mediciones de la prueba actual?')) return;
     referenciaPH = null;
@@ -4382,6 +4557,8 @@
     });
     /* El reporte lleva las dos pantallas: monitor y prueba de N₂ */
     document.body.setAttribute('data-modo', 'reporte');
+    const panelDiagPdf = $('panelAlertas');
+    if (panelDiagPdf) panelDiagPdf.style.display = '';   // el reporte lleva siempre el diagnóstico
     await rasterizarParaPDF();
   };
   window.__monitorDespuesPDF = function () {
@@ -4475,7 +4652,40 @@
       window.cerrarMollier();
     });
 
+    cargarEstadoDiag();
+
     registrarServiceWorker();
+  }
+
+  /* ------------------- MOTOR DE DIAGNÓSTICO: OCULTAR ---------------------- */
+  function aplicarEstadoDiag() {
+    const cont = $('panelAlertas');
+    const btn = $('btnDiagVer');
+    if (!cont) return;
+    const visible = cont.style.display !== 'none';
+    if (btn) {
+      btn.textContent = visible ? '👁 Ocultar' : '👁 Mostrar';
+      btn.title = visible ? 'Ocultar el motor de diagnóstico' : 'Mostrar el motor de diagnóstico';
+    }
+  }
+  window.alternarDiagnostico = function () {
+    const cont = $('panelAlertas');
+    if (!cont) return;
+    const ocultar = cont.style.display !== 'none';
+    cont.style.display = ocultar ? 'none' : '';
+    try { localStorage.setItem(K_DIAG_VISIBLE, ocultar ? '0' : '1'); } catch (e) {}
+    aplicarEstadoDiag();
+  };
+  function cargarEstadoDiag() {
+    const cont = $('panelAlertas');
+    if (!cont) return;
+    let visible = true;
+    try {
+      const guardado = localStorage.getItem(K_DIAG_VISIBLE);
+      if (guardado === '0') visible = false;
+    } catch (e) {}
+    cont.style.display = visible ? '' : 'none';
+    aplicarEstadoDiag();
   }
 
   /* ---------------------- INSTALAR COMO APLICACIÓN ------------------------ */
