@@ -6,6 +6,15 @@
   <title>Gráfica Live · Mediciones del ciclo</title>
 
   <meta name="theme-color" content="#0f172a">
+  <!-- Aplicación web instalable (PWA) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Monitor HVAC">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -182,7 +191,7 @@
     ['presion_succion','presionSuccion','presion1','pres1','p_succion','pSuccion','p1','presion_baja'],
     ['presion_descarga','presionDescarga','presion2','pres2','p_descarga','pDescarga','p2','presion_alta']
   ];
-  const ASIGNACION_INICIAL = { psuct:'pres1', pdesc:'pres2', tdesc:'temp1', tliq:'temp2', tevap:'temp3', tsuct:'temp4', tamb:'temp5' };
+  const ASIGNACION_INICIAL = { psuct:'pres1', pdesc:'pres2', tsuct:'temp1', tevap:'temp2', tdesc:'temp3', tliq:'temp4', tamb:'temp5' };
 
   const SERIES = [
     { id:'tsuct', etiqueta:'T. Succión',     color:'#f87171', eje:'y',  varSlot:'tsuct' },
@@ -212,7 +221,7 @@
   SERIES.forEach(s => { seriesVisibles[s.id] = ['tsuct','tdesc','tevap'].indexOf(s.id) >= 0; });
 
   try {
-    const a = JSON.parse(localStorage.getItem('refrig_asignacion_sondas') || 'null');
+    const a = JSON.parse(localStorage.getItem('refrig_asignacion_sondas_v2') || 'null');
     if (a && typeof a === 'object') Object.keys(ASIGNACION_INICIAL).forEach(k => { if (typeof a[k] === 'string') asignacion[k] = a[k]; });
   } catch (e) {}
   try {
@@ -235,6 +244,7 @@
     if (!s) return null;
     let str = String(s).trim();
     if (str.includes(' ') && !str.includes('T')) str = str.replace(' ', 'T');
+    str = str.replace(/\.(\d{3})\d+/, '.$1');   // Safari no acepta más de 3 decimales
     if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(str)) str += 'Z';
     const t = new Date(str).getTime();
     return isNaN(t) ? null : t;
@@ -662,6 +672,12 @@
     const opts = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
     let txt = new Date(inicio).toLocaleString([], opts) + ' → ' + new Date(fin).toLocaleString([], opts);
     txt += ' · ' + (rangoMin < 60 ? (rangoMin + ' min') : ((rangoMin / 60) + ' h'));
+    txt += ' · ' + (function () {
+      const min = -new Date().getTimezoneOffset();
+      const abs = Math.abs(min);
+      return 'UTC' + (min >= 0 ? '+' : '-') + String(Math.floor(abs / 60)).padStart(2, '0') +
+             (abs % 60 ? ':' + String(abs % 60).padStart(2, '0') : '');
+    })();
     if (offsetMin > 0) txt += ' · hace ' + (offsetMin < 60 ? (offsetMin + ' min') : ((offsetMin / 60) + ' h'));
     if (!cantidad) txt += ' (sin datos)';
     el.textContent = txt;

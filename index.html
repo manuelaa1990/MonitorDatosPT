@@ -3385,15 +3385,50 @@
     nota('');
     return traerRangoWorker(horas);
   }
+  /* ------------------------ FECHAS Y ZONA HORARIA -------------------------- */
+  /* Supabase guarda created_at en UTC y lo devuelve con el desfase explícito
+     ("2026-10-19T23:36:29.771295+00:00"). Se normaliza a ISO con milisegundos
+     antes de usarla: Safari del iPhone no acepta fracciones de más de tres
+     dígitos y ahí la fecha quedaba inválida. Después de esto todo el código
+     trabaja con un instante absoluto y muestra la hora del teléfono. */
+  function fechaIso(valor) {
+    if (valor === null || valor === undefined || valor === '') return null;
+    let s = String(valor).trim().replace(' ', 'T');
+    s = s.replace(/\.(\d{3})\d+/, '.$1');
+    if (!/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  function normalizarFilas(filas) {
+    if (!Array.isArray(filas)) return [];
+    return filas
+      .map(f => {
+        const iso = fechaIso(f && f.created_at);
+        if (!iso) return null;
+        return Object.assign({}, f, { created_at: iso });
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }
+
+  /* Desfase del teléfono respecto de UTC, para mostrarlo junto a la hora */
+  function desfaseLocal() {
+    const min = -new Date().getTimezoneOffset();
+    const signo = min >= 0 ? '+' : '-';
+    const abs = Math.abs(min);
+    const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+    const mm = String(abs % 60).padStart(2, '0');
+    return 'UTC' + signo + hh + (mm === '00' ? '' : ':' + mm);
+  }
+
   async function cargarHistorico() {
     const miSecuencia = ++secuencia;
     const v = ventanaActual();
     try {
       const filas = await traerVentana(v.inicio, v.fin);
       if (miSecuencia !== secuencia) return;
-      datosCrudos = (Array.isArray(filas) ? filas : [])
-        .filter(f => f && Number.isFinite(new Date(f.created_at).getTime()))
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      datosCrudos = normalizarFilas(filas);
       marcarApi(true);
     } catch (err) {
       if (miSecuencia !== secuencia) return;
@@ -3418,11 +3453,13 @@
     sondeando = true;
     try {
       const fila = await traerUltima();
-      if (fila && fila.created_at) {
-        anotarSenal(fila.created_at);
-        ultimaAbsoluta = procesarFila(fila);
+      const iso = fila ? fechaIso(fila.created_at) : null;
+      if (iso) {
+        const filaNorm = Object.assign({}, fila, { created_at: iso });
+        anotarSenal(iso);
+        ultimaAbsoluta = procesarFila(filaNorm);
         pintarBateriaWifi();
-        if (enVivo) fusionarEnVivo(fila);
+        if (enVivo) fusionarEnVivo(filaNorm);
       }
       marcarApi(true);
     } catch (err) {
@@ -3965,7 +4002,8 @@
     /* Encabezado del monitor */
     if (ultima) {
       const hora = new Date(ultima.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      poner('txtUltimaLectura', 'Última lectura: ' + hora + (deRespaldo ? ' (fuera de la ventana)' : ''));
+      poner('txtUltimaLectura', 'Última lectura: ' + hora + ' · ' + desfaseLocal() +
+        (deRespaldo ? ' · fuera de la ventana' : ''));
     } else {
       poner('txtUltimaLectura', enVivo ? 'Última lectura: —' : 'Sin datos en esta ventana');
     }
