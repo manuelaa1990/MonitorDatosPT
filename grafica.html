@@ -436,21 +436,77 @@
      GRÁFICA
      ============================================================ */
   const ctx = document.getElementById('tempChart').getContext('2d');
-  function degradado(color) {
+  function degradado(color, intensidad) {
     return c => {
       const area = c.chart.chartArea;
       if (!area) return 'transparent';
       const g = c.chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
-      g.addColorStop(0, color + '05');
-      g.addColorStop(1, color + '80');
+      g.addColorStop(0, color + '00');
+      g.addColorStop(1, color + (intensidad || '4d'));
       return g;
     };
   }
+  /* Cinta de degradado bajo cada línea. Se dibuja antes de las líneas, con un
+     degradado que va del color de la serie (arriba) a transparente (abajo), y
+     recortada al área de dibujo. Así el estilo se mantiene sin que el relleno
+     tape el resto de la gráfica. */
+  const ALTURA_CINTA = 24;
+  const pluginCinta = {
+    id: 'cintaDegradado',
+    beforeDatasetsDraw(chart) {
+      const area = chart.chartArea;
+      if (!area) return;
+      const ctx = chart.ctx;
+      chart.data.datasets.forEach((ds, i) => {
+        if (!ds.cinta) return;
+        /* Ojo: meta.hidden NO refleja dataset.hidden; la forma correcta es esta */
+        if (!chart.isDatasetVisible(i)) return;
+        const meta = chart.getDatasetMeta(i);
+        if (!meta) return;
+        const pts = (meta.data || []).filter(p => p && Number.isFinite(p.x) && Number.isFinite(p.y));
+        if (pts.length < 2) return;
+
+        /* Se corta la cinta donde hay un hueco grande de tiempo (dato faltante) */
+        const saltos = [];
+        const paso = (pts[pts.length - 1].x - pts[0].x) / Math.max(1, pts.length - 1);
+        for (let k = 1; k < pts.length; k++) {
+          if (pts[k].x - pts[k - 1].x > paso * 3.5) saltos.push(k);
+        }
+        const tramos = [];
+        let inicio = 0;
+        saltos.forEach(corte => { tramos.push(pts.slice(inicio, corte)); inicio = corte; });
+        tramos.push(pts.slice(inicio));
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(area.left, area.top, area.width, area.height);
+        ctx.clip();
+
+        tramos.forEach(tramo => {
+          if (tramo.length < 2) return;
+          let minY = Infinity, maxY = -Infinity;
+          tramo.forEach(p => { minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
+          const grad = ctx.createLinearGradient(0, minY, 0, maxY + ALTURA_CINTA);
+          grad.addColorStop(0, ds.borderColor + '5c');
+          grad.addColorStop(1, ds.borderColor + '00');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(tramo[0].x, tramo[0].y - 1);
+          for (let k = 1; k < tramo.length; k++) ctx.lineTo(tramo[k].x, tramo[k].y - 1);
+          for (let k = tramo.length - 1; k >= 0; k--) ctx.lineTo(tramo[k].x, tramo[k].y + ALTURA_CINTA);
+          ctx.closePath();
+          ctx.fill();
+        });
+        ctx.restore();
+      });
+    }
+  };
+
   const datasets = SERIES.map(s => {
     const ds = {
       label: s.etiqueta,
       borderColor: s.color,
-      backgroundColor: s.eje === 'y' ? degradado(s.color) : 'transparent',
+      backgroundColor: 'transparent',
       data: [],
       borderWidth: 2.5,
       tension: 0.35,
@@ -459,7 +515,8 @@
       pointBackgroundColor: '#ffffff',
       pointBorderColor: s.color,
       pointBorderWidth: 2,
-      fill: s.eje === 'y',
+      fill: false,
+      cinta: !s.soloPuntos,
       spanGaps: false,
       yAxisID: s.eje
     };
@@ -521,8 +578,20 @@
           zoom: { wheel: { enabled: true, speed: 0.05 }, pinch: { enabled: true }, drag: { enabled: false }, mode: 'x', onZoom: () => { userZoomed = true; } }
         }
       }
-    }
+    },
+    plugins: [pluginCinta]
   });
+
+  /* Reserva el alto real de las barras para que los números del eje X no queden
+     debajo de la barra inferior. */
+  function ajustarPadding() {
+    const barraArriba = document.getElementById('topbar');
+    const barraAbajo = document.getElementById('bottombar');
+    if (!barraArriba || !barraAbajo) return;
+    tempChart.options.layout.padding.top = barraArriba.offsetHeight + 6;
+    tempChart.options.layout.padding.bottom = barraAbajo.offsetHeight + 6;
+    tempChart.update('none');
+  }
 
   function getExtrema(datos) {
     let max = { y: -Infinity, x: null }, min = { y: Infinity, x: null };
@@ -586,7 +655,12 @@
       });
     }
 
-    SERIES.forEach((s, i) => { tempChart.data.datasets[i].data = conjuntos[s.id]; });
+    SERIES.forEach((s, i) => {
+      const ds = tempChart.data.datasets[i];
+      ds.data = conjuntos[s.id];
+      ds.hidden = !seriesVisibles[s.id];        // sin esto, la línea no se apagaba
+      ds.borderWidth = s.soloPuntos ? 0 : (seriesVisibles[s.id] ? 2.5 : 0);
+    });
 
     /* Burbujas de máximo y mínimo de las temperaturas visibles */
     try {
@@ -599,11 +673,23 @@
           content: ['Sin datos en este rango'], font: { size: 14, weight: 'bold' }, color: '#64748b'
         };
       } else {
+        /* Desplazamiento horizontal para que la burbuja no se corte en el borde */
+        const ajusteBorde = valorX => {
+          const area = tempChart.chartArea;
+          if (!area || !valorX) return 0;
+          const px = tempChart.scales.x.getPixelForValue(valorX);
+          const MARGEN = 78;
+          if (px < area.left + MARGEN) return MARGEN - (px - area.left);
+          if (px > area.right - MARGEN) return -(px - (area.right - MARGEN));
+          return 0;
+        };
+
         visiblesTemp.forEach(s => {
           const ext = getExtrema(conjuntos[s.id]);
           if (ext.max) {
             anotaciones['max_' + s.id] = {
               type: 'label', xValue: ext.max.x, yValue: ext.max.y,
+              xAdjust: ajusteBorde(ext.max.x),
               content: [ext.max.y.toFixed(2) + ' °C'],
               backgroundColor: 'rgba(255,255,255,0.95)', borderColor: s.color, borderWidth: 1, borderRadius: 6,
               color: '#1e293b', font: { size: 10, weight: 'bold' },
@@ -614,6 +700,7 @@
           if (ext.min) {
             anotaciones['min_' + s.id] = {
               type: 'label', xValue: ext.min.x, yValue: ext.min.y,
+              xAdjust: ajusteBorde(ext.min.x),
               content: [ext.min.y.toFixed(2) + ' °C'],
               backgroundColor: 'rgba(255,255,255,0.95)', borderColor: s.color, borderWidth: 1, borderRadius: 6,
               color: '#1e293b', font: { size: 10, weight: 'bold' },
@@ -699,6 +786,7 @@
     if ('vibrate' in navigator) navigator.vibrate(15);
     pintarToggles();
     renderChart();
+    ajustarPadding();
   }
 
   function updateStatusBar() {
@@ -859,9 +947,10 @@
     if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
     document.querySelectorAll('.range-btn[data-min]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.min, 10) === rangoMin));
     pintarToggles();
+    ajustarPadding();
     updatePortraitHint();
-    window.addEventListener('resize', () => { updatePortraitHint(); tempChart.resize(); });
-    window.addEventListener('orientationchange', () => setTimeout(() => { updatePortraitHint(); tempChart.resize(); }, 300));
+    window.addEventListener('resize', () => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); });
+    window.addEventListener('orientationchange', () => setTimeout(() => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); }, 300));
     document.querySelector('#portrait-hint button')?.addEventListener('click', enterFullscreen);
 
     await loadAllHistory();
