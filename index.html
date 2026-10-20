@@ -2712,9 +2712,12 @@
   SLOTS.forEach(s => { SLOT_POR_ID[s.id] = s; });
 
   /* Asignación de fábrica: el orden en que el usuario enumeró sus sondas */
+  /* Orden que publica el firmware del ESP32:
+       T1 succión · T2 evaporador · T3 descarga · T4 líquido · T5 ambiente
+     Por eso temp1 = succión y temp3 = descarga (no al revés). */
   const ASIGNACION_INICIAL = {
     psuct: 'pres1', pdesc: 'pres2',
-    tdesc: 'temp1', tliq: 'temp2', tevap: 'temp3', tsuct: 'temp4', tamb: 'temp5'
+    tsuct: 'temp1', tevap: 'temp2', tdesc: 'temp3', tliq: 'temp4', tamb: 'temp5'
   };
 
   /* Series de la gráfica: se muestran u ocultan a demanda y se recuerda */
@@ -2743,7 +2746,7 @@
   const K_MED_PH      = 'pressure-measurements';
   const K_TEMA        = 'refrig_tema';
   const K_SENSOR_P    = 'refrig_sensor_p';
-  const K_ASIGNACION  = 'refrig_asignacion_sondas';
+  const K_ASIGNACION  = 'refrig_asignacion_sondas_v2';
   const K_UMBRALES    = 'refrig_umbrales_slots';
   const K_SERIES      = 'refrig_series_grafica';
   const K_ALARMAS     = 'refrig_alarmas_slots';
@@ -3582,6 +3585,17 @@
       filas.push(filaDiagHtml('🔵', 'Canales asignados (' + usadas + '/' + SLOTS.length + ')',
         escaparHtml(detalle) + '. Presiones ' + (sensorAbsoluto ? 'absolutas' : 'manométricas') +
         ', convertidas a absoluta para la tabla P–T.', false));
+
+      /* Equipos con menos sondas o un solo transductor: se informa qué canales
+         están entregando dato, para que los casilleros vacíos no confundan. */
+      const sinDato = SLOTS.filter(s => valorSlotDeFila(fila, s.id) === null);
+      if (sinDato.length) {
+        const informando = SLOTS.length - sinDato.length;
+        filas.push(filaDiagHtml('🔵', 'Canales informando (' + informando + '/' + SLOTS.length + ')',
+          escaparHtml('Sin lectura: ' + sinDato.map(s => s.etiqueta).join(', ')) +
+          '. Si el equipo tiene menos sondas conectadas es lo esperado; si antes informaban, revise la conexión del bus 1-Wire o del transductor.',
+          false));
+      }
     }
 
     /* Referencias P–T (CoolProp) de las dos presiones medidas */
