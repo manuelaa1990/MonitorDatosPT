@@ -125,7 +125,7 @@
 
 <div id="bottombar" class="ui-bar border-t">
   <div class="flex items-center justify-between px-3 py-2 text-[11px] gap-2 flex-wrap">
-    <div class="flex items-center gap-1.5 shrink-0">
+    <div id="bat-box" class="flex items-center gap-1.5 shrink-0">
       <svg id="bat-icon" class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
       </svg>
@@ -283,6 +283,26 @@
     const t = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('TIMEOUT')), ms); });
     return Promise.race([p, t]).finally(() => clearTimeout(timer));
   }
+  /* ---------------------------- ORIGEN DE DATOS ---------------------------
+     Supabase: tabla lecturas_hvac
+       created_at, presion_baja, presion_alta, temp1..temp5
+     Si SB_CLAVE queda vacía se usa el Worker de siempre. */
+  const SB_URL   = 'https://qiidodrtxchurazrghyr.supabase.co';
+  const SB_TABLA = 'lecturas_hvac';
+  const SB_CLAVE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaWRvZHJ0eGNodXJhenJnaHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDkwMDQsImV4cCI6MjEwODAyNTAwNH0.12wbnPavwGr4tEH1kz9ZtgSxHUYvL9gyrbMqFOBX2hg';
+
+  function usarSupabase() { return SB_CLAVE.length > 20; }
+
+  async function sbPedir(consulta) {
+    const url = SB_URL + '/rest/v1/' + SB_TABLA + '?' + consulta;
+    const res = await withTimeout(fetch(url, {
+      headers: { apikey: SB_CLAVE, Authorization: 'Bearer ' + SB_CLAVE, Accept: 'application/json' },
+      cache: 'no-store'
+    }), 15000);
+    if (!res.ok) throw new Error('Supabase HTTP ' + res.status);
+    return res.json();
+  }
+
   async function fetchJSON(path) {
     const res = await withTimeout(fetch(API_URL + path, { cache: 'no-store' }), 12000);
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -294,10 +314,35 @@
     return Array.isArray(data) ? data : [];
   }
 
+  /* Última lectura y ventana exacta (con Supabase, por rango de fechas) */
+  async function fetchUltima() {
+    if (usarSupabase()) {
+      const filas = await sbPedir('select=*&order=created_at.desc&limit=1');
+      return (Array.isArray(filas) && filas.length) ? filas[0] : null;
+    }
+    return fetchJSON('/latest');
+  }
+  async function fetchVentana(desdeMs, hastaMs) {
+    if (usarSupabase()) {
+      const d = encodeURIComponent(new Date(desdeMs).toISOString());
+      const h = encodeURIComponent(new Date(hastaMs).toISOString());
+      const filas = await sbPedir('select=*&created_at=gte.' + d + '&created_at=lte.' + h +
+                                 '&order=created_at.asc&limit=8000');
+      return Array.isArray(filas) ? filas : [];
+    }
+    /* Worker: pide las horas necesarias y el filtro fino lo hace getSlice() */
+    const horas = Math.ceil((Date.now() - desdeMs) / 3600000) + 1;
+    return fetchRange(horas, 0);
+  }
+
   /* ============================================================
      CARGA DE HISTORIAL
      ============================================================ */
   async function loadAllHistory() {
+    if (usarSupabase()) {
+      await recargarVentana();
+      return;
+    }
     const chunks = [];
     let gotBig = false;
     try {
@@ -642,6 +687,9 @@
 
   function updateStatusBar() {
     if (!latestRow) return;
+    /* Fuente directa: si no llega el dato de batería, no se muestra el indicador */
+    const cajaBat = document.getElementById('bat-box');
+    if (cajaBat) cajaBat.style.display = (latestRow.bateriaVolt !== null) ? '' : 'none';
     if (latestRow.bateriaVolt !== null) {
       document.getElementById('bat-val').textContent = latestRow.bateria + '% · ' + latestRow.bateriaVolt.toFixed(2) + 'V';
       const icon = document.getElementById('bat-icon');
@@ -677,7 +725,7 @@
 
   async function refreshLatest() {
     try {
-      const row = await fetchJSON('/latest');
+      const row = await fetchUltima();
       if (row && row.created_at) {
         const t = parseTs(row.created_at);
         if (t && (!lastSeenAt || t > lastSeenAt.getTime())) lastSeenAt = new Date(t);
@@ -692,6 +740,17 @@
       updateBadge();
     } catch (e) { updateBadge(); }
   }
+  /* Con Supabase se vuelve a pedir exactamente la ventana visible */
+  async function recargarVentana() {
+    try {
+      const ahora = Date.now();
+      const fin = ahora - offsetMin * 60000;
+      const filas = await fetchVentana(fin - rangoMin * 60000, fin);
+      allData = Array.isArray(filas) ? filas : [];
+      renderChart();
+    } catch (e) { console.warn('No se pudo leer la ventana:', e); }
+  }
+
   async function refreshRecentHistory() {
     if (isRefreshing) return;
     isRefreshing = true;
@@ -715,7 +774,7 @@
     const hist = offsetMin > 0;
     document.getElementById('btn-actual').classList.toggle('hidden', !hist);
     document.getElementById('btn-forward').classList.toggle('hidden', !hist);
-    renderChart();
+    if (usarSupabase()) { recargarVentana(); } else { renderChart(); }
     updateBadge();
   }
   function setVentana(min) {
@@ -726,7 +785,7 @@
     if (tempChart.resetZoom) tempChart.resetZoom();
     document.getElementById('btn-actual').classList.add('hidden');
     document.getElementById('btn-forward').classList.add('hidden');
-    renderChart();
+    if (usarSupabase()) { recargarVentana(); } else { renderChart(); }
     updateBadge();
   }
   function resetZoom() {
