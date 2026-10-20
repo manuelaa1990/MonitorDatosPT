@@ -15,8 +15,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <title>Estación de Refrigeración — Monitor y diagnóstico térmico</title>
 
-  <!-- CDN del generador de reportes PDF -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- El reporte PDF se genera con el diálogo de impresión nativo (texto vectorial) -->
   <script type="module">
     /*
      * Motor termodinámico principal: CoolProp 6.6.0 WebAssembly.
@@ -447,7 +446,7 @@
     .tabla-historial th { color: var(--acento); font-size: .50rem; text-transform: uppercase; }
     .scroll-x { width: 100%; overflow-x: auto; }
 
-    /* -------------------- Ajustes para el PDF (html2pdf) ------------- */
+    /* -------------------- Ajustes para el reporte impreso -------------- */
 
     body.generating-pdf { background: #fff !important; color: #000 !important; }
     body.generating-pdf .card,
@@ -455,7 +454,8 @@
     body.generating-pdf .top-info-bar,
     body.generating-pdf .diag-container,
     body.generating-pdf .kpi-box,
-    body.generating-pdf .ph-medida,
+    body.generating-pdf .caja-doble,
+    body.generating-pdf .ph-medida {
       background: #fff !important; border-color: #ccc !important; color: #000 !important;
     }
     body.generating-pdf input,
@@ -479,9 +479,14 @@
     }
     .modo-btn.activo { background: var(--acento-bg); border-color: var(--acento-bg); color: #fff; }
     body[data-modo="monitor"] #cardHermeticidad { display: none; }
+    /* En modo N₂ la pantalla se dedica solo a la prueba: se oculta el monitor,
+       la identificación, el diagnóstico y las acciones de la gráfica. */
+    body[data-modo="ph"] #cardIdentificacion,
     body[data-modo="ph"] #cardMonitor,
     body[data-modo="ph"] #cardIndicadores,
-    /* La gráfica tampoco se imprime en el reporte del modo N₂ */
+    body[data-modo="ph"] #accionesMonitor { display: none; }
+    /* En el reporte se ven las dos pantallas */
+    body[data-modo="reporte"] #accionesMonitor { display: none; }
 
     /* ------------------------ Cajas y casilleros ----------------------- */
     /* Tres cajas apiladas a todo el ancho, con sus casilleros en columnas
@@ -544,6 +549,42 @@
     .slot-estado { font-size: .50rem; color: var(--sutil); min-height: 11px; }
     .slot-estado.alarma { color: var(--peligro); font-weight: 800; }
 
+    /* ---------------------- ΔT del ciclo (fila propia) ------------------- */
+    .kpi-deltas { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+    .kpi-deltas .kpi-box .value { font-size: .92rem; }
+    .kpi-dt-desc { border-left-color: #f97316; }
+    .kpi-dt-succ { border-left-color: #22c55e; }
+    .kpi-dt-amb  { border-left-color: #8b5cf6; }
+
+    /* ------------------------- Impresión / PDF --------------------------- */
+    @page { size: A4 portrait; margin: 10mm; }
+    @media print {
+      :root, html[data-tema] {
+        --bg: #ffffff; --panel: #ffffff; --panel2: #ffffff;
+        --texto: #000000; --sutil: #444444;
+        --borde: #cccccc; --borde2: #999999;
+        --acento: #0369a1; --acento-bg: #0369a1;
+        --ok: #047857; --alerta: #b45309; --peligro: #b91c1c;
+      }
+      html, body { background: #fff !important; color: #000 !important; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .app-container { max-width: none !important; width: 100% !important; padding: 0 !important; margin: 0 !important; }
+      .modo-switch, .action-bar, .h2-acciones, #btnTema, #notaVentana { display: none !important; }
+      .top-info-bar { background: #fff !important; border-color: #ccc !important; color: #000 !important; }
+      .card, .probe-card, .kpi-box, .diag-container, .caja-doble, .ph-medida {
+        background: #fff !important; color: #000 !important; border-color: #ccc !important;
+        box-shadow: none !important;
+      }
+      .card, details.card { break-inside: avoid; page-break-inside: avoid; margin-bottom: 6px; }
+      .kpi-box, .ph-medida, .caja-doble, tr { break-inside: avoid; page-break-inside: avoid; }
+      .diag-table-wrap { overflow: visible !important; }
+      .sutil, .probe-estado { color: #444 !important; }
+      .diag-table td, .diag-table th { color: #000 !important; }
+      .diag-table .diag-text span[style] { color: #000 !important; }
+      * { animation: none !important; transition: none !important; }
+      /* El reporte siempre lleva las dos pantallas, aunque se imprima con Ctrl+P */
+      #cardIdentificacion, #cardMonitor, #cardIndicadores, #cardHermeticidad { display: block !important; }
+    }
   </style>
 </head>
 <body data-modo="monitor">
@@ -855,6 +896,11 @@
         <div class="kpi-box kpi-kw"><span class="label">Potencia Eléctrica</span><span class="value" id="kpiKW">NULL</span></div>
         <div class="kpi-box kpi-dt"><span class="label">ΔT Cond - Amb</span><span class="value" id="kpiDeltaAmb">NULL</span></div>
       </div>
+      <div class="results-grid kpi-deltas">
+        <div class="kpi-box kpi-dt-desc" title="T descarga − T líquido"><span class="label">ΔT Desc − Líq</span><span class="value" id="kpiDTDescLiq">NULL</span></div>
+        <div class="kpi-box kpi-dt-succ" title="T succión − T salida del evaporador: calor ganado en la línea de succión"><span class="label">ΔT Succ − Evap</span><span class="value" id="kpiDTSuccEvap">NULL</span></div>
+        <div class="kpi-box kpi-dt-amb" title="T ambiente − T líquido: calor retirado en el condensador"><span class="label">ΔT Amb − Líq</span><span class="value" id="kpiDTAmbLiq">NULL</span></div>
+      </div>
 
       <div id="confiabilidadDiagnostico" style="margin-top:4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.56rem;color:var(--sutil);">
@@ -975,12 +1021,13 @@
         <button class="btn btn-mini" id="phIniciar" onclick="iniciarPH()" title="Fija el antes con las lecturas actuales y arranca el registro automático">▶ Iniciar prueba</button>
         <button class="btn btn-mini" id="phFinalizar" onclick="finalizarPH()" disabled title="Cierra la prueba y deja el resultado">⏹ Finalizar</button>
         <button class="btn btn-mini" onclick="reiniciarPH()" title="Borra la referencia y las mediciones">🗑 Borrar</button>
+        <button class="btn btn-mini" onclick="descargarPDFReporte()" title="Abre el diálogo de impresión: elija «Guardar como PDF»">🖨 Imprimir / PDF</button>
       </div>
     </details>
 
     <!-- ============================ ACCIONES ================================ -->
-    <div class="action-bar">
-      <button class="btn btn-reporte" onclick="descargarPDFReporte()">📄 Reporte PDF</button>
+    <div class="action-bar" id="accionesMonitor">
+      <button class="btn btn-reporte" onclick="descargarPDFReporte()" title="Abre el diálogo de impresión: elija «Guardar como PDF»">🖨 Imprimir / PDF</button>
       <button class="btn btn-toggle" onclick="abrirGraficaAmpliada()" title="Abrir la gráfica extendida en otra pestaña">📊 Gráfica extendida</button>
       <button class="btn btn-toggle" id="btnInstalar" style="display:none" onclick="instalarApp()" title="Instalar como aplicación en el teléfono">⬇ Instalar app</button>
     </div>
@@ -1371,44 +1418,39 @@
 
     /*
      * REPORTE PDF
-     * Se prepara el documento antes de que html2canvas lo capture: el módulo
-     * del monitor abre los bloques plegados y muestra el diagnóstico completo.
+     * Se usa la impresión nativa del navegador: el PDF sale vectorial
+     * (texto seleccionable), en A4 y con el mismo resultado en teléfono y PC.
      * Los ganchos __monitorAntesPDF / __monitorDespuesPDF los define el módulo
-     * del monitor; si no existen, todo sigue funcionando como antes.
+     * del monitor; si no existen, se imprime la vista tal como está.
      */
     window.aplicarCambiosPendientes = aplicarCambiosPendientes;
-    async function descargarPDFReporte() {
-      const element = document.getElementById('reporteArea');
-
+    function descargarPDFReporte() {
       if (typeof window.__monitorAntesPDF === 'function') {
-        try {
-          await window.__monitorAntesPDF();
-        } catch (e) {
-          console.warn('No se pudo preparar el reporte:', e);
-        }
+        try { window.__monitorAntesPDF(); } catch (e) { console.warn('No se pudo preparar el reporte:', e); }
       }
 
-      document.body.classList.add('generating-pdf');
+      /* El nombre del archivo lo toma el navegador del título del documento. */
+      const marca = (document.getElementById('equipoMarca') || {}).value || '';
+      const modelo = (document.getElementById('equipoModelo') || {}).value || '';
+      const tituloPrevio = document.title;
+      document.title = ('Reporte_Tecnico_' + marca + '_' + modelo).replace(/[\\/:*?"<>|]+/g, '-').trim();
 
-      const opt = {
-        margin:       [5, 5, 5, 5],
-        filename:     `Reporte_Tecnico_${document.getElementById('equipoMarca').value}_${document.getElementById('equipoModelo').value}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['css', 'legacy'] }
-      };
-
-      try {
-        await html2pdf().set(opt).from(element).save();
-      } catch (e) {
-        console.error('Error al generar el PDF:', e);
-        alert('No se pudo generar el PDF: ' + (e && e.message ? e.message : e));
-      } finally {
+      const restaurar = () => {
+        document.title = tituloPrevio;
         document.body.classList.remove('generating-pdf');
         if (typeof window.__monitorDespuesPDF === 'function') {
           try { window.__monitorDespuesPDF(); } catch (e) { console.warn(e); }
         }
+        window.removeEventListener('afterprint', restaurar);
+      };
+      window.addEventListener('afterprint', restaurar);
+
+      document.body.classList.add('generating-pdf');
+      try {
+        window.print();
+      } catch (e) {
+        restaurar();
+        alert('No se pudo abrir el diálogo de impresión: ' + (e && e.message ? e.message : e));
       }
     }
 
@@ -1883,6 +1925,17 @@
       const deltaTCondAmb = (tSatCondBubble !== null)
         ? tSatCondBubble - tempAmbientePuntoFijoC : null;
 
+      /* ΔT de diagnóstico entre sondas (no son sobrecalentamientos):
+         · descarga − líquido: cuánto enfría el condensador la línea de líquido.
+         · succión − salida evap: calor ganado en la línea de succión.
+         · ambiente − líquido: calor retirado en el condensador. */
+      const dtDescLiq = (tDescRealC !== null && tLiqC !== null)
+        ? tDescRealC - tLiqC : null;
+      const dtSuccEvap = (tSuctC !== null && tEvapOutC !== null)
+        ? tSuctC - tEvapOutC : null;
+      const dtAmbLiq = (tLiqC !== null && Number.isFinite(tempAmbientePuntoFijoC))
+        ? tempAmbientePuntoFijoC - tLiqC : null;
+
       /* Relación de presión: la usa el motor de diagnóstico. */
       const rP = (pDescBarAbs !== null && pSuctBarAbs !== null && pSuctBarAbs > 0)
         ? pDescBarAbs / pSuctBarAbs : null;
@@ -1900,6 +1953,12 @@
       document.getElementById('kpiSC').innerText = valorKPI(subCoolK, 1, ' K');
       document.getElementById('kpiKW').innerText = valorKPI(pKw, 2, ' kW');
       document.getElementById('kpiDeltaAmb').innerText = valorKPI(deltaTCondAmb, 1, ' K');
+      const kpiDTDescLiq = document.getElementById('kpiDTDescLiq');
+      if (kpiDTDescLiq) kpiDTDescLiq.innerText = valorKPI(dtDescLiq, 1, ' K');
+      const kpiDTSuccEvap = document.getElementById('kpiDTSuccEvap');
+      if (kpiDTSuccEvap) kpiDTSuccEvap.innerText = valorKPI(dtSuccEvap, 1, ' K');
+      const kpiDTAmbLiq = document.getElementById('kpiDTAmbLiq');
+      if (kpiDTAmbLiq) kpiDTAmbLiq.innerText = valorKPI(dtAmbLiq, 1, ' K');
 
       const { alertas, alarmaTDesc, alarmaTLiq, confiabilidad } = evaluarDiagnostico(
         refData, rP, tDescRealC, tLiqC, tSatCondBubble, superHeatUtilK, superHeatTotalK, subCoolK, dischargeSuperHeatK, tempAmbientePuntoFijoC,
@@ -2007,8 +2066,7 @@
    Se apoya en el motor ya cargado arriba:
      · refrigerantes, prepareRefrigerant(), saturationAtP(), nombreCoolProp()
      · pUnits, pUnitActual, tUnitActual, convertirTemp()
-     · actualizarTodo(), guardarYActualizar(), toggleCompresionIdeal(),
-       toggleZonaActiva(), descargarPDFReporte()
+     · actualizarTodo(), guardarYActualizar(), descargarPDFReporte()
    Todo vive dentro de un IIFE para no chocar con los nombres del motor.
    ============================================================================ */
 (function () {
@@ -2319,16 +2377,24 @@
     const bm = $('btnModoMonitor'), bp = $('btnModoPH');
     if (bm) bm.classList.toggle('activo', modoActual === 'monitor');
     if (bp) bp.classList.toggle('activo', modoActual === 'ph');
-    if (modoActual === 'ph') actualizarPanelPH();
+    if (modoActual === 'ph') {
+      const d = $('cardHermeticidad');
+      if (d) d.open = true;
+      actualizarPanelPH();
+    }
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
   }
   window.cambiarModo = function (nuevo) {
     aplicarModo(nuevo);
     vibrar(10);
   };
 
-  /* La gráfica extendida vive en su propia página (grafica.html). */
+  /* La gráfica extendida vive en su propia página (grafica.html).
+     Se le pasa la asignación de sondas para que use exactamente las mismas
+     etiquetas que el monitor (si no, cada página lee su propia caché). */
   window.abrirGraficaAmpliada = function () {
-    window.open('grafica.html?min=' + rangoMin, '_blank');
+    const mapa = encodeURIComponent(JSON.stringify(asignacion));
+    window.open('grafica.html?min=' + rangoMin + '&map=' + mapa, '_blank');
   };
   /* ==================== CASILLEROS: SELECTORES Y VALORES ================== */
   let ventanaProcesada = [];      /* filas de la ventana visible, ya procesadas */
@@ -3463,7 +3529,12 @@
   };
 
   /* ------------------------------- REPORTE PDF ---------------------------- */
+  /* beforeprint y el botón pueden llamar dos veces seguidas: el estado original
+     se guarda solo la primera vez para no dejar todo abierto al terminar. */
+  let reportePreparado = false;
   window.__monitorAntesPDF = async function () {
+    if (reportePreparado) return;
+    reportePreparado = true;
     if (typeof window.aplicarCambiosPendientes === 'function') window.aplicarCambiosPendientes();
     document.querySelectorAll('details').forEach(d => {
       d.dataset.abiertoAntes = d.open ? '1' : '0';
@@ -3475,12 +3546,22 @@
     if (panelDiagPdf) panelDiagPdf.style.display = '';   // el reporte lleva siempre el diagnóstico
   };
   window.__monitorDespuesPDF = function () {
+    if (!reportePreparado) return;
+    reportePreparado = false;
     document.querySelectorAll('details').forEach(d => {
       if (d.dataset.abiertoAntes === '0') d.open = false;
     });
     document.body.setAttribute('data-modo', modoActual);
     try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
   };
+
+  /* Ctrl+P / menú del navegador: el reporte también sale completo. */
+  window.addEventListener('beforeprint', () => {
+    if (typeof window.__monitorAntesPDF === 'function') window.__monitorAntesPDF();
+  });
+  window.addEventListener('afterprint', () => {
+    if (typeof window.__monitorDespuesPDF === 'function') window.__monitorDespuesPDF();
+  });
 
   /* -------------------- GANCHO DE PRUEBA (sin el ESP32) ------------------- */
   /* Inyecta una lectura con el mismo formato del Worker:

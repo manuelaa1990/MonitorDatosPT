@@ -224,6 +224,18 @@
     const a = JSON.parse(localStorage.getItem('refrig_asignacion_sondas_v2') || 'null');
     if (a && typeof a === 'object') Object.keys(ASIGNACION_INICIAL).forEach(k => { if (typeof a[k] === 'string') asignacion[k] = a[k]; });
   } catch (e) {}
+  /* El monitor pasa su asignación en la URL: así el líquido/descarga no se
+     cruzan aunque cada página tenga su propia caché. */
+  try {
+    const mapaUrl = new URLSearchParams(location.search).get('map');
+    if (mapaUrl) {
+      const m = JSON.parse(mapaUrl);
+      if (m && typeof m === 'object') {
+        Object.keys(ASIGNACION_INICIAL).forEach(k => { if (typeof m[k] === 'string') asignacion[k] = m[k]; });
+        localStorage.setItem('refrig_asignacion_sondas_v2', JSON.stringify(asignacion));
+      }
+    }
+  } catch (e) {}
   try {
     const sv = JSON.parse(localStorage.getItem('refrig_series_grafica') || 'null');
     if (sv && typeof sv === 'object') SERIES.forEach(s => { if (typeof sv[s.id] === 'boolean') seriesVisibles[s.id] = sv[s.id]; });
@@ -269,6 +281,14 @@
     return (m[1] === 'temp') ? canalTemp(row, parseInt(m[2], 10)) : canalPres(row, parseInt(m[2], 10));
   }
   function valorSlot(row, slot) { return valorCanal(row, asignacion[slot]); }
+
+  /* Etiqueta con la sonda real: deja ver de un golpe si líquido y descarga
+     están cruzados (p. ej. «T. Líquido · S4»). */
+  function etiquetaSerie(s) {
+    const canal = s.varSlot ? asignacion[s.varSlot] : null;
+    if (!canal || !/^temp\d+$/.test(canal)) return s.etiqueta;
+    return s.etiqueta + ' · S' + canal.replace('temp', '');
+  }
 
   function procesarFila(row) {
     if (!row) return null;
@@ -417,6 +437,7 @@
       return {
         ref: ref, medidas: Array.isArray(med) ? med : [],
         peso: wEvap, tRef: tRefEf,
+        canalTemp: ref.canalTemp || null,      // sonda elegida en la prueba
         tRefMs: parseTs(ref.timestamp)
       };
     } catch (e) { return null; }
@@ -504,7 +525,7 @@
 
   const datasets = SERIES.map(s => {
     const ds = {
-      label: s.etiqueta,
+      label: etiquetaSerie(s),
       borderColor: s.color,
       backgroundColor: 'transparent',
       data: [],
@@ -624,9 +645,17 @@
         if (s.id === 'phe') {
           y = null;
           if (ph && ph.tRef !== null && t >= (ph.tRefMs || 0) - 60000) {
-            const tEvap = valorSlotDeFilaPH(f, 'tevap'), tDesc = valorSlotDeFilaPH(f, 'tdesc');
-            if (tEvap !== null && tDesc !== null) {
-              const tEf = (ph.peso / 100) * tEvap + ((100 - ph.peso) / 100) * tDesc;
+            let tEf = null;
+            if (ph.canalTemp) {
+              /* La prueba eligió una sonda concreta: se usa esa y nada más */
+              tEf = valorSlotDeFilaPH(f, ph.canalTemp);
+            } else {
+              const tEvap = valorSlotDeFilaPH(f, 'tevap'), tDesc = valorSlotDeFilaPH(f, 'tdesc');
+              if (tEvap !== null && tDesc !== null) {
+                tEf = (ph.peso / 100) * tEvap + ((100 - ph.peso) / 100) * tDesc;
+              }
+            }
+            if (tEf !== null) {
               const p = presionEsperada(ph.ref.pressureGauge, ph.tRef, tEf);
               y = (p === null) ? null : Number(p.toFixed(1));
             }
@@ -775,7 +804,7 @@
     cont.innerHTML = SERIES.map(s =>
       '<button onclick="toggleSeries(\'' + s.id + '\')" class="series-toggle ' + (seriesVisibles[s.id] ? 'active' : '') +
       ' flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold transition active:scale-95 border">' +
-      '<span class="w-2 h-2 rounded-full" style="background:' + s.color + '"></span><span>' + s.etiqueta + '</span></button>'
+      '<span class="w-2 h-2 rounded-full" style="background:' + s.color + '"></span><span>' + etiquetaSerie(s) + '</span></button>'
     ).join('');
   }
   function toggleSeries(id) {
@@ -859,6 +888,9 @@
     if (isRefreshing) return;
     isRefreshing = true;
     try {
+      /* Con Supabase la ventana se pide por fecha: no hace falta el Worker
+         (que además rechaza orígenes que no sean el publicado). */
+      if (usarSupabase()) { await recargarVentana(); return; }
       const recientes = await fetchRange(24, 0);
       const vistos = new Set(allData.map(r => r.created_at));
       let sumados = 0;
