@@ -1023,12 +1023,12 @@
           <span class="valor" id="phValTExt">---.- °C</span>
         </div>
         <div class="ph-medida">
-          <span class="label">ANTES · presión inicial</span>
+          <span class="label">ANTES · presión inicial (prom. 10 min)</span>
           <span class="valor" id="phPInicial">---.- PSI</span>
           <span class="sutil" id="phTref">T inicial: --.- °C</span>
         </div>
         <div class="ph-medida">
-          <span class="label">DESPUÉS · presión actual</span>
+          <span class="label">DESPUÉS · presión (prom. 10 min)</span>
           <span class="valor" id="phPFinal">---.- PSI</span>
           <span class="sutil" id="phTactual">T ahora: --.- °C</span>
         </div>
@@ -1065,7 +1065,7 @@
                oninput="cambiarPesoIntPH(this.value)"
                title="0 % = todo el sistema contra el ambiente · 100 % = todo dentro del recinto">
         <div class="sutil"><b id="phPesoIntVal">dentro 70 % · fuera 30 %</b> · T efectiva del gas <b id="phDataTef">--.- °C</b> · tiempo <b id="phTiempo">--</b></div>
-        <div class="sutil">La presión se compensa con esa temperatura efectiva: el ΔP compensado es lo que no explica el cambio térmico.</div>
+        <div class="sutil">La sonda mide el <b>aire del recinto</b>: la compensación usa el promedio de los últimos 10 minutos para no confundir los ciclos de la cámara con una fuga. El ΔP compensado es lo que no explica el cambio térmico.</div>
       </div>
 
       <div class="ph-progreso"><div id="phProgreso"></div></div>
@@ -4193,8 +4193,46 @@
     if (a !== null && b !== null) return w * a + (1 - w) * b;
     return (a !== null) ? a : b;
   }
+  /* Promedio de un canal en los últimos N minutos, sobre las lecturas ya cargadas.
+     Si no hay histórico suficiente, se usa la lectura instantánea. */
+  const MINUTOS_PROMEDIO_PH = 10;
+  function promedioRecientePH(slotId, minutos) {
+    const desde = Date.now() - (minutos || MINUTOS_PROMEDIO_PH) * 60000;
+    let suma = 0, n = 0;
+    (datosCrudos || []).forEach(f => {
+      const t = new Date(f.created_at).getTime();
+      if (!(t >= desde)) return;
+      const v = valorSlotDeFila(f, slotId);
+      if (v !== null && Number.isFinite(v)) { suma += v; n++; }
+    });
+    return n ? suma / n : null;
+  }
+  /* Temperatura efectiva del gas, promediada: amortigua los ciclos del recinto */
+  function tempEfectivaSuavePH() {
+    const ci = canalTIntPH(), ce = canalTExtPH();
+    const a = promedioRecientePH(ci), b = promedioRecientePH(ce);
+    const t = tempEfectivaDe(a !== null ? a : valorSlotActual(ci),
+                            b !== null ? b : valorSlotActual(ce),
+                            pesoIntPH());
+    return t;
+  }
   function tempEfectivaActual() {
-    return tempEfectivaDe(valorSlotActual(canalTIntPH()), valorSlotActual(canalTExtPH()), pesoIntPH());
+    return tempEfectivaSuavePH();
+  }
+  /* Cuánto se movió el aire en la ventana: sirve para avisar que el «antes»
+     puede quedar desfasado */
+  function oscilacionRecientePH(slotId, minutos) {
+    const desde = Date.now() - (minutos || MINUTOS_PROMEDIO_PH) * 60000;
+    let min = Infinity, max = -Infinity;
+    (datosCrudos || []).forEach(f => {
+      const t = new Date(f.created_at).getTime();
+      if (!(t >= desde)) return;
+      const v = valorSlotDeFila(f, slotId);
+      if (v === null || !Number.isFinite(v)) return;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    });
+    return (max >= min) ? (max - min) : null;
   }
   function tempEfectivaDeMedida(m) {
     if (!m) return null;
@@ -4310,9 +4348,11 @@
     if (!referenciaPH || referenciaPH.activa === false) return;
     const fila = ultimaVista;
     if (!fila || !datosFrescos(fila)) return;
-    const p = valorPH(referenciaPH.canalPres || 'psuct');
-    const tI = valorPH(referenciaPH.canalTInt || 'tevap');
-    const tE = valorPH(referenciaPH.canalTExt || 'tamb');
+    const canalP = referenciaPH.canalPres || 'psuct';
+    const p = (promedioRecientePH(canalP) !== null ? promedioRecientePH(canalP) : valorPH(canalP));
+    const canalI = referenciaPH.canalTInt || 'tevap', canalE = referenciaPH.canalTExt || 'tamb';
+    const tI = (promedioRecientePH(canalI) !== null ? promedioRecientePH(canalI) : valorPH(canalI));
+    const tE = (promedioRecientePH(canalE) !== null ? promedioRecientePH(canalE) : valorPH(canalE));
     if (p === null || tempEfectivaDe(tI, tE, referenciaPH.pesoInt) === null) return;
     const ultimaMs = medidasPH.length ? new Date(medidasPH[medidasPH.length - 1].timestamp).getTime() : 0;
     if (Date.now() - ultimaMs < INTERVALO_MEDIDA_PH) return;
@@ -4341,7 +4381,7 @@
       poner('phPInicial', '---.- PSI');
       poner('phTref', 'T efectiva inicial: --.- °C');
       poner('phPFinal', '---.- PSI');
-      poner('phTactual', 'T efectiva ahora: --.- °C');
+      poner('phTactual', 'T efectiva ahora (prom. 10 min): --.- °C');
       poner('phDataTef', '--.- °C');
       poner('phDeltaP', '--.- PSI');
       poner('phDeltaPC', '--.- PSI');
@@ -4359,14 +4399,17 @@
     const tRef = aNumero(ref.tempRefC);
 
     /* Después: la mejor lectura disponible (en vivo, o la última registrada) */
-    let pFin = pVivo, tFin = tempEfectivaDe(tInt, tExt, ref.pesoInt);
+    let pFin = promedioRecientePH(ref.canalPres);
+    if (pFin === null) pFin = pVivo;
+    /* Mismo criterio que la presión: temperatura efectiva promediada */
+    let tFin = tempEfectivaSuavePH();
     if (pFin === null && ultimaMedidaPH) pFin = aNumero(ultimaMedidaPH.pressureGauge);
     if (tFin === null && ultimaMedidaPH) tFin = tempEfectivaDeMedida(ultimaMedidaPH);
 
     poner('phPInicial', pIni !== null ? pIni.toFixed(1) + ' PSI' : '---.- PSI');
     poner('phTref', 'T efectiva inicial: ' + (tRef !== null ? tRef.toFixed(1) : '--.-') + ' °C');
     poner('phPFinal', pFin !== null ? pFin.toFixed(1) + ' PSI' : '---.- PSI');
-    poner('phTactual', 'T efectiva ahora: ' + (tFin !== null ? tFin.toFixed(1) : '--.-') + ' °C');
+    poner('phTactual', 'T efectiva ahora (prom. 10 min): ' + (tFin !== null ? tFin.toFixed(1) : '--.-') + ' °C');
     poner('phDataTef', tFin !== null ? tFin.toFixed(1) + ' °C' : '--.- °C');
 
     /* Diferencial de presión directo (antes → después) */
@@ -4465,8 +4508,12 @@
     if (!datosFrescos(fila)) { mensajePH('Los datos están atrasados: espere una lectura nueva del equipo.', 'err'); return; }
 
     const cp = canalPresionPH(), ci = canalTIntPH(), ce = canalTExtPH();
-    const p = valorPH(cp);
-    const tI = valorPH(ci), tE = valorPH(ce);
+    /* Presión y temperatura promediadas en la misma ventana, para que el ΔP
+       no mezcle una lectura instantánea con un promedio. */
+    const p = (promedioRecientePH(cp) !== null ? promedioRecientePH(cp) : valorPH(cp));
+    /* Las temperaturas se toman promediadas (ver tempEfectivaSuavePH) */
+    const tI = (promedioRecientePH(ci) !== null ? promedioRecientePH(ci) : valorPH(ci));
+    const tE = (promedioRecientePH(ce) !== null ? promedioRecientePH(ce) : valorPH(ce));
     const tEf = tempEfectivaDe(tI, tE, pesoIntPH());
     if (p === null) { mensajePH('El canal de presión elegido (' + nombreCanalPH(cp) + ') no está informando.', 'err'); return; }
     if (tEf === null) { mensajePH('Ninguna de las dos sondas de temperatura está informando.', 'err'); return; }
@@ -4483,8 +4530,13 @@
     medidasPH = [{ timestamp: ahora, pressureGauge: p, tInt: tI, tExt: tE }];
     ultimaMedidaPH = medidasPH[0];
     guardarEstadoPH();
+    const osc = oscilacionRecientePH(ci);
+    const avisoOsc = (osc !== null && osc > 2.0)
+      ? ' Atención: el aire del recinto varió ' + osc.toFixed(1) + ' °C en los últimos 10 minutos; el antes puede quedar desfasado.'
+      : '';
     mensajePH('Prueba iniciada. Antes: ' + p.toFixed(1) + ' PSI con el gas a ' + tEf.toFixed(1) +
-              ' °C (' + nombreCanalPH(ci) + ' / ' + nombreCanalPH(ce) + '). Se registra una lectura cada 5 minutos.', '');
+              ' °C (' + nombreCanalPH(ci) + ' / ' + nombreCanalPH(ce) + '). Se registra una lectura cada 5 minutos.' +
+              avisoOsc, avisoOsc ? 'warn' : '');
     renderMonitor();
   };
 
