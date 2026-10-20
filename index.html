@@ -3230,7 +3230,11 @@
   /* ------------------- ALIMENTAR EL MOTOR DE DIAGNÓSTICO ------------------ */
   function alimentarMotor() {
     const fila = ultimaVista;
-    if (!fila || !datosFrescos(fila)) return false;
+    /* Se alimenta también con la última lectura conocida aunque esté atrasada,
+       para que los números que se muestran arriba y el cálculo coincidan. Lo que
+       queda en pausa con datos congelados son las ALARMAS (alarmaDeSlot exige
+       que la lectura sea reciente) y el aviso de la barra lo explica. */
+    if (!fila) return false;
     let cambio = false;
     SLOTS.forEach(s => {
       if (!s.varMotor) return;
@@ -3277,7 +3281,41 @@
     });
   }
 
-  /* ------------------------------ API DEL ESP32 --------------------------- */
+  /* ------------------------------ ORIGEN DE DATOS ------------------------- */
+  /*
+   * El equipo escribe sus lecturas en Supabase (tabla lecturas_hvac):
+   *   created_at     timestamptz
+   *   presion_baja   float4   -> presión de succión (manométrica)
+   *   presion_alta   float4   -> presión de descarga (manométrica)
+   *   temp1..temp5   float4   -> las cinco sondas de temperatura
+   *
+   * Si SB_CLAVE queda vacía, la aplicación usa el Worker de Cloudflare como
+   * siempre, así nunca se queda sin datos mientras se prueba una cosa u otra.
+   */
+  const SB_URL   = 'https://qiidodrtxchurazrghyr.supabase.co';
+  const SB_TABLA = 'lecturas_hvac';
+  const SB_CLAVE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaWRvZHJ0eGNodXJhenJnaHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDkwMDQsImV4cCI6MjEwODAyNTAwNH0.12wbnPavwGr4tEH1kz9ZtgSxHUYvL9gyrbMqFOBX2hg';   /* anon key pública de Supabase */
+
+  function usarSupabase() { return SB_CLAVE.length > 20; }
+
+  async function sbPedir(consulta) {
+    const url = SB_URL + '/rest/v1/' + SB_TABLA + '?' + consulta;
+    const res = await conTimeout(fetch(url, {
+      headers: {
+        'apikey': SB_CLAVE,
+        'Authorization': 'Bearer ' + SB_CLAVE,
+        'Accept': 'application/json'
+      },
+      cache: 'no-store'
+    }), 15000);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error('Supabase HTTP ' + res.status + (txt ? ': ' + txt.substring(0, 120) : ''));
+    }
+    return res.json();
+  }
+
+  /* ------------------------ WORKER DE RESPALDO ---------------------------- */
   async function traerJSON(ruta) {
     const res = await conTimeout(fetch(API_URL + ruta, {
       headers: { 'Content-Type': 'application/json' },
@@ -3289,12 +3327,17 @@
     }
     return res.json();
   }
-  const traerUltima = () => traerJSON('/latest');
-  const traerRango  = horas => traerJSON('/range?hours=' + horas);
+  const traerRangoWorker = horas => traerJSON('/range?hours=' + horas);
+  const traerUltima = () => usarSupabase()
+    ? sbPedir('select=*&order=created_at.desc&limit=1').then(f => (Array.isArray(f) && f.length) ? f[0] : null)
+    : traerJSON('/latest');
 
   function interpretarError(err) {
     const msg = String((err && err.message) || err || 'Error desconocido');
-    if (msg.indexOf('TIMEOUT') >= 0) return 'el Worker no respondió en 10 s.';
+    if (msg.indexOf('TIMEOUT') >= 0) return 'el servidor no respondió (tiempo de espera agotado).';
+    if (msg.indexOf('Supabase HTTP 401') >= 0) return 'la clave pública de Supabase fue rechazada.';
+    if (msg.indexOf('Supabase HTTP 403') >= 0) return 'Supabase no permite leer la tabla con la clave pública (revise las políticas RLS).';
+    if (msg.indexOf('Supabase HTTP 404') >= 0) return 'la tabla lecturas_hvac no existe o no está expuesta en la API.';
     if (msg.indexOf('HTTP 401') >= 0 || msg.indexOf('HTTP 403') >= 0) return 'token rechazado por el Worker.';
     if (msg.indexOf('HTTP 404') >= 0) return 'ruta no encontrada en el Worker.';
     if (msg.indexOf('Failed to fetch') >= 0 || msg.indexOf('NetworkError') >= 0) return 'sin conexión o bloqueo de red/DNS.';
@@ -3306,18 +3349,27 @@
     return { inicio: fin - rangoMin * 60000, fin: fin };
   }
   async function traerVentana(inicioMs, finMs) {
+    if (usarSupabase()) {
+      /* PostgREST filtra por rango de fechas real: ya no hay límite de 72 h */
+      const desde = encodeURIComponent(new Date(inicioMs).toISOString());
+      const hasta = encodeURIComponent(new Date(finMs).toISOString());
+      const filas = await sbPedir('select=*&created_at=gte.' + desde + '&created_at=lte.' + hasta +
+                                 '&order=created_at.asc&limit=8000');
+      nota('');
+      return Array.isArray(filas) ? filas : [];
+    }
     if (WORKER_SOPORTA_FROM_TO) {
       return traerJSON('/range?from=' + encodeURIComponent(new Date(inicioMs).toISOString()) +
                        '&to=' + encodeURIComponent(new Date(finMs).toISOString()));
     }
     const horas = Math.ceil((Date.now() - inicioMs) / 3600000) + 1;
     if (horas > MAX_HORAS_ATRAS) {
-      const filas = await traerRango(MAX_HORAS_ATRAS);
+      const filas = await traerRangoWorker(MAX_HORAS_ATRAS);
       nota('El Worker entrega hasta ' + MAX_HORAS_ATRAS + ' h hacia atrás: se muestran los datos disponibles de la ventana pedida.');
       return filas;
     }
     nota('');
-    return traerRango(horas);
+    return traerRangoWorker(horas);
   }
   async function cargarHistorico() {
     const miSecuencia = ++secuencia;
@@ -3422,7 +3474,13 @@
         badge.textContent = '🔋 ' + pct + '%';
         badge.className = 'badge ' + (pct <= 20 ? 'badge-off' : (pct <= 50 ? 'badge-warn' : 'badge-ok'));
         badge.title = 'Batería del ESP32: ' + pct + '% · ' + v.toFixed(2) + ' V';
-      } else { badge.textContent = '🔋 —'; badge.className = 'badge'; badge.title = 'Sin dato de batería.'; }
+      } else {
+        /* El equipo va con fuente directa: si la tabla no trae batería, el
+           indicador no se muestra (vuelve solo si algún día llega el dato). */
+        badge.textContent = '';
+        badge.className = 'badge oculto';
+        badge.title = 'El equipo no informa batería (alimentación directa).';
+      }
     }
     const w = $('wifiValor');
     if (w) {
@@ -3863,7 +3921,13 @@
         return t >= v.inicio && t <= v.fin + tolerancia;
       });
 
-    const ultima = ventanaProcesada.length ? ventanaProcesada[ventanaProcesada.length - 1] : null;
+    let ultima = ventanaProcesada.length ? ventanaProcesada[ventanaProcesada.length - 1] : null;
+    /* Si en la ventana no hay ninguna lectura, se muestra la última conocida
+       (el aviso de arriba ya dice que los datos están congelados) en lugar de
+       dejar todos los casilleros en guiones. Esa lectura NO alimenta al motor ni
+       dispara alarmas: solo se muestra. */
+    const deRespaldo = (!ultima && ultimaAbsoluta) ? ultimaAbsoluta : null;
+    ultima = ultima || deRespaldo;
     ultimaVista = ultima;
 
     construirSeries(ventanaProcesada, v.inicio, v.fin);
@@ -3875,8 +3939,8 @@
 
     /* Encabezado del monitor */
     if (ultima) {
-      poner('txtUltimaLectura', 'Última lectura: ' +
-        new Date(ultima.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      const hora = new Date(ultima.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      poner('txtUltimaLectura', 'Última lectura: ' + hora + (deRespaldo ? ' (fuera de la ventana)' : ''));
     } else {
       poner('txtUltimaLectura', enVivo ? 'Última lectura: —' : 'Sin datos en esta ventana');
     }
