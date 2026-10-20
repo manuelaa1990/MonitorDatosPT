@@ -4,6 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#0f172a">
+  <!-- Aplicación web instalable (PWA) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Monitor HVAC">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <title>Estación de Refrigeración — Monitor térmico + Diagrama de Mollier (p-h)</title>
 
   <!-- CDNs: Plotly para las dos gráficas (monitor temporal y Mollier) y html2pdf para el reporte -->
@@ -583,7 +592,7 @@
     #overlayGrafica .serie-chip { font-size: .58rem; padding: 1px 6px; }
   </style>
 </head>
-<body>
+<body data-modo="monitor">
   <div class="app-container" id="reporteArea">
 
     <!-- ============================ BARRA SUPERIOR ============================ -->
@@ -941,19 +950,20 @@
       <div id="chartMonitor" class="chart-monitor"></div>
       <div class="sutil" id="notaVentana"></div>
 
-      <div class="fila-invocar">
-        <button class="btn btn-accion" onclick="abrirMollier()" title="Diagrama de Mollier (p-h) a pantalla completa">
-          📈 Mollier p-h
-        </button>
-        <button class="btn btn-accion" onclick="abrirGraficaAmpliada()" title="Gráfica live a pantalla completa">
-          📊 Gráfica live
-        </button>
-      </div>
       <div class="solo-pdf" style="margin-top:5px;">
         <div class="sutil" style="margin-bottom:2px;">Histórico de mediciones de la ventana visible</div>
         <div id="printMonitor"></div>
       </div>
     </section>
+
+    <div class="fila-invocar">
+      <button class="btn btn-accion" onclick="abrirMollier()" title="Diagrama de Mollier (p-h) a pantalla completa">
+        📈 Mollier p-h
+      </button>
+      <button class="btn btn-accion" onclick="abrirGraficaAmpliada()" title="Gráfica live a pantalla completa">
+        📊 Gráfica live
+      </button>
+    </div>
 
     <!-- ===================== DIAGNÓSTICO Y TRAZABILIDAD ==================== -->
     <section class="card" id="cardIndicadores">
@@ -1037,6 +1047,7 @@
 
     <div class="action-bar">
       <button class="btn btn-reporte" onclick="descargarPDFReporte()">📄 Reporte PDF</button>
+      <button class="btn btn-toggle" id="btnInstalar" style="display:none" onclick="instalarApp()" title="Instalar como aplicación en el teléfono">⬇ Instalar app</button>
     </div>
   </div>
 
@@ -4410,6 +4421,68 @@
       if (ev.key !== 'Escape') return;
       if ($('overlayGrafica') && $('overlayGrafica').classList.contains('abierto')) { window.cerrarZoomGrafica(); return; }
       window.cerrarMollier();
+    });
+
+    registrarServiceWorker();
+  }
+
+  /* ---------------------- INSTALAR COMO APLICACIÓN ------------------------ */
+  let eventoInstalacion = null;
+
+  function avisoFlotante(texto) {
+    let t = $('aviso-flotante');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'aviso-flotante';
+      document.body.appendChild(t);
+    }
+    t.textContent = texto;
+    t.style.cssText = 'position:fixed;left:8px;right:8px;bottom:14px;z-index:99999;' +
+      'background:var(--panel);border:1px solid var(--acento);color:var(--texto);' +
+      'padding:10px 13px;border-radius:9px;font-size:.74rem;font-weight:600;' +
+      'box-shadow:0 8px 22px rgba(0,0,0,.55);line-height:1.35;';
+    clearTimeout(t._temporizador);
+    t._temporizador = setTimeout(() => t.remove(), 9000);
+  }
+
+  window.instalarApp = function () {
+    if (eventoInstalacion) {
+      eventoInstalacion.prompt();
+      eventoInstalacion.userChoice.then(() => {
+        eventoInstalacion = null;
+        const b = $('btnInstalar');
+        if (b) b.style.display = 'none';
+      }).catch(() => {});
+      return;
+    }
+    const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    avisoFlotante(esIOS
+      ? 'Para instalarla en el iPhone: toque el botón Compartir y elija «Añadir a pantalla de inicio».'
+      : 'Para instalarla: abra el menú del navegador (⋮) y elija «Instalar aplicación» o «Añadir a pantalla de inicio».');
+  };
+
+  window.addEventListener('beforeinstallprompt', ev => {
+    ev.preventDefault();
+    eventoInstalacion = ev;
+    const b = $('btnInstalar');
+    if (b) b.style.display = '';
+  });
+  window.addEventListener('appinstalled', () => {
+    eventoInstalacion = null;
+    const b = $('btnInstalar');
+    if (b) b.style.display = 'none';
+    avisoFlotante('Aplicación instalada. Ya se abre desde la pantalla de inicio.');
+  });
+
+  /* El service worker solo existe en http/https: desde el disco (file://) no
+     aplica y la app funciona igual. */
+  function registrarServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(() => console.info('[PWA] service worker registrado'))
+        .catch(e => console.warn('[PWA] no se pudo registrar el service worker:', e));
     });
   }
 
