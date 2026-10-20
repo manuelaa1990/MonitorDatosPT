@@ -13,10 +13,9 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <title>Estación de Refrigeración — Monitor térmico + Diagrama de Mollier (p-h)</title>
+  <title>Estación de Refrigeración — Monitor y diagnóstico térmico</title>
 
-  <!-- CDNs: Plotly para las dos gráficas (monitor temporal y Mollier) y html2pdf para el reporte -->
-  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <!-- CDN del generador de reportes PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script type="module">
     /*
@@ -176,6 +175,24 @@
     details.card[open] > summary::after { content: "▴"; }
     details.card > summary + * { margin-top: 5px; }
 
+    /* Ajuste manual: plegado para que el monitor quede despejado */
+    details.ajuste-manual {
+      margin-top: 7px;
+      border-top: 1px dashed var(--borde);
+      padding-top: 5px;
+    }
+    details.ajuste-manual > summary {
+      cursor: pointer;
+      list-style: none;
+      font-size: .56rem;
+      font-weight: 700;
+      color: var(--sutil);
+    }
+    details.ajuste-manual > summary::-webkit-details-marker { display: none; }
+    details.ajuste-manual > summary::after { content: " ▾"; }
+    details.ajuste-manual[open] > summary::after { content: " ▴"; }
+    details.ajuste-manual > .controls-grid { margin-top: 5px; }
+
     /* --------------------------- Formularios ---------------------------- */
     .prof-grid {
       display: grid;
@@ -321,33 +338,6 @@
     .presion-row input { font-size: 1.05rem; font-weight: 800; height: 30px; }
     .unidad-presion { font-size: .58rem; font-weight: 800; color: var(--acento); min-width: 26px; }
 
-    .ventana-bar {
-      display: flex; align-items: center; justify-content: center;
-      gap: 4px; flex-wrap: wrap; margin: 5px 0 3px;
-    }
-    .ventana-bar .nav-ventana {
-      display: flex; align-items: center; justify-content: center;
-      gap: 4px; flex-basis: 100%; margin-left: 0;
-    }
-    #cardGrafica .ventana-bar .sutil { text-align: center; }
-    .fila-invocar { display: flex; gap: 5px; padding: 6px 6px 2px; }
-    .fila-invocar .btn { min-height: 34px; font-size: .70rem; }
-    .btn-ventana {
-      border: 1px solid var(--borde2);
-      background: var(--panel2);
-      color: var(--texto);
-      border-radius: 4px;
-      font-size: .58rem;
-      font-weight: 700;
-      padding: 2px 7px;
-      cursor: pointer;
-      font-family: inherit;
-    }
-    .btn-ventana.activo { background: var(--acento-bg); border-color: var(--acento-bg); color: #fff; }
-    .nav-ventana { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-
-    .chart-monitor { width: 100%; height: 44vh; min-height: 230px; max-height: 460px; }
-
     .banner-alerta {
       border-radius: 5px;
       padding: 4px 7px;
@@ -366,12 +356,42 @@
     .results-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
-      gap: 3px;
+      gap: 4px;
       margin-bottom: 4px;
     }
-    .kpi-box { background: var(--panel2); border-left: 3px solid var(--acento); padding: 2px 4px; border-radius: 4px; }
-    .kpi-box .label { font-size: .48rem; color: var(--sutil); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .kpi-box .value { font-size: .70rem; font-weight: 700; color: var(--texto); }
+    .kpi-principal { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-bottom: 6px; }
+    .kpi-secundario { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (min-width: 560px) {
+      .kpi-principal { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    .kpi-box {
+      background: var(--panel2);
+      border: 1px solid var(--borde);
+      border-left: 3px solid var(--acento);
+      padding: 5px 7px;
+      border-radius: 6px;
+      min-width: 0;
+    }
+    .kpi-box .label {
+      font-size: .48rem;
+      color: var(--sutil);
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+    .kpi-box .value { font-size: .74rem; font-weight: 800; color: var(--texto); display: block; margin-top: 1px; }
+    .kpi-principal .kpi-box { padding: 7px 8px; }
+    .kpi-principal .kpi-box .label { font-size: .52rem; }
+    .kpi-principal .kpi-box .value { font-size: 1.05rem; line-height: 1.15; }
+    .kpi-sh-util  { border-left-color: #38bdf8; }
+    .kpi-sh-total { border-left-color: #0284c7; }
+    .kpi-sh-desc  { border-left-color: #0ea5e9; }
+    .kpi-sc       { border-left-color: #10b981; }
+    .kpi-kw       { border-left-color: #f59e0b; }
+    .kpi-dt       { border-left-color: #64748b; }
 
     .diag-container { background: var(--panel2); border: 1px solid var(--borde); border-radius: 6px; padding: 4px 6px; width: 100%; }
     .diag-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--borde); border-radius: 5px; background: var(--panel2); }
@@ -421,37 +441,6 @@
     .ph-msg.warn { color: var(--alerta); }
     .deslizador { width: 100%; accent-color: var(--acento); }
 
-    /* --------------------------- Pantalla completa Mollier ------------ */
-    .overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      background: var(--bg);
-      flex-direction: column;
-      padding: 4px;
-      gap: 4px;
-    }
-    .overlay.abierto { display: flex; }
-    body.con-overlay { overflow: hidden; }
-    .overlay-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-      flex-wrap: wrap;
-      font-size: .70rem;
-      font-weight: 800;
-      color: var(--acento);
-      background: var(--panel);
-      border: 1px solid var(--borde);
-      border-radius: 6px;
-      padding: 3px 7px;
-    }
-    .overlay-acciones { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-    .mollier-full { flex: 1 1 auto; width: 100%; min-height: 60vh; }
-    #mollierPlot { touch-action: none; }
-
     /* ------------------------------ Historial ------------------------- */
     .tabla-historial { width: 100%; border-collapse: collapse; font-size: .55rem; }
     .tabla-historial th, .tabla-historial td { border-bottom: 1px solid var(--borde); padding: 2px 4px; text-align: left; }
@@ -459,12 +448,6 @@
     .scroll-x { width: 100%; overflow-x: auto; }
 
     /* -------------------- Ajustes para el PDF (html2pdf) ------------- */
-    /* Bloques que solo aparecen en el PDF: las gráficas se sustituyen por
-       imágenes PNG antes de capturar, porque html2canvas no reproduce bien
-       los gráficos vectoriales de Plotly. */
-    .solo-pdf { display: none; }
-    body.generating-pdf .solo-pdf { display: block !important; }
-    body.generating-pdf #chartMonitor { display: none !important; }
 
     body.generating-pdf { background: #fff !important; color: #000 !important; }
     body.generating-pdf .card,
@@ -473,16 +456,13 @@
     body.generating-pdf .diag-container,
     body.generating-pdf .kpi-box,
     body.generating-pdf .ph-medida,
-    body.generating-pdf .overlay-head {
       background: #fff !important; border-color: #ccc !important; color: #000 !important;
     }
     body.generating-pdf input,
     body.generating-pdf select { background: #fff !important; color: #000 !important; border-color: #999 !important; }
     body.generating-pdf .action-bar,
     body.generating-pdf .h2-acciones,
-    body.generating-pdf .ventana-bar,
     body.generating-pdf .marca-origen { display: none !important; }
-    body.generating-pdf .overlay { display: none !important; }
     body.generating-pdf .sutil, body.generating-pdf .probe-estado { color: #444 !important; }
     body.generating-pdf .diag-table td, body.generating-pdf .diag-table th { color: #000 !important; }
     body.generating-pdf .diag-table .diag-text span[style] { color: #000 !important; }
@@ -501,7 +481,6 @@
     body[data-modo="monitor"] #cardHermeticidad { display: none; }
     body[data-modo="ph"] #cardMonitor,
     body[data-modo="ph"] #cardIndicadores,
-    body[data-modo="ph"] #cardGrafica { display: none; }
     /* La gráfica tampoco se imprime en el reporte del modo N₂ */
 
     /* ------------------------ Cajas y casilleros ----------------------- */
@@ -565,34 +544,6 @@
     .slot-estado { font-size: .50rem; color: var(--sutil); min-height: 11px; }
     .slot-estado.alarma { color: var(--peligro); font-weight: 800; }
 
-    /* -------------------- Selectores de líneas de la gráfica ------------ */
-    /* Selectores de línea en rejilla: en el teléfono quedan alineados */
-    .series-bar {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
-      gap: 3px; margin: 4px 0 4px;
-    }
-    .serie-chip {
-      display: flex; align-items: center; justify-content: flex-start; gap: 3px;
-      font-size: .52rem; font-weight: 700; white-space: nowrap; overflow: hidden;
-      border: 1px solid var(--borde2); border-radius: 6px; padding: 2px 5px;
-      background: var(--panel2); color: var(--sutil); cursor: pointer; user-select: none;
-    }
-    /* La gráfica llega a los bordes de la pantalla: se sale del margen del
-       contenedor y pierde los bordes laterales de la tarjeta */
-    #cardGrafica {
-      padding-left: 0; padding-right: 0;
-      margin-left: -4px; margin-right: -4px;
-      border-left: none; border-right: none; border-radius: 0;
-    }
-    #cardGrafica > h2, #cardGrafica > .series-bar, #cardGrafica > .ventana-bar,
-    #cardGrafica > .sutil, #cardGrafica > .solo-pdf { padding-left: 6px; padding-right: 6px; }
-    .serie-chip.activo { border-color: var(--color-serie); color: var(--texto); }
-    .serie-chip input { margin: 0; width: 13px; height: 13px; }
-    /* El gráfico se queda con todo el alto disponible, sin cromo extra */
-    .overlay-grafica { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; }
-    #overlayGrafica .overlay-head { padding: 1px 4px; }
-    #overlayGrafica .series-bar { gap: 3px; }
-    #overlayGrafica .serie-chip { font-size: .58rem; padding: 1px 6px; }
   </style>
 </head>
 <body data-modo="monitor">
@@ -622,39 +573,28 @@
       <button class="modo-btn" id="btnModoPH" onclick="cambiarModo('ph')">🧪 Prueba de hermeticidad (N₂)</button>
     </div>
 
-<section class="card" id="cardIdentificacion">
-      <h2><span>Identificación, técnico y configuración del ciclo</span></h2>
+<details class="card" id="cardIdentificacion">
+      <summary>Identificación y configuración del ciclo</summary>
       <div class="prof-grid">
         <div class="input-group">
           <label for="empresaNombre">Empresa</label>
-          <input type="text" id="empresaNombre" value="Servicios Técnicos" oninput="guardarYActualizar()">
+          <input type="text" id="empresaNombre" value="Servicios Técnicos" oninput="guardarConfiguracionDemorado()">
         </div>
         <div class="input-group">
           <label for="empresaRif">RIF / ID Fiscal</label>
-          <input type="text" id="empresaRif" value="J-00000000-0" oninput="guardarYActualizar()">
+          <input type="text" id="empresaRif" value="J-00000000-0" oninput="guardarConfiguracionDemorado()">
         </div>
         <div class="input-group">
           <label for="tecnicoNombre">Técnico Evaluante</label>
-          <input type="text" id="tecnicoNombre" value="Téc. Especialista" oninput="guardarYActualizar()">
+          <input type="text" id="tecnicoNombre" value="Téc. Especialista" oninput="entradaManual()">
         </div>
         <div class="input-group">
           <label for="equipoMarca">Marca del Equipo</label>
-          <input type="text" id="equipoMarca" value="Daikin" oninput="guardarYActualizar()">
+          <input type="text" id="equipoMarca" value="Daikin" oninput="entradaManual()">
         </div>
         <div class="input-group">
           <label for="equipoModelo">Modelo</label>
-          <input type="text" id="equipoModelo" value="XL10-2026" oninput="guardarYActualizar()">
-        </div>
-        <div class="input-group">
-          <label for="capFrigValue">Cap. Frigorífica</label>
-          <div class="cap-input-row">
-            <input type="number" id="capFrigValue" value="36000" step="1" oninput="guardarYActualizar()">
-            <select id="capUnitSelect" onchange="guardarYActualizar()">
-              <option value="BTU/h" selected>BTU/h</option>
-              <option value="kW">kW</option>
-              <option value="Ton">Ton</option>
-            </select>
-          </div>
+          <input type="text" id="equipoModelo" value="XL10-2026" oninput="guardarConfiguracionDemorado()">
         </div>
       </div>
 
@@ -741,7 +681,7 @@
           </select>
         </div>
       </div>
-    </section>
+    </details>
 
     <!-- ========================== MONITOR EN VIVO ============================ -->
         <!-- ====================== MEDICIONES DEL CICLO ========================= -->
@@ -808,19 +748,15 @@
               <div class="slot-minmax">Mín <b id="minPdesc">--.-</b> · Máx <b id="maxPdesc">--.-</b></div>
               <div class="slot-estado" id="estadoPdesc">Esperando…</div>
             </div>
-            <div class="slot" id="slotTdesc">
+            <div class="slot" id="slotTliq">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblTDescReal">T. Descarga</span>
-                <span class="slot-valor"><b id="valTdesc">---.-</b> <span class="unidad" id="uniTdesc">°C</span></span>
+                <span class="slot-nombre" id="lblTLiq">T. Líquido</span>
+                <span class="slot-valor"><b id="valTliq">---.-</b> <span class="unidad" id="uniTliq">°C</span></span>
               </div>
               <div class="slot-datos">
-                <label class="slot-sel">Sonda <select id="selTdesc" onchange="cambiarAsignacion('tdesc')"></select></label>
+                <label class="slot-sel">Sonda <select id="selTliq" onchange="cambiarAsignacion('tliq')"></select></label>
               </div>
-              <div class="slot-alarma-fila">
-                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaTdesc" step="0.5" value="100" oninput="guardarAlarmaSlot('tdesc')"> °C</label>
-              </div>
-              <div class="slot-minmax">Mín <b id="minTdesc">--.-</b> · Máx <b id="maxTdesc">--.-</b></div>
-              <div class="slot-estado" id="estadoTdesc">Esperando…</div>
+              <div class="slot-estado" id="estadoTliq">Esperando…</div>
             </div>
           </div>
         </div>
@@ -840,15 +776,19 @@
               </div>
               <div class="slot-estado" id="estadoTevap">Esperando…</div>
             </div>
-            <div class="slot" id="slotTliq">
+            <div class="slot" id="slotTdesc">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblTLiq">T. Líquido</span>
-                <span class="slot-valor"><b id="valTliq">---.-</b> <span class="unidad" id="uniTliq">°C</span></span>
+                <span class="slot-nombre" id="lblTDescReal">T. Descarga</span>
+                <span class="slot-valor"><b id="valTdesc">---.-</b> <span class="unidad" id="uniTdesc">°C</span></span>
               </div>
               <div class="slot-datos">
-                <label class="slot-sel">Sonda <select id="selTliq" onchange="cambiarAsignacion('tliq')"></select></label>
+                <label class="slot-sel">Sonda <select id="selTdesc" onchange="cambiarAsignacion('tdesc')"></select></label>
               </div>
-              <div class="slot-estado" id="estadoTliq">Esperando…</div>
+              <div class="slot-alarma-fila">
+                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaTdesc" step="0.5" value="100" oninput="guardarAlarmaSlot('tdesc')"> °C</label>
+              </div>
+              <div class="slot-minmax">Mín <b id="minTdesc">--.-</b> · Máx <b id="maxTdesc">--.-</b></div>
+              <div class="slot-estado" id="estadoTdesc">Esperando…</div>
             </div>
             <div class="slot slot-ancho" id="slotTamb">
               <div class="slot-fila">
@@ -864,55 +804,56 @@
         </div>
       </div>
 
-      <div class="sutil" style="margin:6px 0 2px;">Variables del ciclo del motor — solo se muestran las que no tienen sonda asignada, para escribirlas a mano</div>
+      <details class="ajuste-manual">
+      <summary>Ajuste manual del ciclo (solo sin sondas asignadas)</summary>
       <div class="controls-grid">
         <div class="input-group" id="grpTEvapOut">
           <label for="tEvapOut" id="lblTEvapOutManual">T. Salida Evap</label>
-          <input type="number" id="tEvapOut" value="-12" step="0.5" oninput="guardarYActualizar()">
+          <input type="number" id="tEvapOut" value="-12" step="0.5" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpTSuct">
           <label for="tSuct" id="lblTSuctManual">T. Succión Comp.</label>
-          <input type="number" id="tSuct" value="-10" step="0.5" oninput="guardarYActualizar()">
+          <input type="number" id="tSuct" value="-10" step="0.5" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpTLiq">
           <label for="tLiq" id="lblTLiqManual">T. Líquido</label>
-          <input type="number" id="tLiq" value="45" step="0.5" oninput="guardarYActualizar()">
+          <input type="number" id="tLiq" value="45" step="0.5" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpTDescReal">
           <label for="tDescReal" id="lblTDescRealManual">T. Descarga</label>
-          <input type="number" id="tDescReal" value="90" step="1" oninput="guardarYActualizar()">
+          <input type="number" id="tDescReal" value="90" step="1" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpPSuct">
           <label for="pSuct" id="lblPSuctManual">P. Succión</label>
-          <input type="number" id="pSuct" value="25" step="1" oninput="guardarYActualizar()">
+          <input type="number" id="pSuct" value="25" step="1" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpPDesc">
           <label for="pDesc" id="lblPDescManual">P. Descarga</label>
-          <input type="number" id="pDesc" value="290" step="1" oninput="guardarYActualizar()">
+          <input type="number" id="pDesc" value="290" step="1" oninput="entradaManual()">
         </div>
         <div class="input-group">
           <label for="vVolt">Voltaje (V)</label>
-          <input type="number" id="vVolt" value="220" step="1" oninput="guardarYActualizar()">
+          <input type="number" id="vVolt" value="220" step="1" oninput="entradaManual()">
         </div>
         <div class="input-group">
           <label for="iAmp">Amperaje (A)</label>
-          <input type="number" id="iAmp" value="22" step="0.1" oninput="guardarYActualizar()">
+          <input type="number" id="iAmp" value="22" step="0.1" oninput="entradaManual()">
         </div>
       </div>
+      </details>
 
       <div class="sutil" style="margin:8px 0 2px;display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;">
-        <span>Cálculo del ciclo</span><span id="txtFuenteTermo">Motor: —</span>
+        <span>Indicadores del ciclo</span><span id="txtFuenteTermo">Motor: —</span>
       </div>
-      <div class="results-grid">
-        <div class="kpi-box" style="border-left-color:#38bdf8;"><span class="label">SH Útil (Evap)</span><span class="value" id="kpiSHUtil">0.0 K</span></div>
-        <div class="kpi-box" style="border-left-color:#0284c7;"><span class="label">SH Total (Succ)</span><span class="value" id="kpiSHTotal">0.0 K</span></div>
-        <div class="kpi-box" style="border-left-color:#0ea5e9;"><span class="label">SH Descarga</span><span class="value" id="kpiSHDescarga">0.0 K</span></div>
-        <div class="kpi-box" style="border-left-color:#10b981;"><span class="label">Subenfriam. (SC)</span><span class="value" id="kpiSC">0.0 K</span></div>
-        <div class="kpi-box" style="border-left-color:#f59e0b;"><span class="label">Potencia Elec.</span><span class="value" id="kpiKW">0.00 kW</span></div>
-        <div class="kpi-box" style="border-left-color:#a855f7;"><span class="label">Cap. Frig. (qn)</span><span class="value" id="kpiqn">0 kJ/kg</span></div>
-        <div class="kpi-box" style="border-left-color:#ef4444;"><span class="label">Trabajo Comp (w)</span><span class="value" id="kpiw">0 kJ/kg</span></div>
-        <div class="kpi-box" style="border-left-color:#ec4899;"><span class="label">COP Estimado</span><span class="value" id="kpicop">0.0</span></div>
-        <div class="kpi-box" style="border-left-color:#64748b;"><span class="label">ΔT Cond - Amb</span><span class="value" id="kpiDeltaAmb">0.0 K</span></div>
+      <div class="results-grid kpi-principal">
+        <div class="kpi-box kpi-sh-util"><span class="label">SH Útil (Evap)</span><span class="value" id="kpiSHUtil">NULL</span></div>
+        <div class="kpi-box kpi-sh-total"><span class="label">SH Total (Succ)</span><span class="value" id="kpiSHTotal">NULL</span></div>
+        <div class="kpi-box kpi-sh-desc"><span class="label">SH Descarga</span><span class="value" id="kpiSHDescarga">NULL</span></div>
+        <div class="kpi-box kpi-sc"><span class="label">Subenfriamiento (SC)</span><span class="value" id="kpiSC">NULL</span></div>
+      </div>
+      <div class="results-grid kpi-secundario">
+        <div class="kpi-box kpi-kw"><span class="label">Potencia Eléctrica</span><span class="value" id="kpiKW">NULL</span></div>
+        <div class="kpi-box kpi-dt"><span class="label">ΔT Cond - Amb</span><span class="value" id="kpiDeltaAmb">NULL</span></div>
       </div>
 
       <div id="confiabilidadDiagnostico" style="margin-top:4px;">
@@ -923,50 +864,8 @@
           <div id="barraConfiabilidad" style="height:100%;width:0%;background:#64748b;border-radius:5px;transition:width .25s ease,background .25s ease;"></div>
         </div>
       </div>
+      <div class="sutil" id="notaVentana" style="margin-top:3px;"></div>
     </section>
-
-    <!-- ========================= GRÁFICA TEMPORAL ========================== -->
-        <section class="card" id="cardGrafica">
-      <h2>
-        <span>Gráfica temporal</span>
-      </h2>
-
-      <div class="series-bar" id="seriesBar"></div>
-
-      <div class="ventana-bar">
-        <span class="sutil">Ventana:</span>
-        <button class="btn-ventana activo" data-min="10" onclick="cambiarVentanaMin(10)">10 min</button>
-        <button class="btn-ventana" data-min="30" onclick="cambiarVentanaMin(30)">30 min</button>
-        <button class="btn-ventana" data-min="60" onclick="cambiarVentanaMin(60)">1 h</button>
-        <button class="btn-ventana" data-min="120" onclick="cambiarVentanaMin(120)">2 h</button>
-        <button class="btn-ventana" data-min="240" onclick="cambiarVentanaMin(240)">4 h</button>
-        <button class="btn-ventana" data-min="480" onclick="cambiarVentanaMin(480)">8 h</button>
-        <button class="btn-ventana" data-min="1440" onclick="cambiarVentanaMin(1440)">24 h</button>
-        <span class="nav-ventana">
-          <button class="btn-mini" onclick="desplazarVentana(-1)" title="Ventana anterior">‹</button>
-          <span class="sutil" id="txtVentana">Calculando…</span>
-          <button class="btn-mini" onclick="desplazarVentana(1)" title="Ventana siguiente">›</button>
-          <button class="btn-mini" onclick="volverEnVivo()">Actual</button>
-        </span>
-      </div>
-
-      <div id="chartMonitor" class="chart-monitor"></div>
-      <div class="sutil" id="notaVentana"></div>
-
-      <div class="solo-pdf" style="margin-top:5px;">
-        <div class="sutil" style="margin-bottom:2px;">Histórico de mediciones de la ventana visible</div>
-        <div id="printMonitor"></div>
-      </div>
-    </section>
-
-    <div class="fila-invocar">
-      <button class="btn btn-accion" onclick="abrirMollier()" title="Diagrama de Mollier (p-h) a pantalla completa">
-        📈 Mollier p-h
-      </button>
-      <button class="btn btn-accion" onclick="abrirGraficaAmpliada()" title="Gráfica live a pantalla completa">
-        📊 Gráfica live
-      </button>
-    </div>
 
     <!-- ===================== DIAGNÓSTICO Y TRAZABILIDAD ==================== -->
     <section class="card" id="cardIndicadores">
@@ -1080,47 +979,14 @@
     </details>
 
     <!-- ============================ ACCIONES ================================ -->
-    <div class="solo-pdf card" style="margin-top:5px;">
-      <h2>Diagrama de Mollier (p-h) del ciclo operativo</h2>
-      <div id="pdfMollier"></div>
-    </div>
-
     <div class="action-bar">
       <button class="btn btn-reporte" onclick="descargarPDFReporte()">📄 Reporte PDF</button>
+      <button class="btn btn-toggle" onclick="abrirGraficaAmpliada()" title="Abrir la gráfica extendida en otra pestaña">📊 Gráfica extendida</button>
       <button class="btn btn-toggle" id="btnInstalar" style="display:none" onclick="instalarApp()" title="Instalar como aplicación en el teléfono">⬇ Instalar app</button>
     </div>
   </div>
 
-  <!-- ================= DIAGRAMA DE MOLLIER EN PANTALLA COMPLETA ============= -->
-    <!-- ================= GRÁFICA TEMPORAL A PANTALLA COMPLETA ============== -->
-  <div class="overlay" id="overlayGrafica">
-    <div class="overlay-head">
-      <span class="series-bar" id="seriesBarZoom" style="margin:0;flex:1 1 auto;"></span>
-      <span class="overlay-acciones">
-        <button class="btn-mini" onclick="pantallaCompletaNativa()" title="Pantalla completa real del dispositivo">⛶ Full</button>
-        <button class="btn-mini" onclick="cerrarZoomGrafica()" title="Cerrar">✕</button>
-      </span>
-    </div>
-    <div id="chartZoom" class="overlay-grafica" title="Arrastre para desplazar · rueda o dos dedos para zoom · doble toque para reiniciar"></div>
-  </div>
-
-<div class="overlay" id="overlayMollier">
-    <div class="overlay-head">
-      <span>Diagrama de Mollier (p-h) — pantalla completa</span>
-      <span class="overlay-acciones">
-        <button class="btn-mini" id="btnCompresionIdeal" onclick="toggleCompresionIdeal()">⚙ Compresión ideal: OFF</button>
-        <button class="btn-mini" id="btnZonaActiva" onclick="toggleZonaActiva()">🔍 Zoom Zona Activa: OFF</button>
-        <button class="btn-mini" onclick="pantallaCompletaNativa()">⛶ Pantalla completa</button>
-        <button class="btn-mini" onclick="cerrarMollier()">✕ Cerrar</button>
-      </span>
-    </div>
-    <div id="mollierPlot" class="mollier-full"></div>
-    <div class="sutil" style="text-align:center;">Un dedo desplaza · dos dedos hacen zoom · rueda del mouse acerca</div>
-  </div>
-
   <script>
-    let zonaActivaHabilitada = false;
-    let compresionIdealVisible = false;
     let modoEvapActual = 'MBP';
     let expansionActual = 'TXV';
     let pUnitActual = 'psi';
@@ -1320,9 +1186,9 @@
       document.getElementById('lblPSuct').innerText = `P. Succión (${pUnits[pUnitActual].label})`;
       document.getElementById('lblPDesc').innerText = `P. Descarga (${pUnits[pUnitActual].label})`;
       document.getElementById('lblTEvapOut').innerText = `T. Salida Evap (°${tUnitActual})`;
-      document.getElementById('lblTSuct').innerText = `T. Succ Tubo (°${tUnitActual})`;
-      document.getElementById('lblTLiq').innerText = `T. Liq Tubo (°${tUnitActual})`;
-      document.getElementById('lblTDescReal').innerText = `T. Desc (°${tUnitActual})`;
+      document.getElementById('lblTSuct').innerText = `T. Succión Comp. (°${tUnitActual})`;
+      document.getElementById('lblTLiq').innerText = `T. Líquido (°${tUnitActual})`;
+      document.getElementById('lblTDescReal').innerText = `T. Descarga (°${tUnitActual})`;
     }
 
     function cambiarUnidades() {
@@ -1334,19 +1200,23 @@
 
       ['pSuct', 'pDesc'].forEach(id => {
         const elem = document.getElementById(id);
-        const valBar = parseFloat(elem.value) / pFactorViejo;
-        elem.value = (valBar * pFactorNuevo).toFixed(nuevaPUnit === 'psi' ? 0 : 1);
+        const texto = String(elem.value).trim();
+        if (texto === '') return;               // vacío sigue vacío (NULL)
+        const valBar = parseFloat(texto.replace(',', '.')) / pFactorViejo;
+        if (!Number.isFinite(valBar)) return;
+        /* Conservar dos decimales y quitar los ceros sobrantes: convertir de
+           ida y vuelta ya no "pierde" un psi (149 → 148). */
+        elem.value = parseFloat((valBar * pFactorNuevo).toFixed(2));
       });
 
       if (tUnitActual !== nuevaTUnit) {
         ['tEvapOut', 'tSuct', 'tLiq', 'tDescReal'].forEach(id => {
           const elem = document.getElementById(id);
-          let val = parseFloat(elem.value);
-          if (nuevaTUnit === 'F') {
-            elem.value = (val * 9/5 + 32).toFixed(1);
-          } else {
-            elem.value = ((val - 32) * 5/9).toFixed(1);
-          }
+          const texto = String(elem.value).trim();
+          if (texto === '') return;
+          const val = parseFloat(texto.replace(',', '.'));
+          if (!Number.isFinite(val)) return;
+          elem.value = (nuevaTUnit === 'F' ? (val * 9/5 + 32) : ((val - 32) * 5/9)).toFixed(1);
         });
       }
 
@@ -1355,31 +1225,8 @@
 
       actualizarEtiquetas();
       obtenerClimaPuntoFijo();
-    }
-
-    function toggleZonaActiva() {
-      zonaActivaHabilitada = !zonaActivaHabilitada;
-      actualizarEstadoBotonZoom();
+      /* Recalcular de inmediato: antes los KPI quedaban con la unidad vieja. */
       guardarYActualizar();
-    }
-
-    function actualizarEstadoBotonZoom() {
-      const btn = document.getElementById('btnZonaActiva');
-      btn.innerText = `🔍 Zoom Zona Activa: ${zonaActivaHabilitada ? 'ON' : 'OFF'}`;
-      btn.classList.toggle('active', zonaActivaHabilitada);
-    }
-
-    function toggleCompresionIdeal() {
-      compresionIdealVisible = !compresionIdealVisible;
-      actualizarEstadoBotonCompresionIdeal();
-      guardarYActualizar();
-    }
-
-    function actualizarEstadoBotonCompresionIdeal() {
-      const btn = document.getElementById('btnCompresionIdeal');
-      if (!btn) return;
-      btn.innerText = `⚙ Compresión ideal: ${compresionIdealVisible ? 'ON' : 'OFF'}`;
-      btn.classList.toggle('active', compresionIdealVisible);
     }
 
     function cambiarModoEvaporacion() {
@@ -1391,17 +1238,6 @@
       expansionActual = document.getElementById('expansionSelect').value;
       guardarYActualizar();
     }
-
-    /*
-     * Paleta del diagrama de Mollier y de las trazas.
-     * El módulo del monitor la redefine según el tema claro/oscuro activo;
-     * si el módulo no está presente se conserva la paleta oscura original.
-     */
-    const CM = () => (window.__colorMollier ? window.__colorMollier() : {
-      paper: '#1e293b', plot: '#0f172a', grid: '#334155', eje: '#cbd5e1',
-      titulo: '#94a3b8', cicloTexto: '#f8fafc', contraste: '#0f172a',
-      idealTexto: '#ddd6fe', domo: '#38bdf8'
-    });
 
     /*
      * Nombre real del motor termodinámico cargado. El paquete de unpkg se llama
@@ -1437,13 +1273,9 @@
         tecnicoNombre: document.getElementById('tecnicoNombre').value,
         equipoMarca: document.getElementById('equipoMarca').value,
         equipoModelo: document.getElementById('equipoModelo').value,
-        // Nuevo: guardamos valor numérico y unidad por separado
-        capFrigValue: document.getElementById('capFrigValue').value,
-        capFrigUnit: document.getElementById('capUnitSelect').value,
         refSelect: document.getElementById('refSelect').value,
         modoEvapSelect: document.getElementById('modoEvapSelect').value,
         expansionSelect: document.getElementById('expansionSelect').value,
-        compresionIdealVisible: compresionIdealVisible,
         pUnitSelect: document.getElementById('pUnitSelect').value,
         tUnitSelect: document.getElementById('tUnitSelect').value,
         pSuct: document.getElementById('pSuct').value,
@@ -1454,7 +1286,6 @@
         tDescReal: document.getElementById('tDescReal').value,
         vVolt: document.getElementById('vVolt').value,
         iAmp: document.getElementById('iAmp').value,
-        zonaActivaHabilitada: zonaActivaHabilitada
       };
       localStorage.setItem('mollier_app_report_data', JSON.stringify(data));
     }
@@ -1470,27 +1301,7 @@
           if (data.equipoMarca !== undefined) document.getElementById('equipoMarca').value = data.equipoMarca;
           if (data.equipoModelo !== undefined) document.getElementById('equipoModelo').value = data.equipoModelo;
 
-          // Compatibilidad: si existe capFrigValue lo usamos; si solo existe el antiguo capFrigNominal intentamos parsearlo
-          if (data.capFrigValue !== undefined) {
-            document.getElementById('capFrigValue').value = data.capFrigValue;
-          } else if (data.capFrigNominal) {
-            const s = data.capFrigNominal;
-            const m = s.match(/([\d\.,]+)/);
-            if (m) {
-              const num = parseFloat(m[1].replace(/,/g, ''));
-              if (!isNaN(num)) document.getElementById('capFrigValue').value = num;
-            }
-          }
-          if (data.capFrigUnit !== undefined) {
-            document.getElementById('capUnitSelect').value = data.capFrigUnit;
-          } else if (data.capFrigNominal) {
-            const s = data.capFrigNominal.toLowerCase();
-            if (s.includes('ton')) document.getElementById('capUnitSelect').value = 'Ton';
-            else if (s.includes('kw')) document.getElementById('capUnitSelect').value = 'kW';
-            else document.getElementById('capUnitSelect').value = 'BTU/h';
-          }
-
-          if (data.refSelect) document.getElementById('refSelect').value = data.refSelect;
+          if (data.refSelect && refrigerantes[data.refSelect]) document.getElementById('refSelect').value = data.refSelect;
           if (data.modoEvapSelect) {
             document.getElementById('modoEvapSelect').value = data.modoEvapSelect;
             modoEvapActual = data.modoEvapSelect;
@@ -1499,7 +1310,6 @@
             document.getElementById('expansionSelect').value = data.expansionSelect;
             expansionActual = data.expansionSelect;
           }
-          if (data.compresionIdealVisible !== undefined) compresionIdealVisible = !!data.compresionIdealVisible;
           if (data.pUnitSelect) document.getElementById('pUnitSelect').value = data.pUnitSelect;
           if (data.tUnitSelect) document.getElementById('tUnitSelect').value = data.tUnitSelect;
           if (data.pSuct !== undefined) document.getElementById('pSuct').value = data.pSuct;
@@ -1510,32 +1320,63 @@
           if (data.tDescReal !== undefined) document.getElementById('tDescReal').value = data.tDescReal;
           if (data.vVolt !== undefined) document.getElementById('vVolt').value = data.vVolt;
           if (data.iAmp !== undefined) document.getElementById('iAmp').value = data.iAmp;
-          if (data.zonaActivaHabilitada !== undefined) zonaActivaHabilitada = data.zonaActivaHabilitada;
 
           pUnitActual = document.getElementById('pUnitSelect').value;
           tUnitActual = document.getElementById('tUnitSelect').value;
-          actualizarEstadoBotonZoom();
-          actualizarEstadoBotonCompresionIdeal();
         } catch (e) {
           console.error("Error al cargar datos", e);
         }
       }
     }
 
+    /* Temporizadores de escritura diferida. */
+    let temporizadorMotor = null;
+    let temporizadorConfig = null;
+
     function guardarYActualizar() {
+      clearTimeout(temporizadorMotor);
+      temporizadorMotor = null;
       guardarConfiguracion();
       actualizarTodo();
     }
 
+    /* Teclear un valor ya no dispara el cálculo completo en cada pulsación:
+       se espera a que el usuario deje de escribir. Antes cada tecla reconstruía
+       el domo de saturación (~210 consultas a CoolProp) y la app se congelaba. */
+    function entradaManual() {
+      clearTimeout(temporizadorMotor);
+      temporizadorMotor = setTimeout(() => { temporizadorMotor = null; guardarYActualizar(); }, 260);
+    }
+
+    /* Datos de identificación y capacidad: solo se guardan, no recalculan nada. */
+    function guardarConfiguracionDemorado() {
+      clearTimeout(temporizadorConfig);
+      temporizadorConfig = setTimeout(() => { temporizadorConfig = null; guardarConfiguracion(); }, 300);
+    }
+
+    /* Aplica cambios pendientes antes de una acción que los necesita
+       (por ejemplo, generar el reporte PDF). */
+    function aplicarCambiosPendientes() {
+      if (temporizadorMotor !== null) {
+        clearTimeout(temporizadorMotor);
+        temporizadorMotor = null;
+        guardarYActualizar();
+      }
+      if (temporizadorConfig !== null) {
+        clearTimeout(temporizadorConfig);
+        temporizadorConfig = null;
+        guardarConfiguracion();
+      }
+    }
+
     /*
      * REPORTE PDF
-     * Se convirtió en async para poder preparar el documento antes de que
-     * html2canvas lo capture: el módulo del monitor rasteriza las dos gráficas
-     * (histórico de sondas y diagrama de Mollier) a imágenes PNG, porque
-     * html2canvas no reproduce de forma fiable los gráficos vectoriales.
+     * Se prepara el documento antes de que html2canvas lo capture: el módulo
+     * del monitor abre los bloques plegados y muestra el diagnóstico completo.
      * Los ganchos __monitorAntesPDF / __monitorDespuesPDF los define el módulo
      * del monitor; si no existen, todo sigue funcionando como antes.
      */
+    window.aplicarCambiosPendientes = aplicarCambiosPendientes;
     async function descargarPDFReporte() {
       const element = document.getElementById('reporteArea');
 
@@ -1562,8 +1403,7 @@
         await html2pdf().set(opt).from(element).save();
       } catch (e) {
         console.error('Error al generar el PDF:', e);
-        const avisoPdf = document.getElementById('notaVentana');
-        if (avisoPdf) avisoPdf.textContent = 'No se pudo generar el PDF: ' + (e && e.message ? e.message : e);
+        alert('No se pudo generar el PDF: ' + (e && e.message ? e.message : e));
       } finally {
         document.body.classList.remove('generating-pdf');
         if (typeof window.__monitorDespuesPDF === 'function') {
@@ -1656,103 +1496,6 @@
       return saturationAtP(refData, pBarAbs);
     }
 
-    function getStatePT(refData, pBarAbs, tC) {
-      const fluid = refData.coolprop;
-      if (window.CoolProp && fluid) {
-        const P = pBarAbs * 100000;
-        const T = tC + 273.15;
-        const h = cpCall("H", "P", P, "T", T, fluid);
-        const s = cpCall("S", "P", P, "T", T, fluid);
-        const cp = cpCall("C", "P", P, "T", T, fluid);
-        if ([h, s].every(Number.isFinite)) {
-          return {
-            h: h/1000,
-            s: s/1000,
-            cp: Number.isFinite(cp) ? cp/1000 : null,
-            source:nombreCoolProp()
-          };
-        }
-      }
-
-      const sat = saturationAtP(refData, pBarAbs);
-      const superheat = Math.max(tC - sat.tDew, 0);
-      const cpV = refData.cpV || 1.0;
-      return {
-        h: sat.hV + superheat*cpV,
-        s: null,
-        cp: cpV,
-        source:"tabla local"
-      };
-    }
-
-    function getStatePS(refData, pBarAbs, sKjKgK) {
-      const fluid = refData.coolprop;
-      if (window.CoolProp && fluid && Number.isFinite(sKjKgK)) {
-        const P = pBarAbs * 100000;
-        const S = sKjKgK * 1000;
-        const h = cpCall("H", "P", P, "S", S, fluid);
-        const t = cpCall("T", "P", P, "S", S, fluid);
-        if ([h,t].every(Number.isFinite)) {
-          return { h:h/1000, t:t-273.15, s:sKjKgK, source:nombreCoolProp() };
-        }
-      }
-      return null;
-    }
-
-    function pressureAtT(refData, tC, quality=1) {
-      const fluid = refData.coolprop;
-      if (window.CoolProp && fluid && Number.isFinite(tC)) {
-        try {
-          const pPa = cpCall("P", "T", tC + 273.15, "Q", quality, fluid);
-          if (Number.isFinite(pPa) && pPa > 0) return pPa / 100000;
-        } catch (e) {}
-      }
-      return null;
-    }
-
-    function getStatePH(refData, pBarAbs, hKjKg) {
-      const fluid = refData.coolprop;
-      if (window.CoolProp && fluid) {
-        const P = pBarAbs * 100000;
-        const H = hKjKg * 1000;
-        const t = cpCall("T", "P", P, "H", H, fluid);
-        if (Number.isFinite(t)) return t - 273.15;
-      }
-      return null;
-    }
-
-    function buildCoolPropDome(refData, n=48) {
-      if (!window.CoolProp || !refData.coolprop) return null;
-      const pc = cpConst("pcrit", refData.coolprop);
-      const pmin = cpConst("ptriple", refData.coolprop);
-      if (!Number.isFinite(pc)) return null;
-
-      const lo = Math.max((Number.isFinite(pmin) ? pmin : 5000) / 100000, 0.005);
-      const hi = (pc / 100000) * 0.995;
-      const pts = [];
-
-      for (let i=0; i<n; i++) {
-        const f = i/(n-1);
-        const p = Math.exp(Math.log(lo) + f*(Math.log(hi)-Math.log(lo)));
-        const sat = saturationAtP(refData, p);
-        if (sat && Number.isFinite(sat.hL) && Number.isFinite(sat.hV)) {
-          pts.push({
-            p, hL:sat.hL, hV:sat.hV,
-            tSat:sat.tDew,
-            tBubble:sat.tBubble,
-            tDew:sat.tDew
-          });
-        }
-      }
-      if (pts.length >= 10) {
-        refData.dome = pts;
-        refData.thermoSource = nombreCoolProp();
-        refData.criticalP = pc/100000;
-        return pts;
-      }
-      return null;
-    }
-
     const COOLPROP_FLUID_MAP = {
       R134a: 'R134a',
       R22: 'R22',
@@ -1780,92 +1523,14 @@
         refData.coolprop = COOLPROP_FLUID_MAP[selectedKey];
       }
 
-      if (window.CoolProp && refData.coolprop) {
+      /* Solo se actualizan una vez los metadatos de CoolProp (presión crítica).
+         Ya no se construye el domo completo: el Mollier no forma parte de esta
+         pantalla y eran ~210 consultas a CoolProp en cada arranque. */
+      if (window.CoolProp && refData.coolprop && !refData._metaCoolProp) {
         refreshCoolPropMeta(refData);
-        buildCoolPropDome(refData, 52);
+        refData._metaCoolProp = true;
       }
       return refData;
-    }
-
-    function getZoneTraces(refData, minX, maxX) {
-      const f = pUnits[pUnitActual].factor;
-      const dome = refData.dome;
-
-      const pVals = dome.map(pt => pt.p * f);
-      const hLVals = dome.map(pt => pt.hL);
-      const hVVals = dome.map(pt => pt.hV);
-
-      const pTop = pVals[pVals.length - 1];
-      const pBot = pVals[0];
-
-      const liquidX = [minX, minX];
-      const liquidY = [pBot, pTop];
-      for (let i = dome.length - 1; i >= 0; i--) {
-        liquidX.push(hLVals[i]);
-        liquidY.push(pVals[i]);
-      }
-
-      const traceLiquid = {
-        x: liquidX, y: liquidY, fill: 'toself',
-        fillcolor: 'rgba(2, 132, 199, 0.22)', line: { color: 'transparent' },
-        name: 'Líquido', showlegend: false, hoverinfo: 'none'
-      };
-
-      const satX = []; const satY = [];
-      for (let i = 0; i < dome.length; i++) { satX.push(hLVals[i]); satY.push(pVals[i]); }
-      for (let i = dome.length - 1; i >= 0; i--) { satX.push(hVVals[i]); satY.push(pVals[i]); }
-
-      const traceSat = {
-        x: satX, y: satY, fill: 'toself',
-        fillcolor: 'rgba(16, 185, 129, 0.22)', line: { color: 'transparent' },
-        name: 'Mezcla', showlegend: false, hoverinfo: 'none'
-      };
-
-      const vaporX = []; const vaporY = [];
-      for (let i = 0; i < dome.length; i++) { vaporX.push(hVVals[i]); vaporY.push(pVals[i]); }
-      vaporX.push(maxX, maxX);
-      vaporY.push(pTop, pBot);
-
-      const traceVapor = {
-        x: vaporX, y: vaporY, fill: 'toself',
-        fillcolor: 'rgba(245, 158, 11, 0.20)', line: { color: 'transparent' },
-        name: 'Vapor', showlegend: false, hoverinfo: 'none'
-      };
-
-      return [traceLiquid, traceSat, traceVapor];
-    }
-
-    function getDomeTrace(refData) {
-      const hVals = [];
-      const pVals = [];
-      const tempsText = [];
-      const f = pUnits[pUnitActual].factor;
-
-      refData.dome.forEach(pt => {
-        hVals.push(pt.hL);
-        pVals.push(pt.p * f);
-        tempsText.push(`${convertirTemp(pt.tSat).toFixed(1)} °${tUnitActual}`);
-      });
-
-      for (let i = refData.dome.length - 1; i >= 0; i--) {
-        hVals.push(refData.dome[i].hV);
-        pVals.push(refData.dome[i].p * f);
-        tempsText.push(`${convertirTemp(refData.dome[i].tSat).toFixed(1)} °${tUnitActual}`);
-      }
-
-      return {
-        x: hVals,
-        y: pVals,
-        mode: 'lines+markers',
-        name: `Domo ${refData.nombre}`,
-        line: { color: CM().domo, width: 2.0, shape: 'spline', smoothing: 1.1 },
-        marker: { size: 4, color: CM().domo },
-        hovertemplate: `<b>Domo Sat. (${refData.nombre})</b><br>` +
-                       `Temp Sat: %{text}<br>` +
-                       `P: %{y:.1f} ${pUnits[pUnitActual].label}<br>` +
-                       `h: %{x:.1f} kJ/kg<extra></extra>`,
-        text: tempsText
-      };
     }
 
     /*
@@ -1885,13 +1550,15 @@
       const contradicciones = [];
       let score = 100;
 
-      const deltaTCondAmb = tSatCondC - tempAmbienteC;
+      const finite = v => Number.isFinite(v);
+      /* null - 30 daría -30: si falta la presión de descarga, no hay ΔT. */
+      const deltaTCondAmb = (finite(tSatCondC) && finite(tempAmbienteC))
+        ? tSatCondC - tempAmbienteC : null;
       const shMin = refData.shOptimo[0];
       const shMax = refData.shOptimo[1];
       const scMin = refData.scOptimo[0];
       const scMax = refData.scOptimo[1];
 
-      const finite = v => Number.isFinite(v);
       const modo = MODOS_EVAP[modoEvapActual] || MODOS_EVAP.MBP;
 
       const expansion = TIPOS_EXPANSION[expansionKey] || TIPOS_EXPANSION.TXV;
@@ -2129,113 +1796,110 @@
     function actualizarTodo() {
       const refKey = document.getElementById('refSelect').value;
       const refData = refrigerantes[refKey];
+
+      /* Lee un casillero y devuelve null si está vacío: un dato ausente NUNCA
+         se sustituye por un valor inventado (-12 °C, 25 PSI…). El KPI que
+         dependa de ese dato se muestra como NULL. */
+      const valorDe = id => {
+        const el = document.getElementById(id);
+        if (!el) return null;
+        const txt = String(el.value).replace(',', '.').trim();
+        if (txt === '') return null;
+        const v = parseFloat(txt);
+        return Number.isFinite(v) ? v : null;
+      };
+
+      /* Un refrigerante desconocido en la caché rompía todo el render. */
+      if (!refData) {
+        const panel = document.getElementById('panelAlertas');
+        if (panel) panel.innerHTML = '<div class="sutil">Refrigerante no reconocido. Elija uno de la lista.</div>';
+        return;
+      }
+
       const pf = pUnits[pUnitActual].factor;
 
-      let pSuctInput = parseFloat(document.getElementById('pSuct').value);
-      let pDescInput = parseFloat(document.getElementById('pDesc').value);
-
-      if (isNaN(pSuctInput)) pSuctInput = 25;
-      if (isNaN(pDescInput)) pDescInput = 290;
+      const pSuctInput = valorDe('pSuct');
+      const pDescInput = valorDe('pDesc');
 
       const barFactor = (pUnitActual === 'psi') ? 14.5038 : ((pUnitActual === 'kpa') ? 100 : 1.0);
       const atmBar = 1.01325;
 
-      const pSuctBarAbs = Math.max((pSuctInput / barFactor) + atmBar, 0.2);
-      const pDescBarAbs = Math.min((pDescInput / barFactor) + atmBar, refData.criticalP - 0.2);
+      const pSuctBarAbs = (pSuctInput === null)
+        ? null
+        : Math.max((pSuctInput / barFactor) + atmBar, 0.2);
+      const pDescBarAbs = (pDescInput === null)
+        ? null
+        : Math.min((pDescInput / barFactor) + atmBar, refData.criticalP - 0.2);
 
-      let tEvapOutVal = parseFloat(document.getElementById('tEvapOut').value) || -12;
-      let tSuctVal = parseFloat(document.getElementById('tSuct').value) || -10;
-      let tLiqVal = parseFloat(document.getElementById('tLiq').value) || 45;
-      let tDescRealVal = parseFloat(document.getElementById('tDescReal').value) || 90;
+      const tEvapOutVal = valorDe('tEvapOut');
+      const tSuctVal    = valorDe('tSuct');
+      const tLiqVal     = valorDe('tLiq');
+      const tDescVal    = valorDe('tDescReal');
 
-      let tEvapOutC = tEvapOutVal;
-      let tSuctC = tSuctVal;
-      let tLiqC = tLiqVal;
-      let tDescRealC = tDescRealVal;
+      const aCelsius = v => {
+        if (v === null) return null;
+        return (tUnitActual === 'F') ? (v - 32) * 5/9 : v;
+      };
 
-      if (tUnitActual === 'F') {
-        tEvapOutC = (tEvapOutVal - 32) * 5/9;
-        tSuctC = (tSuctVal - 32) * 5/9;
-        tLiqC = (tLiqVal - 32) * 5/9;
-        tDescRealC = (tDescRealVal - 32) * 5/9;
-      }
+      const tEvapOutC  = aCelsius(tEvapOutVal);
+      const tSuctC     = aCelsius(tSuctVal);
+      const tLiqC      = aCelsius(tLiqVal);
+      const tDescRealC = aCelsius(tDescVal);
 
-      const vVolt = parseFloat(document.getElementById('vVolt').value) || 220;
-      const iAmp = parseFloat(document.getElementById('iAmp').value) || 0;
-      // Potencia eléctrica estimada: se conserva el factor 0.90 de la versión base.
-      // No se presenta como potencia medida si no existe PF/medición de kW.
-      const pKw = (vVolt * iAmp * 0.9) / 1000.0;
+      const vVolt = valorDe('vVolt');
+      const iAmp = valorDe('iAmp');
+      // Potencia eléctrica estimada con el factor 0.90 de la versión base.
+      // Sin voltaje o sin amperaje no se inventa un consumo.
+      const pKw = (vVolt !== null && iAmp !== null) ? (vVolt * iAmp * 0.9) / 1000.0 : null;
 
       prepareRefrigerant(refData);
 
-      const propEvap = getPropAtP(refData, pSuctBarAbs);
-      const propCond = getPropAtP(refData, pDescBarAbs);
+      const propEvap = (pSuctBarAbs !== null) ? getPropAtP(refData, pSuctBarAbs) : null;
+      const propCond = (pDescBarAbs !== null) ? getPropAtP(refData, pDescBarAbs) : null;
 
       // Para mezclas: SH se referencia al punto de rocío y SC al punto de burbuja.
-      const tSatEvapDew = Number.isFinite(propEvap.tDew) ? propEvap.tDew : propEvap.tSat;
-      const tSatCondBubble = Number.isFinite(propCond.tBubble) ? propCond.tBubble : propCond.tSat;
-      const tSatCondDew = Number.isFinite(propCond.tDew) ? propCond.tDew : propCond.tSat;
-
-      const superHeatUtilK = tEvapOutC - tSatEvapDew;
-      const superHeatTotalK = tSuctC - tSatEvapDew;
-      const subCoolK = tSatCondBubble - tLiqC;
-      const dischargeSuperHeatK = tDescRealC - tSatCondDew;
-
-      const deltaTCondAmb = tSatCondBubble - tempAmbientePuntoFijoC;
-
-      /*
-       * ESTADOS REALES:
-       * 1 = P1 + T1
-       * 2 = P2 + T2  <-- la temperatura de descarga ahora determina h2
-       * 3 = P3 + T3
-       * 4 = h3, P4=P1 (expansión isentálpica)
-       *
-       * Ya no se utiliza Math.max() entre una estimación de compresión
-       * y otra térmica. La medición de campo P2/T2 manda sobre el punto 2.
-       */
-      const estado1 = getStatePT(refData, pSuctBarAbs, tSuctC);
-      const estado2 = getStatePT(refData, pDescBarAbs, tDescRealC);
-      const estado3 = getStatePT(refData, pDescBarAbs, tLiqC);
-
-      const h1 = Number.isFinite(estado1.h)
-        ? estado1.h
-        : propEvap.hV + Math.max(superHeatTotalK,0) * (refData.cpV || 1.0);
-
-      const h2 = Number.isFinite(estado2.h)
-        ? estado2.h
-        : propCond.hV + Math.max(dischargeSuperHeatK,0) * (refData.cpV || 1.0);
-
-      const h3 = Number.isFinite(estado3.h)
-        ? estado3.h
-        : propCond.hL - Math.max(subCoolK,0) * (refData.cpL || 1.0);
-
-      const h4 = h3;
-      const qn = h1 - h4;
-
-      const rP = pDescBarAbs / pSuctBarAbs;
-      const w = h2 - h1;
-      const cop = w > 0 ? (qn / w) : 0;
-
-      // Estado 2s: compresión isentrópica ideal desde el estado 1 hasta P2.
-      // Se calcula siempre para alimentar el motor; el botón solo controla su trazado.
-      const estado2s = (Number.isFinite(estado1.s) && pDescBarAbs > pSuctBarAbs)
-        ? getStatePS(refData, pDescBarAbs, estado1.s)
+      const tSatEvapDew = propEvap
+        ? (Number.isFinite(propEvap.tDew) ? propEvap.tDew : propEvap.tSat)
         : null;
-      const h2s = estado2s && Number.isFinite(estado2s.h) ? estado2s.h : null;
-      const wIdeal = Number.isFinite(h2s) ? h2s - h1 : null;
-      const etaIs = Number.isFinite(w) && w > 0 && Number.isFinite(wIdeal) && wIdeal > 0
-        ? Math.max(0, Math.min(1.5, wIdeal / w)) : null;
+      const tSatCondBubble = propCond
+        ? (Number.isFinite(propCond.tBubble) ? propCond.tBubble : propCond.tSat)
+        : null;
+      const tSatCondDew = propCond
+        ? (Number.isFinite(propCond.tDew) ? propCond.tDew : propCond.tSat)
+        : null;
 
-      document.getElementById('kpiSHUtil').innerText = `${superHeatUtilK.toFixed(1)} K`;
-      document.getElementById('kpiSHTotal').innerText = `${superHeatTotalK.toFixed(1)} K`;
+      /* Cada sobrecalentamiento/subenfriamiento exige SU propia temperatura.
+         Si falta la sonda correspondiente el resultado es null (se muestra
+         NULL); nunca se rellena con otra sonda ni con un valor por defecto. */
+      const superHeatUtilK = (tEvapOutC !== null && tSatEvapDew !== null)
+        ? tEvapOutC - tSatEvapDew : null;
+      const superHeatTotalK = (tSuctC !== null && tSatEvapDew !== null)
+        ? tSuctC - tSatEvapDew : null;
+      const subCoolK = (tLiqC !== null && tSatCondBubble !== null)
+        ? tSatCondBubble - tLiqC : null;
+      const dischargeSuperHeatK = (tDescRealC !== null && tSatCondDew !== null)
+        ? tDescRealC - tSatCondDew : null;
+
+      const deltaTCondAmb = (tSatCondBubble !== null)
+        ? tSatCondBubble - tempAmbientePuntoFijoC : null;
+
+      /* Relación de presión: la usa el motor de diagnóstico. */
+      const rP = (pDescBarAbs !== null && pSuctBarAbs !== null && pSuctBarAbs > 0)
+        ? pDescBarAbs / pSuctBarAbs : null;
+
+      /* Presentación de KPI: sin dato se escribe NULL, no un número inventado. */
+      const valorKPI = (v, decimales, unidad) =>
+        (v === null || v === undefined || !Number.isFinite(v))
+          ? 'NULL'
+          : v.toFixed(decimales) + (unidad || '');
+
+      document.getElementById('kpiSHUtil').innerText = valorKPI(superHeatUtilK, 1, ' K');
+      document.getElementById('kpiSHTotal').innerText = valorKPI(superHeatTotalK, 1, ' K');
       const kpiSHDescargaEl = document.getElementById('kpiSHDescarga');
-      if (kpiSHDescargaEl) kpiSHDescargaEl.innerText = `${Number.isFinite(dischargeSuperHeatK) ? dischargeSuperHeatK.toFixed(1) : '--'} K`;
-      document.getElementById('kpiSC').innerText = `${subCoolK.toFixed(1)} K`;
-      document.getElementById('kpiKW').innerText = `${pKw.toFixed(2)} kW`;
-      document.getElementById('kpiqn').innerText = `${qn.toFixed(1)} kJ/kg`;
-      document.getElementById('kpiw').innerText = `${w.toFixed(1)} kJ/kg`;
-      document.getElementById('kpicop').innerText = cop.toFixed(2);
-      document.getElementById('kpiDeltaAmb').innerText = `${deltaTCondAmb.toFixed(1)} K`;
+      if (kpiSHDescargaEl) kpiSHDescargaEl.innerText = valorKPI(dischargeSuperHeatK, 1, ' K');
+      document.getElementById('kpiSC').innerText = valorKPI(subCoolK, 1, ' K');
+      document.getElementById('kpiKW').innerText = valorKPI(pKw, 2, ' kW');
+      document.getElementById('kpiDeltaAmb').innerText = valorKPI(deltaTCondAmb, 1, ' K');
 
       const { alertas, alarmaTDesc, alarmaTLiq, confiabilidad } = evaluarDiagnostico(
         refData, rP, tDescRealC, tLiqC, tSatCondBubble, superHeatUtilK, superHeatTotalK, subCoolK, dischargeSuperHeatK, tempAmbientePuntoFijoC,
@@ -2254,9 +1918,6 @@
 
       const fuenteTermo = refData.thermoSource || (window.CoolProp ? 'CoolProp disponible' : 'tabla local de respaldo');
       const modoTexto = MODOS_EVAP[modoEvapActual] ? MODOS_EVAP[modoEvapActual].label : modoEvapActual;
-      const idealTexto = Number.isFinite(etaIs)
-        ? `2s disponible: h₂s ${h2s.toFixed(1)} kJ/kg · w ideal ${wIdeal.toFixed(1)} kJ/kg · ηis ${(etaIs*100).toFixed(1)} %`
-        : `2s no disponible: se requiere CoolProp para calcular la compresión isentrópica.`;
       // Presentación estructurada: una fila por evidencia/alerta.
       // El motor conserva el texto completo; aquí solo lo organizamos visualmente.
       const escaparHtml = txt => String(txt)
@@ -2282,7 +1943,6 @@
         if (String(a).includes('DATOS EN CONFLICTO')) cls = 'diag-conflict';
         filas.push(filaDiagnostico(a, cls));
       });
-      filas.push(`<tr class="diag-compression"><td class="diag-status">⚙</td><td class="diag-title">Compresión ideal</td><td class="diag-text">${idealTexto}</td></tr>`);
       filas.push(`<tr class="diag-system"><td class="diag-status">ⓘ</td><td class="diag-title">Motor termodinámico</td><td class="diag-text">${fuenteTermo}. Las tablas locales son respaldo aproximado.</td></tr>`);
 
       /* Filas que aporta el módulo del monitor: estado del ESP32, alarmas de
@@ -2300,353 +1960,15 @@
       panelAlertas.innerHTML = `<div class="diag-table-wrap"><table class="diag-table"><thead><tr><th class="diag-status">Est.</th><th>Indicador</th><th>Resultado / interpretación</th></tr></thead><tbody>${filas.join('')}</tbody></table></div>`;
       actualizarBarraConfiabilidad(confiabilidad);
 
-      const pSuctPlot = pSuctBarAbs * pf;
-      const pDescPlot = pDescBarAbs * pf;
-
-      const minX = refData.xRange[0];
-      const maxX = refData.xRange[1];
-
-      const zoneTraces = getZoneTraces(refData, minX, maxX);
-
-      const t1Str = `${convertirTemp(tSuctC).toFixed(1)} °${tUnitActual}`;
-      const t2Str = `${convertirTemp(tDescRealC).toFixed(1)} °${tUnitActual}`;
-      const t3Str = `${convertirTemp(tLiqC).toFixed(1)} °${tUnitActual}`;
-      const t4Str = `${convertirTemp(tSatEvapDew).toFixed(1)} °${tUnitActual}`;
-
-      const cycleTrace = {
-        x: [h1, h2, h3, h4, h1],
-        y: [pSuctPlot, pDescPlot, pDescPlot, pSuctPlot, pSuctPlot],
-        mode: 'lines+markers+text',
-        name: 'Ciclo Operativo',
-        text: ['1', '2', '3', '4', '1'],
-        textposition: 'top center',
-        textfont: { size: 8, color: CM().cicloTexto },
-        line: { color: '#ef4444', width: 2.2 },
-        marker: { size: 6, color: '#f59e0b' },
-        hovertemplate: '<b>Punto %{text} del Ciclo</b><br>' +
-                       'Temp: %{customdata}<br>' +
-                       'P: %{y:.1f} ' + pUnits[pUnitActual].label + '<br>' +
-                       'h: %{x:.1f} kJ/kg<extra></extra>',
-        customdata: [t1Str, t2Str, t3Str, t4Str, t1Str]
-      };
-
-      // Puntos de consulta: uno por tramo.
-      // IMPORTANTE: el eje de presión es logarítmico. Para que el punto
-      // quede visualmente sobre el 50 % del tramo vertical 1→2, 3→4, etc.,
-      // la interpolación de presión debe hacerse en escala logarítmica.
-      // Con presión lineal el marcador se desplazaba fuera de la línea.
-      const probeDefs = [
-        {name:"Medio compresión 1→2", a:[h1,pSuctBarAbs], b:[h2,pDescBarAbs], frac:0.50},
-        {name:"Medio descarga / condensación 2→3", a:[h2,pDescBarAbs], b:[h3,pDescBarAbs], frac:0.50},
-        {name:"Medio expansión 3→4", a:[h3,pDescBarAbs], b:[h4,pSuctBarAbs], frac:0.50},
-        {name:"Medio evaporación 4→1", a:[h4,pSuctBarAbs], b:[h1,pSuctBarAbs], frac:0.50}
-      ];
-
-      const probeX = [];
-      const probeY = [];
-      const probeText = [];
-      const probeCustom = [];
-
-      const interpLogP = (pA, pB, f) => {
-        if (!(pA > 0) || !(pB > 0)) return NaN;
-        return Math.exp(Math.log(pA) + (Math.log(pB) - Math.log(pA)) * f);
-      };
-
-      probeDefs.forEach(pr => {
-        const x = pr.a[0] + (pr.b[0]-pr.a[0])*pr.frac;
-        const pBar = interpLogP(pr.a[1], pr.b[1], pr.frac);
-        const y = pBar * pf;
-        const t = getStatePH(refData, pBar, x);
-        probeX.push(x);
-        probeY.push(y);
-        probeText.push("•");
-        probeCustom.push([
-          pr.name,
-          Number.isFinite(t) ? `${convertirTemp(t).toFixed(1)} °${tUnitActual}` : "—",
-          `${(pBar*pf).toFixed(1)} ${pUnits[pUnitActual].label}`,
-          `${x.toFixed(1)} kJ/kg`
-        ]);
-      });
-
-      const probeTrace = {
-        x: probeX,
-        y: probeY,
-        mode: 'markers+text',
-        text: probeText,
-        textposition: 'middle center',
-        name: 'Puntos de consulta',
-        marker: {
-          size: 11,
-          color: '#fbbf24',
-          line: {color: CM().contraste, width:1.5},
-          symbol: 'circle'
-        },
-        customdata: probeCustom,
-        hovertemplate:
-          '<b>%{customdata[0]}</b><br>' +
-          'T aprox.: %{customdata[1]}<br>' +
-          'P: %{customdata[2]}<br>' +
-          'h: %{customdata[3]}<extra></extra>',
-        showlegend: false
-      };
-
-      // Trazado de compresión ideal: curva 1→2s a entropía constante.
-      const idealTraces = [];
-      if (compresionIdealVisible && estado2s && Number.isFinite(h2s) && Number.isFinite(estado1.s)) {
-        const idealX = [];
-        const idealY = [];
-        const idealT = [];
-        const nIdeal = 28;
-        for (let i = 0; i < nIdeal; i++) {
-          const f = i / (nIdeal - 1);
-          const pBar = pSuctBarAbs * Math.pow(pDescBarAbs / pSuctBarAbs, f);
-          const st = getStatePS(refData, pBar, estado1.s);
-          if (st && Number.isFinite(st.h)) {
-            idealX.push(st.h);
-            idealY.push(pBar * pf);
-            idealT.push(`${convertirTemp(st.t).toFixed(1)} °${tUnitActual}`);
-          }
-        }
-        if (idealX.length > 1) {
-          idealTraces.push({
-            x: idealX, y: idealY, mode:'lines', name:'Compresión ideal 1→2s',
-            line:{color:'#a78bfa', width:2, dash:'dot'},
-            customdata:idealT,
-            hovertemplate:'<b>Compresión ideal 1→2s</b><br>T: %{customdata}<br>P: %{y:.1f} '+pUnits[pUnitActual].label+'<br>h: %{x:.1f} kJ/kg<extra></extra>',
-            showlegend:false
-          });
-          idealTraces.push({
-            x:[h2s], y:[pDescPlot], mode:'markers+text', name:'Punto 2s',
-            text:['2s'], textposition:'top center',
-            textfont:{size:8,color: CM().idealTexto},
-            marker:{size:8,color:'#a78bfa',symbol:'diamond',line:{color:'#0f172a',width:1.5}},
-            customdata:[[estado2s.t, h2s, estado1.s, wIdeal, etaIs]],
-            hovertemplate:'<b>Punto 2s — compresión ideal</b><br>T: %{customdata[0]:.1f} °C<br>P: %{y:.1f} '+pUnits[pUnitActual].label+'<br>h: %{customdata[1]:.1f} kJ/kg<br>s₁: %{customdata[2]:.3f} kJ/kg·K<br>Trabajo ideal: %{customdata[3]:.1f} kJ/kg<br>ηis: %{customdata[4]:.1%}<extra></extra>',
-            showlegend:false
-          });
-        }
-      }
-
-      const modo = MODOS_EVAP[modoEvapActual] || MODOS_EVAP.MBP;
-      const modoBandTraces = [];
-      const pModoMin = pressureAtT(refData, modo.tMin, 1);
-      const pModoMax = pressureAtT(refData, modo.tMax, 1);
-      if (Number.isFinite(pModoMin) && Number.isFinite(pModoMax) && pModoMin > 0 && pModoMax > 0) {
-        const yLow = Math.min(pModoMin, pModoMax) * pf;
-        const yHigh = Math.max(pModoMin, pModoMax) * pf;
-        // Zona de aplicación: sombreado muy tenue para no competir con el ciclo.
-        // Las dos fronteras son las únicas líneas visibles de referencia.
-        modoBandTraces.push({
-          x:[minX,maxX,maxX,minX,minX], y:[yLow,yLow,yHigh,yHigh,yLow],
-          fill:'toself', mode:'lines',
-          line:{color:'rgba(0,0,0,0)',width:0},
-          fillcolor:'rgba(148,163,184,0.025)', name:`Zona ${modoEvapActual}`,
-          hoverinfo:'skip', showlegend:false
-        });
-        modoBandTraces.push({
-          x:[minX,maxX], y:[yLow,yLow], mode:'lines',
-          line:{color:modo.color,width:1,dash:'dot'},
-          hovertemplate:`<b>${modoEvapActual} — límite inferior</b><br>Tevap: ${modo.tMin} °C<extra></extra>`,
-          showlegend:false
-        });
-        modoBandTraces.push({
-          x:[minX,maxX], y:[yHigh,yHigh], mode:'lines',
-          line:{color:modo.color,width:1,dash:'dot'},
-          hovertemplate:`<b>${modoEvapActual} — límite superior</b><br>Tevap: ${modo.tMax} °C<extra></extra>`,
-          showlegend:false
-        });
-        modoBandTraces.push({
-          x:[maxX - (maxX-minX)*0.08],
-          y:[Math.sqrt(yLow*yHigh)],
-          mode:'text',
-          text:[modoEvapActual],
-          textposition:'middle right',
-          textfont:{size:8,color:modo.color},
-          hoverinfo:'skip',
-          showlegend:false
-        });
-      }
-
-      const domeTrace = getDomeTrace(refData);
-
-      const layout = {
-        autosize: true,
-        // Navegación del gráfico: arrastrar desplaza el Mollier.
-        // Se evita el zoom rectangular por selección.
-        dragmode: 'pan',
-        margin: { l: 22, r: 10, t: 10, b: 22 },
-        paper_bgcolor: CM().paper,
-        plot_bgcolor: CM().plot,
-        showlegend: false,
-        xaxis: {
-          title: 'h (kJ/kg)',
-          titlefont: { size: 7, color: CM().titulo },
-          tickfont: { size: 6.5, color: CM().eje },
-          gridcolor: CM().grid,
-          zeroline: false,
-          autorange: !zonaActivaHabilitada,
-          range: zonaActivaHabilitada ? [Math.max(h4 - 25, minX), Math.min(h2 + 25, maxX)] : undefined
-        },
-        yaxis: {
-          title: `P. Abs (${pUnits[pUnitActual].label})`,
-          titlefont: { size: 7, color: CM().titulo },
-          tickfont: { size: 6.5, color: CM().eje },
-          type: 'log',
-          automargin: true,
-          gridcolor: CM().grid,
-          zeroline: false,
-          autorange: !zonaActivaHabilitada,
-          range: zonaActivaHabilitada ? [Math.log10(pSuctPlot * 0.75), Math.log10(pDescPlot * 1.25)] : undefined
-        }
-      };
-
-      /* El diagrama de Mollier se dibuja solo cuando hace falta (al abrir su
-         vista o al generar el reporte). En el teléfono esto ahorra mucho: el
-         Mollier vive en su propia página (mollier.html). */
-      const mollierVisible = (typeof window.__mollierNecesario !== 'function') || window.__mollierNecesario();
-      if (typeof Plotly !== 'undefined') {
-        if (mollierVisible) {
-          Plotly.react('mollierPlot', [...zoneTraces, ...modoBandTraces, domeTrace, ...idealTraces, cycleTrace, probeTrace], layout, {
-            responsive: true,
-            displayModeBar: false,
-            // Sin barra de herramientas. Un dedo = pan; rueda = zoom.
-            // El pinch de dos dedos se gestiona manualmente para evitar que
-            // Plotly mezcle pan + zoom y provoque movimientos erráticos.
-            scrollZoom: true,
-            doubleClick: 'reset'
-          }).then(() => instalarPinchZoomMollier());
-        }
-      } else {
-        console.warn('Plotly todavía no está disponible; se reintentará.');
-        setTimeout(() => {
-          if (typeof Plotly !== 'undefined') {
-            actualizarTodo();
-          }
-        }, 800);
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // Navegación táctil estable del Mollier
-    // -------------------------------------------------------------------------
-    // Plotly maneja muy bien el pan con un dedo y el zoom con rueda, pero en
-    // algunos teléfonos el gesto de dos dedos puede ser interpretado a la vez
-    // como pan + zoom. Aquí interceptamos SOLO el gesto de dos dedos y hacemos
-    // el zoom de forma controlada. El gesto de un dedo queda para Plotly.
-    let pinchMollierInstalado = false;
-    let pinchActivo = false;
-    let pinchDistInicial = 0;
-    let pinchXRangoInicial = null;
-    let pinchYRangoInicial = null;
-    let pinchCentroXInicial = null;
-    let pinchCentroYInicial = null;
-
-    function distanciaPinch(t1, t2) {
-      const dx = t2.clientX - t1.clientX;
-      const dy = t2.clientY - t1.clientY;
-      return Math.hypot(dx, dy);
-    }
-
-    function instalarPinchZoomMollier() {
-      const gd = document.getElementById('mollierPlot');
-      if (!gd || pinchMollierInstalado) return;
-      pinchMollierInstalado = true;
-
-      // Evita que el navegador intente desplazar la página sobre el gráfico.
-      gd.style.touchAction = 'none';
-
-      gd.addEventListener('touchstart', (ev) => {
-        if (ev.touches.length !== 2) return;
-
-        // Desde este punto Plotly no recibe el gesto de dos dedos.
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        const a = ev.touches[0];
-        const b = ev.touches[1];
-        pinchDistInicial = distanciaPinch(a, b);
-        if (!Number.isFinite(pinchDistInicial) || pinchDistInicial <= 0) return;
-
-        const xRange = gd._fullLayout?.xaxis?.range;
-        const yRange = gd._fullLayout?.yaxis?.range;
-        if (!Array.isArray(xRange) || !Array.isArray(yRange)) return;
-
-        pinchXRangoInicial = [...xRange];
-        pinchYRangoInicial = [...yRange];
-
-        // Centro visual del gesto, expresado en coordenadas de pantalla.
-        pinchCentroXInicial = (a.clientX + b.clientX) / 2;
-        pinchCentroYInicial = (a.clientY + b.clientY) / 2;
-        pinchActivo = true;
-      }, { capture: true, passive: false });
-
-      gd.addEventListener('touchmove', (ev) => {
-        if (!pinchActivo || ev.touches.length < 2) return;
-
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        const a = ev.touches[0];
-        const b = ev.touches[1];
-        const distActual = distanciaPinch(a, b);
-        if (!Number.isFinite(distActual) || distActual <= 0) return;
-
-        // >1 acerca; <1 aleja.
-        const factor = distActual / pinchDistInicial;
-        if (!Number.isFinite(factor) || factor <= 0) return;
-
-        const x0 = pinchXRangoInicial[0];
-        const x1 = pinchXRangoInicial[1];
-        const y0 = pinchYRangoInicial[0];
-        const y1 = pinchYRangoInicial[1];
-
-        const xMid = (x0 + x1) / 2;
-        const yMid = (y0 + y1) / 2;
-        const xHalf = Math.abs(x1 - x0) / 2 / factor;
-        const yHalf = Math.abs(y1 - y0) / 2 / factor;
-
-        if (!(xHalf > 0) || !(yHalf > 0)) return;
-
-        // Conservamos el centro de la vista durante el pinch. Esto evita que
-        // pequeñas variaciones de posición de los dedos hagan "saltar" la gráfica.
-        const nuevoX = [xMid - xHalf, xMid + xHalf];
-        const nuevoY = [yMid - yHalf, yMid + yHalf];
-
-        Plotly.relayout(gd, {
-          'xaxis.range': nuevoX,
-          'yaxis.range': nuevoY,
-          'xaxis.autorange': false,
-          'yaxis.autorange': false
-        });
-      }, { capture: true, passive: false });
-
-      const finalizarPinch = (ev) => {
-        if (!pinchActivo) return;
-        if (ev.type === 'touchend' || ev.type === 'touchcancel') {
-          ev.preventDefault();
-          ev.stopPropagation();
-        }
-        if (ev.touches && ev.touches.length >= 2) return;
-        pinchActivo = false;
-        pinchDistInicial = 0;
-        pinchXRangoInicial = null;
-        pinchYRangoInicial = null;
-      };
-
-      gd.addEventListener('touchend', finalizarPinch, { capture: true, passive: false });
-      gd.addEventListener('touchcancel', finalizarPinch, { capture: true, passive: false });
     }
 
     window.addEventListener('DOMContentLoaded', () => {
       cargarConfiguracion();
       actualizarEtiquetas();
       actualizarReloj();
-      actualizarEstadoBotonZoom();
-      actualizarEstadoBotonCompresionIdeal();
       setInterval(actualizarReloj, 1000);
 
       // Render inicial independiente de Internet/clima.
-      // Esto garantiza KPIs, alertas y Mollier desde el primer momento.
       try {
         actualizarTodo();
       } catch (e) {
@@ -2657,7 +1979,7 @@
       obtenerClimaPuntoFijo().catch(e => console.warn('Clima no disponible:', e));
 
       // Si CoolProp termina de cargar después del primer render,
-      // sustituimos tablas locales por EOS y redibujamos el domo.
+      // sustituimos las tablas locales por la EOS y recalculamos.
       window.addEventListener('coolprop-ready', () => {
         try {
           const rd = refrigerantes[document.getElementById('refSelect').value];
@@ -2679,7 +2001,7 @@
        succión del compresor y ambiente.
    Cada casillero de la pantalla tiene su selector de sonda (por si los sensores
    quedan montados al revés), la asignación es única y se guarda en caché.
-   El motor de Mollier, cargado justo antes, sigue siendo quien calcula: lee los
+   El motor termodinámico, cargado justo antes, sigue siendo quien calcula: lee los
    cuatro casilleros del ciclo y las dos presiones, y resuelve P–T con CoolProp.
 
    Se apoya en el motor ya cargado arriba:
@@ -2698,11 +2020,8 @@
 
   const WORKER_SOPORTA_FROM_TO  = false;
   const MAX_HORAS_ATRAS         = 72;
-  const MAX_PUNTOS_GRAFICA      = 1200;
-  const HUECO_MS                = 5 * 60 * 1000;
   /* Ventanas en MINUTOS: la de 10 minutos es la de trabajo en el teléfono */
   const VENTANAS_MIN            = [10, 30, 60, 120, 240, 480, 1440];
-  const PASO_MARCA_MIN          = { 10: 2, 30: 5, 60: 15, 120: 30, 240: 60, 480: 120, 1440: 180 };
   const VENTANA_MIN_DEFECTO     = 10;
   const EDAD_MAX_ESP32_MS       = 35000;
   const INTERVALO_SONDEO_MS     = 10000;
@@ -2760,20 +2079,6 @@
     tsuct: 'temp1', tevap: 'temp2', tdesc: 'temp3', tliq: 'temp4', tamb: 'temp5'
   };
 
-  /* Series de la gráfica: se muestran u ocultan a demanda y se recuerda */
-  const SERIES_GRAFICA = [
-    { id: 'tsuct', etiqueta: 'T. Succión',  color: '#f87171', eje: 'y',  porDefecto: true },
-    { id: 'tdesc', etiqueta: 'T. Descarga', color: '#fb923c', eje: 'y',  porDefecto: true },
-    { id: 'tliq',  etiqueta: 'T. Líquido',  color: '#34d399', eje: 'y',  porDefecto: false },
-    { id: 'tevap', etiqueta: 'T. Salida Evap', color: '#38bdf8', eje: 'y', porDefecto: true },
-    { id: 'tamb',  etiqueta: 'T. Ambiente', color: '#a78bfa', eje: 'y',  porDefecto: false },
-    { id: 'dt',    etiqueta: 'ΔT',          color: '#fbbf24', eje: 'y',  porDefecto: false, dash: 'dot' },
-    { id: 'psuct', etiqueta: 'P. Succión',  color: '#818cf8', eje: 'y2', porDefecto: false },
-    { id: 'pdesc', etiqueta: 'P. Descarga', color: '#f472b6', eje: 'y2', porDefecto: false },
-    { id: 'phe',   etiqueta: 'P.H. esperada', color: '#22d3ee', eje: 'y2', porDefecto: false, dash: 'dash' },
-    { id: 'phm',   etiqueta: 'P.H. medida',   color: '#a7f3d0', eje: 'y2', porDefecto: false, modo: 'markers' }
-  ];
-
   /* ------------------------------- CLAVES DE CACHÉ ------------------------ */
   /* Se conservan los nombres que ya usaba la app del termómetro para no perder
      la referencia de hermeticidad ni la ventana elegida. */
@@ -2789,7 +2094,6 @@
   const K_SENSOR_P    = 'refrig_sensor_p';
   const K_ASIGNACION  = 'refrig_asignacion_sondas_v2';
   const K_UMBRALES    = 'refrig_umbrales_slots';
-  const K_SERIES      = 'refrig_series_grafica';
   const K_ALARMAS     = 'refrig_alarmas_slots';
 
   /* --------------------------------- ESTADO ------------------------------- */
@@ -2839,14 +2143,6 @@
   } catch (e) {}
 
   let umbralDT = 3;
-  const seriesVisibles = {};
-  SERIES_GRAFICA.forEach(s => { seriesVisibles[s.id] = !!s.porDefecto; });
-  try {
-    const sv = JSON.parse(localStorage.getItem(K_SERIES) || 'null');
-    if (sv && typeof sv === 'object') {
-      SERIES_GRAFICA.forEach(s => { if (typeof sv[s.id] === 'boolean') seriesVisibles[s.id] = sv[s.id]; });
-    }
-  } catch (e) {}
 
   /* Hermeticidad */
   let pesoEvap = parseInt(localStorage.getItem(K_PESO1), 10);
@@ -3001,20 +2297,6 @@
   }
 
   /* --------------------------------- TEMA --------------------------------- */
-  function esTemaClaro() { return document.documentElement.getAttribute('data-tema') === 'claro'; }
-  function colorMollier() {
-    return esTemaClaro()
-      ? { paper: '#ffffff', plot: '#f8fafc', grid: '#cbd5e1', eje: '#334155', titulo: '#475569',
-          cicloTexto: '#0f172a', contraste: '#ffffff', idealTexto: '#6d28d9', domo: '#0284c7' }
-      : { paper: '#1e293b', plot: '#0f172a', grid: '#334155', eje: '#cbd5e1', titulo: '#94a3b8',
-          cicloTexto: '#f8fafc', contraste: '#0f172a', idealTexto: '#ddd6fe', domo: '#38bdf8' };
-  }
-  window.__colorMollier = colorMollier;
-  function colorMonitor() {
-    return esTemaClaro()
-      ? { papel: '#ffffff', fondo: '#f8fafc', rejilla: '#e2e8f0', eje: '#475569', titulo: '#334155' }
-      : { papel: '#1e293b', fondo: '#0f172a', rejilla: '#334155', eje: '#cbd5e1', titulo: '#94a3b8' };
-  }
   function aplicarTema(nuevo, silencioso) {
     temaActual = (nuevo === 'claro') ? 'claro' : 'oscuro';
     document.documentElement.setAttribute('data-tema', temaActual);
@@ -3025,10 +2307,8 @@
     if (meta) meta.setAttribute('content', temaActual === 'claro' ? '#eef2f7' : '#0f172a');
     if (silencioso) return;
     try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
-    dibujarMonitor();
   }
   window.alternarTema = function () { aplicarTema(temaActual === 'claro' ? 'oscuro' : 'claro'); };
-
   /* ------------------------------ MODO DE TRABAJO ------------------------- */
   /* Monitor y prueba de hermeticidad no conviven: se cambia de modo. */
   function aplicarModo(nuevo) {
@@ -3044,100 +2324,11 @@
   window.cambiarModo = function (nuevo) {
     aplicarModo(nuevo);
     vibrar(10);
-    setTimeout(() => { try { if (window.Plotly) Plotly.Plots.resize('chartMonitor'); } catch (e) {} }, 80);
   };
 
-  /* ----------------------- PANTALLAS COMPLETAS (overlays) ----------------- */
-  function abrirOverlay(id) {
-    const ov = $(id);
-    if (!ov) return;
-    ov.classList.add('abierto');
-    document.body.classList.add('con-overlay');
-  }
-  function cerrarOverlay(id) {
-    const ov = $(id);
-    if (!ov) return;
-    ov.classList.remove('abierto');
-    if (!document.querySelector('.overlay.abierto')) document.body.classList.remove('con-overlay');
-  }
-  function abrirMollierInterno() {
-    /* Respaldo mientras la página aparte (mollier.html) no esté publicada */
-    window.__mollierVisible = true;
-    abrirOverlay('overlayMollier');
-    try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
-    const ajustar = () => { try { if (window.Plotly) Plotly.Plots.resize('mollierPlot'); } catch (e) {} };
-    setTimeout(ajustar, 60);
-    setTimeout(ajustar, 380);
-    vibrar(10);
-  }
-  function abrirZoomGrafica() {
-    abrirOverlay('overlayGrafica');
-    const ajustar = () => { try { if (window.Plotly) Plotly.Plots.resize('chartZoom'); } catch (e) {} };
-    dibujarZoom();
-    setTimeout(ajustar, 60);
-    setTimeout(ajustar, 380);
-    vibrar(10);
-  }
-  /* Abre la página aparte si ya está publicada; si no, usa la vista interna.
-     Así el botón sirve igual antes y después de subir grafica.html/mollier.html. */
-  async function abrirArchivoAparte(archivo, params, respaldo) {
-    /* En file:// las peticiones HEAD están bloqueadas por CORS, así que se va
-       directo al respaldo interno sin llenar la consola de errores. */
-    if (location.protocol !== 'file:') {
-      try {
-        const r = await fetch(archivo, { method: 'HEAD', cache: 'no-store' });
-        if (r.ok) {
-          window.open(archivo + (params ? '?' + params : ''), '_blank');
-          return;
-        }
-      } catch (e) { /* sin red o archivo ausente */ }
-    }
-    if (typeof respaldo === 'function') respaldo();
-  }
-  /* Parámetros del ciclo para la página del Mollier (los mismos que espera) */
-  function parametrosMollier() {
-    const val = id => { const el = $(id); return el ? el.value : ''; };
-    const p = new URLSearchParams();
-    p.set('ref', val('refSelect'));
-    p.set('mod', val('modoEvapSelect'));
-    p.set('pu', pUnitActual);
-    p.set('tu', tUnitActual);
-    p.set('psuct', val('pSuct'));
-    p.set('pdesc', val('pDesc'));
-    p.set('tevap', val('tEvapOut'));
-    p.set('tsuct', val('tSuct'));
-    p.set('tdesc', val('tDescReal'));
-    p.set('tliq', val('tLiq'));
-    return p.toString();
-  }
-  window.abrirMollier = function () {
-    abrirArchivoAparte('mollier.html', parametrosMollier(), abrirMollierInterno);
-  };
+  /* La gráfica extendida vive en su propia página (grafica.html). */
   window.abrirGraficaAmpliada = function () {
-    abrirArchivoAparte('grafica.html', 'min=' + rangoMin, abrirZoomGrafica);
-  };
-  window.cerrarMollier = function () {
-    window.__mollierVisible = false;
-    cerrarOverlay('overlayMollier');
-  };
-  window.__mollierNecesario = function () { return window.__mollierVisible === true; };
-  window.abrirZoomGrafica = abrirZoomGrafica;
-  window.cerrarZoomGrafica = function () { cerrarOverlay('overlayGrafica'); };
-  window.pantallaCompletaNativa = function () {
-    const raiz = document.documentElement;
-    if (!document.fullscreenElement) {
-      if (raiz.requestFullscreen) raiz.requestFullscreen().catch(() => {});
-      else if (raiz.webkitRequestFullscreen) raiz.webkitRequestFullscreen();
-    } else if (document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
-    }
-    setTimeout(() => {
-      try {
-        if (!window.Plotly) return;
-        Plotly.Plots.resize('mollierPlot');
-        Plotly.Plots.resize('chartZoom');
-      } catch (e) {}
-    }, 400);
+    window.open('grafica.html?min=' + rangoMin, '_blank');
   };
   /* ==================== CASILLEROS: SELECTORES Y VALORES ================== */
   let ventanaProcesada = [];      /* filas de la ventana visible, ya procesadas */
@@ -3294,10 +2485,19 @@
     let cambio = false;
     SLOTS.forEach(s => {
       if (!s.varMotor) return;
-      const crudo = valorSlotDeFila(fila, s.id);
-      if (crudo === null) return;
       const el = $(s.varMotor);
       if (!el) return;
+
+      /* Casillero manual (sin sonda): no se toca lo que escribió el usuario. */
+      if (!asignacion[s.id]) return;
+
+      const crudo = valorSlotDeFila(fila, s.id);
+      if (crudo === null) {
+        /* La sonda está asignada pero no tiene dato: el motor debe ver un
+           casillero vacío (NULL), no el último número que quedó guardado. */
+        if (el.value !== '') { el.value = ''; cambio = true; }
+        return;
+      }
       const nuevo = (s.tipo === 'pres')
         ? (function () { const v = presionAMotor(crudo); return v === null ? null : v.toFixed(v >= 100 ? 0 : 1); })()
         : convertirTemp(crudo).toFixed(1);
@@ -3709,314 +2909,9 @@
     const html = filasDiagnosticoMonitor().join('');
     if (html) tbody.insertAdjacentHTML('beforeend', html);
   }
-  /* ------------------------------- GRÁFICA -------------------------------- */
-  let ultimaSerie = { x: [], datos: {}, dt: [], xPH: [], yPH: [], pe: [],
-                      inicio: Date.now(), fin: Date.now(), refT: null,
-                      hayPresion: false, hayPH: false };
-
-  function hayOverlayAbierto() { return !!document.querySelector('.overlay.abierto'); }
-
-  function reducirFilas(filas, maxPts) {
-    /* Normaliza SIEMPRE cada punto a { t, <canal>..., dt }: si se devolvieran
-       las filas crudas (cuando hay pocas) el campo t no existiría y el insertor
-       de huecos de la gráfica rompía con una fecha inválida. */
-    const normalizar = g => {
-      const out = { t: g.reduce((a, f) => a + new Date(f.created_at).getTime(), 0) / g.length };
-      SLOTS.forEach(s => {
-        const vals = g.map(f => valorSlotDeFila(f, s.id)).filter(v => v !== null);
-        out[s.id] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-      });
-      const dts = g.map(f => f.dt).filter(v => v !== null);
-      out.dt = dts.length ? dts.reduce((a, b) => a + b, 0) / dts.length : null;
-      return out;
-    };
-    if (filas.length <= maxPts) return filas.map(f => normalizar([f]));
-    const k = Math.ceil(filas.length / maxPts);
-    const salida = [];
-    for (let i = 0; i < filas.length; i += k) salida.push(normalizar(filas.slice(i, i + k)));
-    return salida;
-  }
-
-  function construirSeries(filas, inicio, fin) {
-    const puntos = reducirFilas(filas, MAX_PUNTOS_GRAFICA);
-    const x = [], datos = {}, dtSerie = [], pe = [];
-    SLOTS.forEach(s => { datos[s.id] = []; });
-
-    /* Presión esperada de la prueba de hermeticidad, calculada por fila */
-    const tRef = temperaturaRefPH();
-    const refT = referenciaPH ? new Date(referenciaPH.timestamp).getTime() : null;
-    const gas = gasPH();
-    const esperadaDe = p => {
-      if (!referenciaPH || tRef === null || p.t < refT - 60000) return null;
-      const tEf = tempEfectivaDe(
-        p[referenciaPH.canalTInt || 'tevap'],
-        p[referenciaPH.canalTExt || 'tamb'],
-        referenciaPH.pesoInt);
-      if (tEf === null) return null;
-      const r = presionEsperada(referenciaPH.pressureGauge, tRef, tEf, gas);
-      return (r.psi !== null) ? Number(r.psi.toFixed(1)) : null;
-    };
-
-    let prevT = null;
-    puntos.forEach(p => {
-      if (prevT !== null && (p.t - prevT) > HUECO_MS) {
-        x.push(new Date((p.t + prevT) / 2).toISOString());
-        SLOTS.forEach(s => datos[s.id].push(null));
-        dtSerie.push(null);
-        pe.push(null);
-      }
-      x.push(new Date(p.t).toISOString());
-      SLOTS.forEach(s => datos[s.id].push(p[s.id]));
-      dtSerie.push(p.dt);
-      pe.push(esperadaDe(p));
-      prevT = p.t;
-    });
-
-    const xPH = [], yPH = [];
-    medidasPH.forEach(m => {
-      const t = new Date(m.timestamp).getTime();
-      if (!Number.isFinite(t) || t < inicio || t > fin + 60000) return;
-      xPH.push(new Date(t).toISOString());
-      yPH.push(Number(m.pressureGauge));
-    });
-
-    ultimaSerie = {
-      x: x, datos: datos, dt: dtSerie, pe: pe, xPH: xPH, yPH: yPH,
-      inicio: inicio, fin: fin, refT: refT,
-      hayPresion: datos.psuct.some(v => v !== null) || datos.pdesc.some(v => v !== null),
-      hayPH: !!referenciaPH
-    };
-  }
-
-  function trazasMonitor(paraZoom) {
-    const s = ultimaSerie;
-    const t = [];
-    const grosor = paraZoom ? 2.4 : 1.8;
-    SERIES_GRAFICA.forEach(def => {
-      if (!seriesVisibles[def.id]) return;
-      const esSlot = !!SLOT_POR_ID[def.id];
-      const esPresion = esSlot && SLOT_POR_ID[def.id].tipo === 'pres';
-      let x = s.x, y = null;
-      if (esSlot) {
-        y = (s.datos[def.id] || []).map(v => {
-          if (v === null) return null;
-          return esPresion ? v : convertirTemp(v);
-        });
-      } else if (def.id === 'dt') {
-        y = s.dt.map(v => v === null ? null : convertirTemp(v));
-      } else if (def.id === 'phe') {
-        y = s.pe;
-      } else if (def.id === 'phm') {
-        x = s.xPH; y = s.yPH;
-      }
-      if (!y) return;
-      const traza = {
-        x: x, y: y, type: 'scatter',
-        mode: def.modo || 'lines',
-        name: def.etiqueta,
-        connectgaps: false,
-        line: { color: def.color, width: grosor, dash: def.dash || 'solid', shape: def.modo ? 'linear' : 'spline' },
-        hovertemplate: def.etiqueta + ': %{y:.1f}<br>%{x|%d/%m %H:%M}<extra></extra>',
-        yaxis: def.eje
-      };
-      if (def.modo === 'markers') {
-        traza.marker = { size: paraZoom ? 11 : 9, color: def.color, line: { color: '#059669', width: 1 } };
-        delete traza.line;
-      }
-      t.push(traza);
-    });
-    return t;
-  }
-
-  function layoutMonitor(paraZoom) {
-    const c = colorMonitor();
-    const s = ultimaSerie;
-    const paso = PASO_MARCA_MIN[rangoMin] || 5;
-    const formas = [];
-
-    /* Líneas de umbral: solo de los canales de temperatura visibles */
-    SLOTS.forEach(slot => {
-      if (!seriesVisibles[slot.id] || slot.tipo !== 'temp') return;
-      if (!Number.isFinite(umbrales[slot.id])) return;
-      const y = convertirTemp(umbrales[slot.id]);
-      formas.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: y, y1: y,
-                    line: { color: '#f87171', width: 1, dash: 'dot' } });
-    });
-    if (s.refT !== null) {
-      formas.push({ type: 'line', xref: 'x', x0: new Date(s.refT).toISOString(), x1: new Date(s.refT).toISOString(),
-                    yref: 'paper', y0: 0, y1: 1, line: { color: '#22d3ee', width: 1.2, dash: 'dash' } });
-    }
-
-    /* Eje X: fijo en la ventana elegida (10 minutos por defecto) para que el
-       trazado no se mueva al llegar datos nuevos.
-       Eje Y: se ajusta solo, con un 10 % de margen, para que todas las series
-       visibles entren dentro del cuadro sin tocar los bordes. */
-    const rangoX = (Number.isFinite(s.inicio) && Number.isFinite(s.fin) && s.fin > s.inicio)
-      ? [new Date(s.inicio).toISOString(), new Date(s.fin).toISOString()]
-      : undefined;
-
-    let tMin = null, tMax = null;
-    SERIES_GRAFICA.forEach(def => {
-      if (!seriesVisibles[def.id] || def.eje === 'y2') return;
-      const serie = (def.id === 'dt') ? s.dt : (SLOT_POR_ID[def.id] ? (s.datos[def.id] || []) : null);
-      if (!serie) return;
-      serie.forEach(v => {
-        if (v === null || v === undefined) return;
-        const y = convertirTemp(v);
-        if (tMin === null || y < tMin) tMin = y;
-        if (tMax === null || y > tMax) tMax = y;
-      });
-    });
-    let rangoY;
-    if (tMin !== null && tMax !== null) {
-      const margen = Math.max(1, (tMax - tMin) * 0.10);
-      rangoY = [tMin - margen, tMax + margen];
-    }
-
-    let pMin = null, pMax = null;
-    const sumarPresion = serie => {
-      if (!serie) return;
-      serie.forEach(v => {
-        if (v === null || v === undefined) return;
-        if (pMin === null || v < pMin) pMin = v;
-        if (pMax === null || v > pMax) pMax = v;
-      });
-    };
-    if (seriesVisibles.psuct) sumarPresion(s.datos.psuct);
-    if (seriesVisibles.pdesc) sumarPresion(s.datos.pdesc);
-    if (seriesVisibles.phe) sumarPresion(s.pe);
-    if (seriesVisibles.phm) sumarPresion(s.yPH);
-    let rangoY2;
-    if (pMin !== null && pMax !== null) {
-      const margen = Math.max(2, (pMax - pMin) * 0.10);
-      rangoY2 = [pMin - margen, pMax + margen];
-    }
-    const hayEje2 = !!(seriesVisibles.psuct || seriesVisibles.pdesc || seriesVisibles.phe || seriesVisibles.phm);
-    const ft = paraZoom ? 12 : 7.5;
-
-    /* Sin leyenda ni títulos de eje: las series se identifican por la barra de
-       chips (con su color) y el trazado se queda con todo el espacio posible. */
-    return {
-      margin: paraZoom ? { l: 44, r: hayEje2 ? 34 : 14, t: 6, b: 28 }
-                       : { l: 30, r: hayEje2 ? 30 : 8, t: 4, b: 20 },
-      paper_bgcolor: c.papel,
-      plot_bgcolor: c.fondo,
-      showlegend: false,
-      dragmode: 'pan',
-      hovermode: 'x unified',
-      xaxis: { type: 'date', range: rangoX, gridcolor: c.rejilla,
-               tickfont: { size: ft, color: c.eje }, tickformat: '%H:%M', dtick: paso * 60000,
-               showline: false, zeroline: false },
-      yaxis: { gridcolor: c.rejilla, tickfont: { size: ft, color: c.eje },
-               zeroline: false, showline: false, automargin: true,
-               range: rangoY, fixedrange: true },
-      yaxis2: { overlaying: 'y', side: 'right', showgrid: false,
-                tickfont: { size: ft, color: c.eje }, zeroline: false, automargin: true,
-                range: rangoY2, fixedrange: true,
-                visible: hayEje2 },
-      shapes: formas
-    };
-  }
-
-  /* La gráfica de la tarjeta es ESTÁTICA a propósito: así el teléfono puede
-     desplazarse por la página sin que el gráfico se quede con el gesto, y el
-     zoom de verdad vive en la página aparte (grafica.html). */
-  const CONFIG_GRAFICA = { staticPlot: true, responsive: true, displayModeBar: false };
-  const CONFIG_ZOOM = {
-    responsive: true, displayModeBar: true, scrollZoom: true, doubleClick: 'reset',
-    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'hoverCompareCartesian'],
-    displaylogo: false
-  };
-
-  let reintentoPlotly = false;
-  function cuandoPlotly(accion) {
-    if (typeof Plotly !== 'undefined') { accion(); return; }
-    if (!reintentoPlotly) {
-      reintentoPlotly = true;
-      setTimeout(() => { reintentoPlotly = false; accion(); }, 800);
-    }
-  }
-  function dibujarMonitor() {
-    const cont = $('chartMonitor');
-    if (!cont) return;
-    cuandoPlotly(() => {
-      try { Plotly.react('chartMonitor', trazasMonitor(false), layoutMonitor(false), CONFIG_GRAFICA); }
-      catch (e) { console.warn('Gráfica del monitor no disponible:', e); }
-    });
-  }
-  function dibujarZoom() {
-    const cont = $('chartZoom');
-    if (!cont) return;
-    cuandoPlotly(() => {
-      try { Plotly.react('chartZoom', trazasMonitor(true), layoutMonitor(true), CONFIG_ZOOM); }
-      catch (e) { console.warn('Gráfica en zoom no disponible:', e); }
-    });
-  }
-
-  /* La barra de chips se pinta en la tarjeta y también dentro del zoom, para
-     prender y apagar líneas sin salir de la pantalla completa. */
-  function pintarSelectoresSeries() {
-    const html = SERIES_GRAFICA.map(def =>
-      '<label class="serie-chip' + (seriesVisibles[def.id] ? ' activo' : '') + '" style="--color-serie:' + def.color + '">' +
-      '<input type="checkbox"' + (seriesVisibles[def.id] ? ' checked' : '') +
-      ' onchange="alternarSerie(\'' + def.id + '\')"> ' + escaparHtml(def.etiqueta) + '</label>'
-    ).join('');
-    document.querySelectorAll('.series-bar').forEach(cont => { cont.innerHTML = html; });
-  }
-  window.alternarSerie = function (id) {
-    seriesVisibles[id] = !seriesVisibles[id];
-    guardarJSON(K_SERIES, seriesVisibles);
-    pintarSelectoresSeries();
-    dibujarMonitor();
-    if (hayOverlayAbierto()) dibujarZoom();
-  };
-
-  /* ------------------------------ VENTANA --------------------------------- */
-  function actualizarEtiquetaVentana() {
-    const v = ventanaActual();
-    const opciones = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
-    poner('txtVentana', new Date(v.inicio).toLocaleString([], opciones) + ' → ' +
-                        new Date(v.fin).toLocaleString([], opciones) + (enVivo ? ' (en vivo)' : ''));
-  }
-  function actualizarBotonesVentana() {
-    document.querySelectorAll('.btn-ventana').forEach(b => {
-      b.classList.toggle('activo', parseInt(b.dataset.min, 10) === rangoMin);
-    });
-  }
-  window.cambiarVentanaMin = function (min) {
-    const n = Number(min);
-    if (!VENTANAS_MIN.includes(n)) return;
-    rangoMin = n;
-    try { localStorage.setItem(K_VENTANA_MIN, String(n)); } catch (e) {}
-    enVivo = true;
-    finVentana = new Date();
-    actualizarBotonesVentana();
-    cargarHistorico();
-  };
-  /* Compatibilidad: si algo llama con horas, se convierte a minutos */
-  window.cambiarVentanaHoras = function (h) { window.cambiarVentanaMin(Number(h) * 60); };
-  window.desplazarVentana = function (dir) {
-    const pasoMs = rangoMin * 60000;
-    const base = enVivo ? Date.now() : finVentana.getTime();
-    const nuevoFin = base + dir * pasoMs;
-    if (nuevoFin > Date.now() - 5000) { window.volverEnVivo(); return; }
-    enVivo = false;
-    finVentana = new Date(nuevoFin);
-    cargarHistorico();
-  };
-  window.volverEnVivo = function () {
-    enVivo = true;
-    finVentana = new Date();
-    cargarHistorico();
-    sondearUltima();
-  };
-  /* Ya no hay selector de tipo de sensor: siempre manométrica */
-  window.cambiarTipoSensorPresion = function () { renderMonitor(); };
-
   /* --------------------------- RENDER PRINCIPAL --------------------------- */
   function renderMonitor() {
     if (enVivo) finVentana = new Date();
-    actualizarEtiquetaVentana();
     const v = ventanaActual();
     const tolerancia = enVivo ? 60000 : 0;
 
@@ -4036,8 +2931,6 @@
     const deRespaldo = (!ultima && ultimaAbsoluta) ? ultimaAbsoluta : null;
     ultima = ultima || deRespaldo;
     ultimaVista = ultima;
-
-    construirSeries(ventanaProcesada, v.inicio, v.fin);
 
     /* Casilleros */
     pintarSelectores();
@@ -4073,8 +2966,6 @@
     alimentarMotor();
     registrarMedidaAutomaticaPH();
     actualizarPanelPH();
-    dibujarMonitor();
-    if (hayOverlayAbierto()) dibujarZoom();
     actualizarFilasMonitorEnTabla();
     pintarBannerSistema();
     actualizarBadgeConexion();
@@ -4083,9 +2974,8 @@
 
   const CAJAS = [
     { id: 'Succion', slots: ['psuct', 'tsuct'], titulo: 'SUCCIÓN' },
-    { id: 'Descarga', slots: ['pdesc', 'tdesc'], titulo: 'DESCARGA' },
-    { id: 'EvapLiq', slots: ['tevap', 'tliq'], titulo: 'EVAPORADOR / LÍQUIDO' },
-    { id: 'Ambiente', slots: ['tamb'], titulo: 'AMBIENTE' }
+    { id: 'Descarga', slots: ['pdesc', 'tliq'], titulo: 'DESCARGA' },
+    { id: 'Termicas', slots: ['tevap', 'tdesc', 'tamb'], titulo: 'TEMPERATURAS' }
   ];
   function actualizarResumenCajas() {
     CAJAS.forEach(caja => {
@@ -4573,36 +3463,8 @@
   };
 
   /* ------------------------------- REPORTE PDF ---------------------------- */
-  async function rasterizarParaPDF() {
-    if (typeof Plotly === 'undefined') return;
-    try {
-      const cont = $('chartMonitor');
-      if (cont && cont.data) {
-        const url = await Plotly.toImage('chartMonitor', { format: 'png', width: 900, height: 470, scale: 2 });
-        const destino = $('printMonitor');
-        if (destino) destino.innerHTML = '<img src="' + url + '" alt="Histórico de mediciones" style="width:100%;border:1px solid #cbd5e1;border-radius:4px;">';
-      }
-    } catch (e) { console.warn('No se pudo rasterizar la gráfica para el PDF:', e); }
-
-    const ov = $('overlayMollier');
-    const estabaAbierto = ov ? ov.classList.contains('abierto') : false;
-    try {
-      if (ov && $('mollierPlot')) {
-        window.__mollierVisible = true;
-        if (!estabaAbierto) { ov.classList.add('abierto'); document.body.classList.add('con-overlay'); }
-        try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
-        await esperar(120);
-        try { Plotly.Plots.resize('mollierPlot'); } catch (e) {}
-        await esperar(300);
-        const url = await Plotly.toImage('mollierPlot', { format: 'png', width: 900, height: 760, scale: 2 });
-        const destino = $('pdfMollier');
-        if (destino) destino.innerHTML = '<img src="' + url + '" alt="Diagrama de Mollier" style="width:100%;border:1px solid #cbd5e1;border-radius:4px;">';
-      }
-    } catch (e) { console.warn('No se pudo rasterizar el Mollier para el PDF:', e); }
-    if (ov && !estabaAbierto) { ov.classList.remove('abierto'); document.body.classList.remove('con-overlay'); }
-    window.__mollierVisible = false;
-  }
   window.__monitorAntesPDF = async function () {
+    if (typeof window.aplicarCambiosPendientes === 'function') window.aplicarCambiosPendientes();
     document.querySelectorAll('details').forEach(d => {
       d.dataset.abiertoAntes = d.open ? '1' : '0';
       d.open = true;
@@ -4611,18 +3473,13 @@
     document.body.setAttribute('data-modo', 'reporte');
     const panelDiagPdf = $('panelAlertas');
     if (panelDiagPdf) panelDiagPdf.style.display = '';   // el reporte lleva siempre el diagnóstico
-    await rasterizarParaPDF();
   };
   window.__monitorDespuesPDF = function () {
     document.querySelectorAll('details').forEach(d => {
       if (d.dataset.abiertoAntes === '0') d.open = false;
     });
     document.body.setAttribute('data-modo', modoActual);
-    const a = $('printMonitor'), b = $('pdfMollier');
-    if (a) a.innerHTML = '';
-    if (b) b.innerHTML = '';
     try { if (typeof actualizarTodo === 'function') actualizarTodo(); } catch (e) {}
-    dibujarMonitor();
   };
 
   /* -------------------- GANCHO DE PRUEBA (sin el ESP32) ------------------- */
@@ -4649,9 +3506,6 @@
 
   /* ---------------------------------- INIT -------------------------------- */
   function conectarControles() {
-    actualizarBotonesVentana();
-    pintarSelectoresSeries();
-
     /* Cambios del motor (refrigerante, aplicación, expansión, unidades) obligan
        a repintar casilleros, etiquetas y filas de diagnóstico. */
     ['refSelect', 'modoEvapSelect', 'expansionSelect', 'pUnitSelect', 'tUnitSelect'].forEach(id => {
@@ -4689,19 +3543,6 @@
         sondearUltima();
         if (enVivo) cargarHistorico();
       }
-    });
-    window.addEventListener('resize', () => {
-      cuandoPlotly(() => {
-        try {
-          Plotly.Plots.resize('chartMonitor');
-          if (hayOverlayAbierto()) Plotly.Plots.resize('chartZoom');
-        } catch (e) {}
-      });
-    });
-    document.addEventListener('keydown', ev => {
-      if (ev.key !== 'Escape') return;
-      if ($('overlayGrafica') && $('overlayGrafica').classList.contains('abierto')) { window.cerrarZoomGrafica(); return; }
-      window.cerrarMollier();
     });
 
     cargarEstadoDiag();
