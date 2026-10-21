@@ -232,6 +232,7 @@
   let latestRow = null;
   let lastSeenAt = null;
   let isRefreshing = false;
+  let ventanaSeq = 0;
   let userZoomed = false;
   let asignacion = Object.assign({}, ASIGNACION_INICIAL);
   let seriesVisibles = {};
@@ -412,9 +413,22 @@
     if (usarSupabase()) {
       const d = encodeURIComponent(new Date(desdeMs).toISOString());
       const h = encodeURIComponent(new Date(hastaMs).toISOString());
-      const filas = await sbPedir('select=*&created_at=gte.' + d + '&created_at=lte.' + h +
-                                 '&order=created_at.asc&limit=8000');
-      return Array.isArray(filas) ? filas : [];
+      /* Supabase/PostgREST entrega como máximo 1000 filas por consulta.
+         Se pagina con offset para no dejar vacíos en 4 h, 8 h y 24 h. */
+      const base = 'select=*&created_at=gte.' + d + '&created_at=lte.' + h +
+                   '&order=created_at.asc,id.asc';
+      const filas = [];
+      const PAGINA = 1000;
+      const MAX_FILAS = 20000;
+      let offset = 0;
+      while (offset < MAX_FILAS) {
+        const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
+        if (!Array.isArray(lote) || !lote.length) break;
+        filas.push(...lote);
+        if (lote.length < PAGINA) break;
+        offset += lote.length;
+      }
+      return filas;
     }
     /* Worker: pide las horas necesarias y el filtro fino lo hace getSlice() */
     const horas = Math.ceil((Date.now() - desdeMs) / 3600000) + 1;
@@ -880,6 +894,82 @@
             };
           }
         });
+
+        /* Bandas suaves sobre los huecos reales de datos: solo se marcan los
+           que ocupan un ancho visible, para no llenar la gráfica de etiquetas. */
+        try {
+          const yEscala = tempChart.scales.y;
+          if (yEscala && filas.length > 1) {
+            const finVentana = Date.now() - offsetMin * 60000;
+            const inicioVentana = finVentana - rangoMin * 60000;
+            const anchoPx = (tempChart.chartArea && tempChart.chartArea.width) ||
+                            tempChart.width || 800;
+            const minGapMs = Math.max(2 * 60000, rangoMin * 60000 * 0.015);
+            const tiempos = filas
+              .map(f => new Date(f.created_at).getTime())
+              .filter(Number.isFinite)
+              .sort((a, b) => a - b);
+            const huecos = [];
+            const agregarHueco = (ini, fin) => {
+              const ms = fin - ini;
+              if (ms < minGapMs) return;
+              const px = (ms / (finVentana - inicioVentana)) * anchoPx;
+              if (px < 45) return;
+              huecos.push({ ini, fin, ms, px });
+            };
+
+            for (let i = 1; i < tiempos.length; i++) {
+              const t0 = tiempos[i - 1];
+              const t1 = tiempos[i];
+              if (t1 < inicioVentana || t0 > finVentana) continue;
+              agregarHueco(Math.max(t0, inicioVentana), Math.min(t1, finVentana));
+            }
+
+            /* También los bordes: por ejemplo, en 24 h puede haber muchas
+               horas sin datos antes de la primera lectura disponible. */
+            if (tiempos.length) {
+              const primero = Math.max(tiempos[0], inicioVentana);
+              const ultimo = Math.min(tiempos[tiempos.length - 1], finVentana);
+              if (primero > inicioVentana) agregarHueco(inicioVentana, primero);
+              if (ultimo < finVentana) agregarHueco(ultimo, finVentana);
+            }
+
+            huecos.sort((a, b) => b.px - a.px);
+            huecos.slice(0, 3).sort((a, b) => a.ini - b.ini).forEach((h, i) => {
+              const duracion = fmtAge(h.ms);
+              const texto = h.px >= 120
+                ? ['Sin datos · ' + duracion]
+                : ['Sin datos', duracion];
+              anotaciones['hueco_' + i] = {
+                type: 'box',
+                xMin: h.ini,
+                xMax: h.fin,
+                yMin: yEscala.min,
+                yMax: yEscala.max,
+                yScaleID: 'y',
+                backgroundColor: 'rgba(148, 163, 184, 0.08)',
+                borderColor: 'rgba(148, 163, 184, 0.28)',
+                borderWidth: 1,
+                borderDash: [4, 4],
+                drawTime: 'beforeDatasetsDraw',
+                label: {
+                  display: true,
+                  content: texto,
+                  position: 'center',
+                  color: '#dbe4ee',
+                  backgroundColor: 'rgba(15, 23, 42, 0.82)',
+                  borderColor: 'rgba(148, 163, 184, 0.38)',
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  padding: { top: 4, bottom: 4, left: 7, right: 7 },
+                  font: { size: 10, weight: 'bold' }
+                }
+              };
+            });
+          }
+        } catch (err) {
+          console.warn('No se pudieron marcar los huecos:', err);
+        }
       }
       tempChart.options.plugins.annotation.annotations = anotaciones;
     } catch (err) { console.error('Error en anotaciones:', err); }
@@ -1051,13 +1141,19 @@
   }
   /* Con Supabase se vuelve a pedir exactamente la ventana visible */
   async function recargarVentana() {
+    const seq = ++ventanaSeq;
     try {
       const ahora = Date.now();
       const fin = ahora - offsetMin * 60000;
       const filas = await fetchVentana(fin - rangoMin * 60000, fin);
+      /* Si el usuario cambió de rango mientras llegaban las páginas,
+         no dejar que una respuesta vieja pise la ventana nueva. */
+      if (seq !== ventanaSeq) return;
       allData = Array.isArray(filas) ? filas : [];
       renderChart();
-    } catch (e) { console.warn('No se pudo leer la ventana:', e); }
+    } catch (e) {
+      if (seq === ventanaSeq) console.warn('No se pudo leer la ventana:', e);
+    }
   }
 
   async function refreshRecentHistory() {

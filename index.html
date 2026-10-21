@@ -118,6 +118,13 @@
     }
     .date-time-box { color: var(--texto); font-size: .68rem; }
     .barra-estado { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .estado-enlaces { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    #estadoSupabase::before, #estadoEsp32::before {
+      content: '●';
+      margin-right: 4px;
+      font-size: .72em;
+      vertical-align: 1px;
+    }
 
     .badge {
       font-size: .56rem;
@@ -590,7 +597,10 @@
         📅 <span id="txtFechaHora">Cargando fecha y hora...</span>
       </div>
       <div class="barra-estado">
-        <span id="estadoDispositivo" class="badge badge-off" title="Estado del ESP32 según la antigüedad de la última lectura">ESP32: verificando…</span>
+        <span class="estado-enlaces" title="Estado de la conexión con Supabase y del ESP32">
+          <span id="estadoSupabase" class="badge badge-warn" title="Estado de la conexión con Supabase">Supabase: verificando…</span>
+          <span id="estadoEsp32" class="badge badge-warn" title="Estado del ESP32 según la antigüedad de la última lectura">ESP32: verificando…</span>
+        </span>
         <span class="badge" id="badgeBateria" title="Batería del ESP32">🔋 --%</span>
         <span class="sutil" id="wifiValor" title="Red del ESP32">Wifi: "—"</span>
         <span>📍 Punto Fijo: <span id="txtTempAmb">Cargando...</span></span>
@@ -2537,6 +2547,9 @@
   let ultimaSenal    = null;
   let apiOk          = null;
   let errorApi       = null;
+  let supabaseOk     = null;
+  let errorSupabase  = null;
+  let ultimaConsultaSupabase = null;
   let sondeando      = false;
   let secuencia      = 0;
   let temaActual     = localStorage.getItem(K_TEMA) === 'claro' ? 'claro' : 'oscuro';
@@ -3017,19 +3030,26 @@
 
   async function sbPedir(consulta) {
     const url = SB_URL + '/rest/v1/' + SB_TABLA + '?' + consulta;
-    const res = await conTimeout(fetch(url, {
-      headers: {
-        'apikey': SB_CLAVE,
-        'Authorization': 'Bearer ' + SB_CLAVE,
-        'Accept': 'application/json'
-      },
-      cache: 'no-store'
-    }), 15000);
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error('Supabase HTTP ' + res.status + (txt ? ': ' + txt.substring(0, 120) : ''));
+    try {
+      const res = await conTimeout(fetch(url, {
+        headers: {
+          'apikey': SB_CLAVE,
+          'Authorization': 'Bearer ' + SB_CLAVE,
+          'Accept': 'application/json'
+        },
+        cache: 'no-store'
+      }), 15000);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error('Supabase HTTP ' + res.status + (txt ? ': ' + txt.substring(0, 120) : ''));
+      }
+      const datos = await res.json();
+      marcarSupabase(true);
+      return datos;
+    } catch (err) {
+      marcarSupabase(false, err);
+      throw err;
     }
-    return res.json();
   }
 
   /* ------------------------ WORKER DE RESPALDO ---------------------------- */
@@ -3067,13 +3087,25 @@
   }
   async function traerVentana(inicioMs, finMs) {
     if (usarSupabase()) {
-      /* PostgREST filtra por rango de fechas real: ya no hay límite de 72 h */
+      /* PostgREST filtra por rango de fechas real, pero entrega como máximo
+         1000 filas por consulta. Se pagina para no dejar huecos en el histórico. */
       const desde = encodeURIComponent(new Date(inicioMs).toISOString());
       const hasta = encodeURIComponent(new Date(finMs).toISOString());
-      const filas = await sbPedir('select=*&created_at=gte.' + desde + '&created_at=lte.' + hasta +
-                                 '&order=created_at.asc&limit=8000');
+      const base = 'select=*&created_at=gte.' + desde + '&created_at=lte.' + hasta +
+                   '&order=created_at.asc,id.asc';
+      const filas = [];
+      const PAGINA = 1000;
+      const MAX_FILAS = 20000;
+      let offset = 0;
+      while (offset < MAX_FILAS) {
+        const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
+        if (!Array.isArray(lote) || !lote.length) break;
+        filas.push(...lote);
+        if (lote.length < PAGINA) break;
+        offset += lote.length;
+      }
       nota('');
-      return Array.isArray(filas) ? filas : [];
+      return filas;
     }
     if (WORKER_SOPORTA_FROM_TO) {
       return traerJSON('/range?from=' + encodeURIComponent(new Date(inicioMs).toISOString()) +
@@ -3206,16 +3238,80 @@
     return 0;
   }
 
+  function marcarSupabase(ok, err) {
+    supabaseOk = ok;
+    errorSupabase = ok ? null : (err || new Error('Error desconocido'));
+    ultimaConsultaSupabase = new Date();
+    actualizarBadgeConexion();
+    pintarBannerSistema();
+  }
+
   function actualizarBadgeConexion() {
-    const badge = $('estadoDispositivo');
+    pintarEstadoSupabase();
+    pintarEstadoEsp32();
+  }
+
+  function pintarEstadoSupabase() {
+    const badge = $('estadoSupabase');
+    if (!badge) return;
+    let texto, clase, tip;
+    if (!usarSupabase()) {
+      texto = 'Supabase: sin configurar';
+      clase = 'badge';
+      tip = 'La aplicación está usando el Worker de Cloudflare como fuente de datos.';
+    } else if (supabaseOk === null) {
+      texto = 'Supabase: verificando…';
+      clase = 'badge badge-warn';
+      tip = 'Comprobando la conexión con Supabase…';
+    } else if (supabaseOk === false) {
+      texto = 'Supabase: sin respuesta';
+      clase = 'badge badge-off';
+      tip = 'No se pudo consultar Supabase: ' + interpretarError(errorSupabase);
+    } else {
+      texto = 'Supabase: OK';
+      clase = 'badge badge-ok';
+      tip = 'Consultas a Supabase funcionando.' +
+            (ultimaConsultaSupabase ? ' Última consulta: ' + ultimaConsultaSupabase.toLocaleTimeString('es-VE') : '');
+    }
+    badge.textContent = texto;
+    badge.className = clase;
+    badge.title = tip;
+  }
+
+  function pintarEstadoEsp32() {
+    const badge = $('estadoEsp32');
     if (!badge) return;
     const edad = ultimaSenal ? Math.max(0, Date.now() - ultimaSenal.getTime()) : null;
-    let texto = 'ESP32: verificando…', clase = 'badge badge-warn', tip = 'Comprobando el API del termómetro…';
-    if (apiOk === null) { texto = 'ESP32: verificando…'; clase = 'badge badge-warn'; tip = 'Comprobando el API del termómetro…'; }
-    else if (apiOk === false) { texto = 'API: sin respuesta'; clase = 'badge badge-warn'; tip = errorApi ? interpretarError(errorApi) : 'No se puede leer el Worker.'; }
-    else if (!enVivo) { texto = 'Modo historial'; clase = 'badge'; tip = 'Viendo datos históricos. Toque «Actual» para volver.'; }
-    else if (edad !== null && edad <= EDAD_MAX_ESP32_MS) { texto = 'ESP32: en línea'; clase = 'badge badge-ok'; tip = 'Transmitiendo · última lectura hace ' + formatearEdad(edad); }
-    else { texto = 'ESP32: sin datos' + (edad !== null ? ' (' + formatearEdad(edad) + ')' : ''); clase = 'badge badge-off'; tip = edad !== null ? 'Sin lecturas desde hace ' + formatearEdad(edad) : 'No hay lecturas registradas del ESP32.'; }
+    const fuente = usarSupabase() ? 'Supabase' : 'el Worker';
+    const fuenteSinRespuesta = usarSupabase() ? supabaseOk === false : apiOk === false;
+    let texto, clase, tip;
+
+    if (fuenteSinRespuesta) {
+      texto = 'ESP32: desconocido';
+      clase = 'badge';
+      tip = 'No se pudo consultar ' + fuente + ', así que no se puede saber si el ESP32 está en línea.' +
+            (edad !== null ? ' Última lectura conocida: hace ' + formatearEdad(edad) + '.' : '');
+    } else if (!enVivo) {
+      texto = 'ESP32: historial';
+      clase = 'badge';
+      tip = 'Viendo datos históricos. Toque «Actual» para volver.';
+    } else if (usarSupabase() && supabaseOk === null && !ultimaSenal) {
+      texto = 'ESP32: verificando…';
+      clase = 'badge badge-warn';
+      tip = 'Esperando la primera consulta a Supabase…';
+    } else if (edad !== null && edad <= EDAD_MAX_ESP32_MS) {
+      texto = 'ESP32: en línea';
+      clase = 'badge badge-ok';
+      tip = 'Transmitiendo · última lectura hace ' + formatearEdad(edad);
+    } else if (edad !== null) {
+      texto = 'ESP32: sin datos (' + formatearEdad(edad) + ')';
+      clase = 'badge badge-warn';
+      tip = 'Sin lecturas nuevas desde hace ' + formatearEdad(edad) + '.';
+    } else {
+      texto = 'ESP32: sin datos';
+      clase = 'badge badge-off';
+      tip = 'No hay lecturas registradas del ESP32.';
+    }
     badge.textContent = texto;
     badge.className = clase;
     badge.title = tip;
@@ -3253,7 +3349,11 @@
     let texto = '', clase = 'banner-alerta';
     const pct = ultimaAbsoluta ? ultimaAbsoluta.bateria : null;
     const v = ultimaAbsoluta ? ultimaAbsoluta.bateriaVolt : null;
-    if (apiOk === false) {
+    if (usarSupabase() && supabaseOk === false) {
+      texto = '⚠️ No se puede consultar Supabase: ' + interpretarError(errorSupabase) +
+              ' No se puede confirmar si el ESP32 está en línea.';
+      clase = 'banner-alerta peligro';
+    } else if (apiOk === false) {
       texto = '⚠️ No se puede leer el API del termómetro: ' + interpretarError(errorApi);
       clase = 'banner-alerta peligro';
     } else if (enVivo && ultimaSenal && !datosFrescos(ultimaAbsoluta)) {
@@ -3295,7 +3395,11 @@
     const fila = ultimaVista;
     const fresco = !!(enVivo && fila && datosFrescos(fila));
 
-    if (apiOk === false) {
+    if (usarSupabase() && supabaseOk === false) {
+      filas.push(filaDiagHtml('⚠️', 'Monitor — Supabase',
+        'Sin respuesta de Supabase: ' + escaparHtml(interpretarError(errorSupabase)) +
+        ' No se puede confirmar si el ESP32 está en línea; los valores mostrados pueden estar atrasados.', true));
+    } else if (apiOk === false) {
       filas.push(filaDiagHtml('⚠️', 'Monitor — API',
         'Sin respuesta del API del termómetro: ' + escaparHtml(interpretarError(errorApi)) +
         ' Los valores mostrados pueden estar atrasados.', true));
