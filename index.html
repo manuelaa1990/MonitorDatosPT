@@ -323,12 +323,8 @@
     }
     .probe-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; flex-wrap: wrap; }
     .probe-nombre { font-size: .56rem; font-weight: 800; color: var(--acento); letter-spacing: .3px; }
-    .probe-alarma { font-size: .50rem; color: var(--sutil); font-weight: 700; display: flex; align-items: center; gap: 3px; }
-    .probe-alarma input { width: 52px; height: 19px; font-size: .62rem; padding: 1px 3px; }
     .probe-valor { font-size: 1.30rem; font-weight: 800; line-height: 1.1; color: var(--texto); }
     .probe-valor.pequeno { font-size: 1.05rem; }
-    .probe-minmax { font-size: .56rem; color: var(--sutil); }
-    .probe-minmax b { color: var(--texto); }
     .probe-estado { font-size: .52rem; color: var(--sutil); min-height: 12px; }
     .probe-estado.alarma { color: var(--peligro); font-weight: 800; }
     .probe-map { font-size: .50rem; color: var(--sutil); font-weight: 700; display: flex; align-items: center; gap: 3px; }
@@ -359,7 +355,6 @@
       margin-bottom: 4px;
     }
     .kpi-principal { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-bottom: 6px; }
-    .kpi-secundario { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     @media (min-width: 560px) {
       .kpi-principal { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
@@ -389,7 +384,6 @@
     .kpi-sh-total { border-left-color: #0284c7; }
     .kpi-sh-desc  { border-left-color: #0ea5e9; }
     .kpi-sc       { border-left-color: #10b981; }
-    .kpi-kw       { border-left-color: #f59e0b; }
     .kpi-dt       { border-left-color: #64748b; }
 
     .diag-container { background: var(--panel2); border: 1px solid var(--borde); border-radius: 6px; padding: 4px 6px; width: 100%; }
@@ -410,6 +404,9 @@
     .diag-table .diag-conflict td { background: rgba(245,158,11,.05); }
     .diag-table .diag-monitor td { background: rgba(16,185,129,.05); color: var(--ok); }
     .diag-table .diag-monitor-alarma td { background: rgba(239,68,68,.08); color: var(--peligro); }
+    .diag-table .diag-alarma td { background: rgba(239,68,68,.10); color: var(--peligro); }
+    .diag-table .diag-alarma .diag-title { font-weight: 800; }
+    .diag-table .diag-aviso td { background: rgba(245,158,11,.10); color: var(--alerta); }
 
     /* Campos que el motor marca en condición crítica (T. descarga / T. líquido) */
     .alarm-field-active {
@@ -501,16 +498,13 @@
        sonda se sale del ancho del teléfono (comportamiento por defecto de las
        rejillas CSS). */
     .caja-slots > .slot { min-width: 0; }
-    .slot-datos, .slot-sel, .slot-alarma-fila { min-width: 0; }
+    .slot-datos, .slot-sel { min-width: 0; }
     .caja-slots.caja-2 { grid-template-columns: 1fr 1fr; }
     .caja-slots.caja-3 { grid-template-columns: repeat(3, 1fr); }
     .caja-3 .slot-nombre { font-size: .46rem; }
     .caja-3 .slot-valor { font-size: 1.02rem; }
     .caja-3 .slot-sel select { font-size: .50rem; padding-left: 2px; padding-right: 12px; }
-    .caja-3 .slot-nombre, .caja-3 .slot-minmax, .caja-3 .slot-estado { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .caja-3 .slot-alarma { font-size: .46rem; }
-    .caja-3 .slot-alarma input { width: 44px; }
-    .slot-alarma-fila { display: flex; align-items: center; }
+    .caja-3 .slot-nombre, .caja-3 .slot-estado { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .caja-doble.con-alarma { border-color: var(--peligro); }
     .caja-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
     .caja-titulo { font-size: .62rem; font-weight: 800; color: var(--acento); letter-spacing: .4px; }
@@ -523,17 +517,17 @@
     .slot-nombre { height: 13px; line-height: 13px; }
     .slot-valor { height: 26px; line-height: 26px; }
     .slot-datos { height: 22px; align-items: center; }
-    .slot-alarma-fila { height: 20px; }
-    .slot-minmax { height: 14px; line-height: 14px; }
+    .slot-tsat { height: 13px; line-height: 13px; }
     .slot-estado { height: 12px; line-height: 12px; }
     /* Una sola línea por fila: si la etiqueta se parte, el selector deja de
        quedar alineado con el de al lado. */
-    .slot-nombre, .slot-minmax, .slot-estado {
+    .slot-nombre, .slot-tsat, .slot-estado {
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .caja-2 .slot-ancho { grid-column: 1 / -1; }
     .slot:first-of-type { border-top-color: transparent; }
     .slot.alarma { animation: parpadeo-alarma .8s infinite alternate; border-radius: 5px; padding-left: 3px; padding-right: 3px; }
+    .slot.aviso { border-color: var(--alerta); background: rgba(245,158,11,.10); border-radius: 5px; padding-left: 3px; padding-right: 3px; }
     .slot-fila { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
     .slot-nombre { font-size: .52rem; font-weight: 700; color: var(--sutil); }
     .slot-valor { font-size: 1.22rem; font-weight: 800; line-height: 1.05; white-space: nowrap; }
@@ -542,16 +536,16 @@
     .slot-sel { font-size: .50rem; font-weight: 700; color: var(--sutil); display: flex; align-items: center; gap: 3px; }
     .slot-sel { flex: 1 1 auto; }
     .slot-sel select { height: 20px; font-size: .56rem; width: 100%; max-width: 100%; min-width: 0; }
-    .slot-alarma { font-size: .50rem; font-weight: 700; color: var(--sutil); display: flex; align-items: center; gap: 3px; }
-    .slot-alarma input { width: 54px; height: 19px; font-size: .62rem; padding: 1px 3px; }
-    .slot-minmax { font-size: .52rem; color: var(--sutil); }
-    .slot-minmax b { color: var(--texto); }
+    .slot-tsat { font-size: .50rem; color: var(--sutil); font-weight: 600; margin-top: 1px; }
+    .slot-tsat b { color: var(--acento); font-weight: 800; }
     .slot-estado { font-size: .50rem; color: var(--sutil); min-height: 11px; }
     .slot-estado.alarma { color: var(--peligro); font-weight: 800; }
+    .slot-estado.aviso { color: var(--alerta); font-weight: 700; }
 
     /* ---------------------- ΔT del ciclo (fila propia) ------------------- */
-    .kpi-deltas { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-    .kpi-deltas .kpi-box .value { font-size: .92rem; }
+    /* Misma rejilla y tipografía que la fila principal: 2 columnas en el
+       teléfono y 4 en pantalla ancha, para que todos los indicadores midan
+       exactamente igual. */
     .kpi-dt-desc { border-left-color: #f97316; }
     .kpi-dt-succ { border-left-color: #22c55e; }
     .kpi-dt-amb  { border-left-color: #8b5cf6; }
@@ -741,30 +735,23 @@
           <div class="caja-slots caja-2">
             <div class="slot" id="slotPsuct">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblPSuct">P. Succión</span>
+                <span class="slot-nombre" id="lblPSuct">P1 Succión</span>
                 <span class="slot-valor"><b id="valPsuct">---.-</b> <span class="unidad" id="uniPsuct">PSI</span></span>
               </div>
+              <div class="slot-tsat" id="tsatPsuct">Tsat --.-</div>
               <div class="slot-datos">
                 <label class="slot-sel">Sonda <select id="selPsuct" onchange="cambiarAsignacion('psuct')"></select></label>
               </div>
-              <div class="slot-alarma-fila">
-                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaPsuct" step="1" value="120" oninput="guardarAlarmaSlot('psuct')"> PSI</label>
-              </div>
-              <div class="slot-minmax">Mín <b id="minPsuct">--.-</b> · Máx <b id="maxPsuct">--.-</b></div>
               <div class="slot-estado" id="estadoPsuct">Esperando…</div>
             </div>
             <div class="slot" id="slotTsuct">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblTSuct">T. Succión Comp.</span>
+                <span class="slot-nombre" id="lblTSuct">T1 Succión</span>
                 <span class="slot-valor"><b id="valTsuct">---.-</b> <span class="unidad" id="uniTsuct">°C</span></span>
               </div>
               <div class="slot-datos">
                 <label class="slot-sel">Sonda <select id="selTsuct" onchange="cambiarAsignacion('tsuct')"></select></label>
               </div>
-              <div class="slot-alarma-fila">
-                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaTsuct" step="0.5" value="25" oninput="guardarAlarmaSlot('tsuct')"> °C</label>
-              </div>
-              <div class="slot-minmax">Mín <b id="minTsuct">--.-</b> · Máx <b id="maxTsuct">--.-</b></div>
               <div class="slot-estado" id="estadoTsuct">Esperando…</div>
             </div>
           </div>
@@ -777,21 +764,18 @@
           <div class="caja-slots caja-2">
             <div class="slot" id="slotPdesc">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblPDesc">P. Descarga</span>
+                <span class="slot-nombre" id="lblPDesc">P2 Descarga</span>
                 <span class="slot-valor"><b id="valPdesc">---.-</b> <span class="unidad" id="uniPdesc">PSI</span></span>
               </div>
+              <div class="slot-tsat" id="tsatPdesc">Tsat --.-</div>
               <div class="slot-datos">
                 <label class="slot-sel">Sonda <select id="selPdesc" onchange="cambiarAsignacion('pdesc')"></select></label>
               </div>
-              <div class="slot-alarma-fila">
-                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaPdesc" step="1" value="350" oninput="guardarAlarmaSlot('pdesc')"> PSI</label>
-              </div>
-              <div class="slot-minmax">Mín <b id="minPdesc">--.-</b> · Máx <b id="maxPdesc">--.-</b></div>
               <div class="slot-estado" id="estadoPdesc">Esperando…</div>
             </div>
             <div class="slot" id="slotTliq">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblTLiq">T. Líquido</span>
+                <span class="slot-nombre" id="lblTLiq">T4 Líquido</span>
                 <span class="slot-valor"><b id="valTliq">---.-</b> <span class="unidad" id="uniTliq">°C</span></span>
               </div>
               <div class="slot-datos">
@@ -809,7 +793,7 @@
           <div class="caja-slots caja-2">
             <div class="slot" id="slotTevap">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblTEvapOut">T. Salida Evap</span>
+                <span class="slot-nombre" id="lblTEvapOut">T2 Evaporador</span>
                 <span class="slot-valor"><b id="valTevap">---.-</b> <span class="unidad" id="uniTevap">°C</span></span>
               </div>
               <div class="slot-datos">
@@ -819,21 +803,17 @@
             </div>
             <div class="slot" id="slotTdesc">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblTDescReal">T. Descarga</span>
+                <span class="slot-nombre" id="lblTDescReal">T3 Descarga</span>
                 <span class="slot-valor"><b id="valTdesc">---.-</b> <span class="unidad" id="uniTdesc">°C</span></span>
               </div>
               <div class="slot-datos">
                 <label class="slot-sel">Sonda <select id="selTdesc" onchange="cambiarAsignacion('tdesc')"></select></label>
               </div>
-              <div class="slot-alarma-fila">
-                <label class="slot-alarma">Alarma ≥ <input type="number" id="alarmaTdesc" step="0.5" value="100" oninput="guardarAlarmaSlot('tdesc')"> °C</label>
-              </div>
-              <div class="slot-minmax">Mín <b id="minTdesc">--.-</b> · Máx <b id="maxTdesc">--.-</b></div>
               <div class="slot-estado" id="estadoTdesc">Esperando…</div>
             </div>
             <div class="slot slot-ancho" id="slotTamb">
               <div class="slot-fila">
-                <span class="slot-nombre" id="lblTAmb">T. Ambiente</span>
+                <span class="slot-nombre" id="lblTAmb">T5 Ambiente</span>
                 <span class="slot-valor"><b id="valTamb">---.-</b> <span class="unidad" id="uniTamb">°C</span></span>
               </div>
               <div class="slot-datos">
@@ -849,36 +829,28 @@
       <summary>Ajuste manual del ciclo (solo sin sondas asignadas)</summary>
       <div class="controls-grid">
         <div class="input-group" id="grpTEvapOut">
-          <label for="tEvapOut" id="lblTEvapOutManual">T. Salida Evap</label>
+          <label for="tEvapOut" id="lblTEvapOutManual">T2 Evaporador</label>
           <input type="number" id="tEvapOut" value="-12" step="0.5" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpTSuct">
-          <label for="tSuct" id="lblTSuctManual">T. Succión Comp.</label>
+          <label for="tSuct" id="lblTSuctManual">T1 Succión</label>
           <input type="number" id="tSuct" value="-10" step="0.5" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpTLiq">
-          <label for="tLiq" id="lblTLiqManual">T. Líquido</label>
+          <label for="tLiq" id="lblTLiqManual">T4 Líquido</label>
           <input type="number" id="tLiq" value="45" step="0.5" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpTDescReal">
-          <label for="tDescReal" id="lblTDescRealManual">T. Descarga</label>
+          <label for="tDescReal" id="lblTDescRealManual">T3 Descarga</label>
           <input type="number" id="tDescReal" value="90" step="1" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpPSuct">
-          <label for="pSuct" id="lblPSuctManual">P. Succión</label>
+          <label for="pSuct" id="lblPSuctManual">P1 Succión</label>
           <input type="number" id="pSuct" value="25" step="1" oninput="entradaManual()">
         </div>
         <div class="input-group" id="grpPDesc">
-          <label for="pDesc" id="lblPDescManual">P. Descarga</label>
+          <label for="pDesc" id="lblPDescManual">P2 Descarga</label>
           <input type="number" id="pDesc" value="290" step="1" oninput="entradaManual()">
-        </div>
-        <div class="input-group">
-          <label for="vVolt">Voltaje (V)</label>
-          <input type="number" id="vVolt" value="220" step="1" oninput="entradaManual()">
-        </div>
-        <div class="input-group">
-          <label for="iAmp">Amperaje (A)</label>
-          <input type="number" id="iAmp" value="22" step="0.1" oninput="entradaManual()">
         </div>
       </div>
       </details>
@@ -892,14 +864,11 @@
         <div class="kpi-box kpi-sh-desc"><span class="label">SH Descarga</span><span class="value" id="kpiSHDescarga">NULL</span></div>
         <div class="kpi-box kpi-sc"><span class="label">Subenfriamiento (SC)</span><span class="value" id="kpiSC">NULL</span></div>
       </div>
-      <div class="results-grid kpi-secundario">
-        <div class="kpi-box kpi-kw"><span class="label">Potencia Eléctrica</span><span class="value" id="kpiKW">NULL</span></div>
-        <div class="kpi-box kpi-dt"><span class="label">ΔT Cond - Amb</span><span class="value" id="kpiDeltaAmb">NULL</span></div>
-      </div>
-      <div class="results-grid kpi-deltas">
+      <div class="results-grid kpi-principal kpi-deltas">
+        <div class="kpi-box kpi-dt" title="T saturación de condensación − T ambiente"><span class="label">ΔT Cond − Amb</span><span class="value" id="kpiDeltaAmb">NULL</span></div>
         <div class="kpi-box kpi-dt-desc" title="T descarga − T líquido"><span class="label">ΔT Desc − Líq</span><span class="value" id="kpiDTDescLiq">NULL</span></div>
         <div class="kpi-box kpi-dt-succ" title="T succión − T salida del evaporador: calor ganado en la línea de succión"><span class="label">ΔT Succ − Evap</span><span class="value" id="kpiDTSuccEvap">NULL</span></div>
-        <div class="kpi-box kpi-dt-amb" title="T ambiente − T líquido: calor retirado en el condensador"><span class="label">ΔT Amb − Líq</span><span class="value" id="kpiDTAmbLiq">NULL</span></div>
+        <div class="kpi-box kpi-dt-amb" title="T líquido − T ambiente. Positivo = el líquido está más caliente que el ambiente; negativo = está más frío."><span class="label">ΔT Líq − Amb</span><span class="value" id="kpiDTLiqAmb">NULL</span></div>
       </div>
 
       <div id="confiabilidadDiagnostico" style="margin-top:4px;">
@@ -940,30 +909,30 @@
         <div class="ph-medida">
           <span class="label">Presión de la prueba (PSI man.)</span>
           <select id="phCanalPresion" onchange="guardarPH()">
-            <option value="psuct">P. Succión</option>
-            <option value="pdesc">P. Descarga</option>
+            <option value="psuct">P1 Succión</option>
+            <option value="pdesc">P2 Descarga</option>
           </select>
           <span class="valor" id="phValPres">---.- PSI</span>
         </div>
         <div class="ph-medida">
           <span class="label">Temperatura interna (recinto)</span>
           <select id="phCanalTInt" onchange="guardarPH()">
-            <option value="tamb">T. Ambiente</option>
-            <option value="tsuct">T. Succión Comp.</option>
-            <option value="tdesc">T. Descarga</option>
-            <option value="tliq">T. Líquido</option>
-            <option value="tevap" selected>T. Salida Evap</option>
+            <option value="tamb">T5 Ambiente</option>
+            <option value="tsuct">T1 Succión</option>
+            <option value="tdesc">T3 Descarga</option>
+            <option value="tliq">T4 Líquido</option>
+            <option value="tevap" selected>T2 Evaporador</option>
           </select>
           <span class="valor" id="phValTInt">---.- °C</span>
         </div>
         <div class="ph-medida">
           <span class="label">Temperatura externa (ambiente)</span>
           <select id="phCanalTExt" onchange="guardarPH()">
-            <option value="tamb" selected>T. Ambiente</option>
-            <option value="tsuct">T. Succión Comp.</option>
-            <option value="tdesc">T. Descarga</option>
-            <option value="tliq">T. Líquido</option>
-            <option value="tevap">T. Salida Evap</option>
+            <option value="tamb" selected>T5 Ambiente</option>
+            <option value="tsuct">T1 Succión</option>
+            <option value="tdesc">T3 Descarga</option>
+            <option value="tliq">T4 Líquido</option>
+            <option value="tevap">T2 Evaporador</option>
           </select>
           <span class="valor" id="phValTExt">---.- °C</span>
         </div>
@@ -1191,6 +1160,297 @@
       }
     };
 
+    /* ==================== LUBRICANTES Y LÍMITES TÉCNICOS ==================== */
+    /*
+     * El sistema de alarmas NO usa umbrales escritos a mano: cada límite sale
+     * del refrigerante, de la aplicación (LBP/MBP/HBP/CBP) y de los lubricantes
+     * compatibles. Cuando un refrigerante admite varios aceites se adopta el
+     * MÁS RESTRICTIVO, porque no se puede garantizar en campo cuál se cargó.
+     * Así el motor nunca promete un margen que el aceite real no tiene.
+     */
+    const LUBRICANTES = {
+      MO:  { nombre: 'Mineral (MO)',        tDescMax: 130, nota: 'El aceite mineral se oxida y forma barnices por encima de ~130 °C.' },
+      AB:  { nombre: 'Alquilbenceno (AB)',  tDescMax: 130, nota: 'El alquilbenceno mantiene buena estabilidad térmica hasta ~130 °C.' },
+      POE: { nombre: 'Poliéster (POE)',     tDescMax: 120, nota: 'El POE hidroliza con humedad y se degrada por encima de ~120 °C.' },
+      PAG: { nombre: 'PAG',                 tDescMax: 120, nota: 'El PAG es muy sensible a la humedad; su límite práctico es ~120 °C.' },
+      PVE: { nombre: 'PVE',                 tDescMax: 125, nota: 'El PVE mantiene estabilidad térmica hasta ~125 °C.' }
+    };
+
+    /* Aceites compatibles por refrigerante (el primero es el habitual). */
+    const ACEITES_REFRIGERANTE = {
+      R134a: ['PAG', 'POE'],
+      R22:   ['MO', 'AB', 'POE'],
+      R404A: ['POE'],
+      R507A: ['POE'],
+      R410A: ['POE'],
+      R32:   ['POE'],
+      R290:  ['MO'],
+      R600a: ['MO'],
+      R717:  ['MO'],
+      R744:  ['PAG', 'POE'],
+      R407C: ['POE'],
+      R407F: ['POE'],
+      R448A: ['POE'],
+      R449A: ['POE'],
+      R422D: ['MO', 'AB', 'POE'],
+      R427A: ['POE'],
+      R438A: ['MO', 'AB', 'POE'],
+      R513A: ['POE']
+    };
+
+    const FAMILIA_REFRIGERANTE = {
+      R134a: 'HFC', R22: 'HCFC', R404A: 'HFC', R507A: 'HFC', R410A: 'HFC',
+      R32: 'HFC', R290: 'HC', R600a: 'HC', R717: 'Natural (NH₃)', R744: 'Natural (CO₂)',
+      R407C: 'HFC', R407F: 'HFC', R448A: 'HFO', R449A: 'HFO',
+      R422D: 'HFC', R427A: 'HFC', R438A: 'HFC', R513A: 'HFO'
+    };
+
+    /*
+     * Construye los límites aplicables. Devuelve también el aceite que fija el
+     * límite para poder explicarlo en el diagnóstico, en lugar de mostrar un
+     * número sin origen.
+     */
+    function limitesTecnicos(refKey, refData, appKey) {
+      const claves = ACEITES_REFRIGERANTE[refKey] || ['POE'];
+      const aceites = claves.map(k => Object.assign({ clave: k }, LUBRICANTES[k] || LUBRICANTES.POE));
+      /* Aceite más restrictivo: límite conservador válido para cualquiera de
+         los lubricantes compatibles. */
+      const aceite = aceites.reduce((a, b) => (a.tDescMax <= b.tDescMax ? a : b), aceites[0]);
+
+      const tCrit = (refData.dome && refData.dome.length)
+        ? refData.dome[refData.dome.length - 1].tSat : null;
+
+      /* Descarga: manda el más restrictivo entre refrigerante y aceite. */
+      const tDescMax = Math.min(refData.tDescMax, aceite.tDescMax);
+
+      /* Condensación: techo práctico de 65 °C y siempre 5 K por debajo de la
+         temperatura crítica. En CO₂ se usa 40 °C (zona transcrítica aparte). */
+      const tCondMax = (refKey === 'R744') ? 40
+        : (Number.isFinite(tCrit) ? Math.min(65, tCrit - 5) : 65);
+
+      const app = MODOS_EVAP[appKey] || MODOS_EVAP.MBP;
+      return {
+        refKey: refKey,
+        familia: FAMILIA_REFRIGERANTE[refKey] || '—',
+        aceites: aceites,
+        aceite: aceite,
+        tCrit: tCrit,
+        tDescMax: tDescMax,
+        tCondMax: tCondMax,
+        appKey: appKey,
+        app: app,
+        shMin: refData.shOptimo[0],
+        shMax: refData.shOptimo[1],
+        scMin: refData.scOptimo[0],
+        scMax: refData.scOptimo[1],
+        rPMax: refData.rPMax
+      };
+    }
+
+    /*
+     * EVALUADOR DE ALARMAS TÉCNICAS
+     * Devuelve un mapa { casillero: {nivel, texto, detalle} } que el módulo del
+     * monitor pinta en los casilleros. Está "blindado" por tres compuertas:
+     *   1. Sin lectura fresca no se evalúa (datos congelados = pausa).
+     *   2. Sin las dos presiones no se evalúa el ciclo (dato ausente = pausa).
+     *   3. Con ΔP < 0.5 bar se considera equipo detenido (presiones igualadas).
+     * Las explicaciones completas las aporta el motor de diagnóstico, que usa
+     * exactamente los mismos límites; aquí solo se decide qué casillero marca.
+     */
+    function evaluarAlarmasTecnicas(c) {
+      const alarmas = {};
+      const filas = [];
+      const lim = c.limites;
+      const app = lim.app;
+      const refData = c.refData;
+      const fin = Number.isFinite;
+
+      const uT = '°' + tUnitActual;
+      const fT = v => convertirTemp(v).toFixed(1) + ' ' + uT;
+      const fS = v => convertirTemp(v).toFixed(1) + ' ' + uT;
+
+      const escapar = txt => String(txt)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+      const filaInfo = (icono, titulo, texto) => {
+        filas.push('<tr class="diag-info"><td class="diag-status">' + icono +
+          '</td><td class="diag-title">' + escapar(titulo) +
+          '</td><td class="diag-text">' + escapar(texto) + '</td></tr>');
+      };
+
+      /* Mantiene la alarma más grave de cada casillero; el texto es corto para
+         que quepa en la línea de estado, el detalle va en el título flotante. */
+      const marcar = (slot, nivel, texto, detalle) => {
+        const prev = alarmas[slot];
+        if (!prev || (prev.nivel === 'aviso' && nivel === 'critica')) {
+          alarmas[slot] = { nivel: nivel, texto: texto, detalle: detalle };
+        }
+      };
+
+      /* Límites aplicados: siempre visibles, incluso con el equipo parado. */
+      const listaAceites = lim.aceites.map(a => a.nombre).join(' / ');
+      /* Solo se habla de "límite conservador" si el aceite elegido es
+         realmente más restrictivo que otro compatible. */
+      const hayDiferencia = lim.aceites.some(a => a.tDescMax > lim.aceite.tDescMax);
+      const notaAceite = hayDiferencia
+        ? ' · límite conservador ' + lim.aceite.clave : '';
+      filaInfo('⚙', 'Límites técnicos aplicados',
+        refData.nombre + ' · ' + lim.familia + ' · aceite ' + listaAceites + notaAceite + ' · ' +
+        app.label + '. Descarga ≤ ' + fT(lim.tDescMax) + ' · condensación ≤ ' + fT(lim.tCondMax) +
+        ' · evaporación ' + convertirTemp(app.tMin).toFixed(0) + ' a ' +
+        convertirTemp(app.tMax).toFixed(0) + ' °' + tUnitActual +
+        ' · SH ' + lim.shMin + '–' + lim.shMax + ' K · SC ' + lim.scMin + '–' + lim.scMax + ' K.');
+
+      /* Compuerta 1: frescura de la lectura. */
+      const puedeAlarmar = (typeof window.__monitorPuedeAlarmar === 'function')
+        ? window.__monitorPuedeAlarmar() : true;
+      if (!puedeAlarmar) {
+        return { alarmas: alarmas, enMarcha: null, pausa: true, filas: filas, limites: lim };
+      }
+
+      const pS = c.pSuctBarAbs, pD = c.pDescBarAbs;
+      const ambas = fin(pS) && fin(pD) && pS > 0 && pD > 0;
+      const enMarcha = ambas ? ((pD - pS) >= 0.5) : null;
+
+      /* Compuerta 2: sin las dos presiones no hay ciclo que evaluar. */
+      if (!ambas) {
+        filaInfo('⏸', 'Alarmas en pausa',
+          'Falta la lectura de una o de ambas presiones. Sin las dos presiones no se puede validar el ciclo ni el sobrecalentamiento; no se genera ninguna alarma para evitar falsos positivos.');
+        return { alarmas: alarmas, enMarcha: enMarcha, pausa: true, filas: filas, limites: lim };
+      }
+
+      /* Presiones invertidas: problema de medición, no de ciclo. La tolerancia
+         de 0.5 bar evita marcar como fallo la igualación normal al detenerse. */
+      if (pD < pS - 0.5) {
+        marcar('pdesc', 'critica', 'P. descarga < P. succión',
+          'La presión absoluta de descarga es menor que la de succión. Revise manómetros, unidades y puntos de toma.');
+      }
+
+      /* Compuerta 3: equipo detenido (ΔP < 0.5 bar) → ciclo en pausa. */
+      if (!enMarcha) {
+        filaInfo('⏸', 'Equipo detenido — alarmas de ciclo en pausa',
+          'ΔP ' + (pD - pS).toFixed(2) + ' bar (< 0.5 bar): las presiones están igualadas o el compresor no está funcionando. ' +
+          'Se mantiene la alarma de medición si existe, pero no se generan alarmas de temperatura, sobrecalentamiento ni condensación.');
+        return { alarmas: alarmas, enMarcha: false, pausa: true, filas: filas, limites: lim };
+      }
+
+      /* ------------------------------ DESCARGA ----------------------------- */
+      if (fin(c.tDescRealC)) {
+        if (c.tDescRealC > lim.tDescMax) {
+          marcar('tdesc', 'critica',
+            fS(c.tDescRealC) + ' > ' + fS(lim.tDescMax),
+            'Temperatura de descarga ' + fT(c.tDescRealC) + ' por encima del máximo técnico de ' +
+            fT(lim.tDescMax) + ' (' + refData.nombre + ' · ' + lim.aceite.nombre +
+            '). Riesgo de degradación del aceite, barnices y carbonización de válvulas.');
+        } else if (c.tDescRealC > lim.tDescMax - 10) {
+          marcar('tdesc', 'aviso',
+            fS(c.tDescRealC) + ' cerca de ' + fS(lim.tDescMax),
+            'Temperatura de descarga ' + fT(c.tDescRealC) + ', a menos de 10 K del máximo de ' +
+            fT(lim.tDescMax) + '. Vigile carga, condensador y ventilación.');
+        }
+      }
+
+      /* Condensación: la presión se interpreta como su temperatura de saturación. */
+      if (fin(c.tSatCondBubble)) {
+        if (c.tSatCondBubble > lim.tCondMax) {
+          marcar('pdesc', 'critica',
+            'Tsat ' + fS(c.tSatCondBubble) + ' > ' + fS(lim.tCondMax),
+            'La presión de descarga equivale a ' + fT(c.tSatCondBubble) + ' de condensación, por encima del máximo de ' +
+            fT(lim.tCondMax) + '. Alta condensación: pérdida de capacidad y esfuerzo del compresor.');
+        } else if (c.tSatCondBubble > lim.tCondMax - 5) {
+          marcar('pdesc', 'aviso',
+            'Tsat ' + fS(c.tSatCondBubble) + ' cerca de ' + fS(lim.tCondMax),
+            'Condensación ' + fT(c.tSatCondBubble) + ', a menos de 5 K del máximo de ' + fT(lim.tCondMax) +
+            '. Revise limpieza y flujo del condensador.');
+        }
+      }
+      if (fin(c.rPK) && c.rPK > lim.rPMax) {
+        marcar('pdesc', 'aviso',
+          'Relación de presión ' + c.rPK.toFixed(2) + ' > ' + lim.rPMax,
+          'Relación de presión ' + c.rPK.toFixed(2) + ' por encima de la referencia ' + lim.rPMax +
+          '. Indica mayor esfuerzo del compresor; no confirma por sí solo una falla.');
+      }
+
+      /* ----------------------------- EVAPORACIÓN --------------------------- */
+      if (fin(c.tSatEvapDew)) {
+        const excesoBajo = app.tMin - c.tSatEvapDew;
+        const excesoAlto = c.tSatEvapDew - app.tMax;
+        const exceso = Math.max(excesoBajo, excesoAlto);
+        if (exceso > 5) {
+          marcar('psuct', 'critica',
+            'Tsat ' + fS(c.tSatEvapDew) + ' fuera de ' + app.tMin + '…' + app.tMax + ' ' + uT,
+            'Evaporación ' + fT(c.tSatEvapDew) + ', más de 5 K fuera del rango ' + app.label +
+            ' (' + app.tMin + ' a ' + app.tMax + ' °C). Riesgo de congelación, baja capacidad o compresor inadecuado.');
+        } else if (exceso > 0) {
+          marcar('psuct', 'aviso',
+            'Tsat ' + fS(c.tSatEvapDew) + ' fuera de rango',
+            'Evaporación ' + fT(c.tSatEvapDew) + ' fuera del rango orientativo de la aplicación ' + app.label +
+            ' (' + app.tMin + ' a ' + app.tMax + ' °C). Verifique la clasificación del compresor.');
+        }
+      }
+
+      /* Sobrecalentamiento total: retorno de líquido / evaporador estrecho. */
+      if (fin(c.shTotalK)) {
+        if (c.shTotalK < 2) {
+          marcar('tsuct', 'critica',
+            'SH total ' + c.shTotalK.toFixed(1) + ' K < 2 K',
+            'Sobrecalentamiento total de ' + c.shTotalK.toFixed(1) + ' K: riesgo de retorno de líquido al compresor. ' +
+            'Verifique sobrealimentación, sensor de succión y aislamiento de la línea.');
+        } else if (c.shTotalK < lim.shMin) {
+          marcar('tsuct', 'aviso',
+            'SH total ' + c.shTotalK.toFixed(1) + ' K < ' + lim.shMin + ' K',
+            'Sobrecalentamiento total de ' + c.shTotalK.toFixed(1) + ' K, por debajo de ' + lim.shMin +
+            ' K. Vigile posible arrastre de líquido.');
+        } else if (c.shTotalK > lim.shMax + 10) {
+          marcar('tsuct', 'aviso',
+            'SH total ' + c.shTotalK.toFixed(1) + ' K muy alto',
+            'Sobrecalentamiento total de ' + c.shTotalK.toFixed(1) + ' K, muy por encima de ' + lim.shMax +
+            ' K. Compatible con evaporador subalimentado o baja carga térmica.');
+        }
+      }
+
+      /* Sobrecalentamiento útil: líquido a la salida del evaporador. */
+      if (fin(c.shUtilK)) {
+        if (c.shUtilK < lim.shMin) {
+          /* Mismo nivel que el motor de diagnóstico: SH útil bajo es crítico. */
+          const muyBajo = c.shUtilK < 1;
+          marcar('tevap', 'critica',
+            'SH útil ' + c.shUtilK.toFixed(1) + ' K < ' + lim.shMin + ' K',
+            'Sobrecalentamiento útil de ' + c.shUtilK.toFixed(1) + ' K, por debajo de ' + lim.shMin + ' K. ' +
+            (muyBajo ? 'Puede haber líquido a la salida del evaporador. ' : 'Riesgo de retorno de líquido. ') +
+            'Confirme la ubicación del sensor y el control de expansión.');
+        } else if (c.shUtilK > lim.shMax + 10) {
+          marcar('tevap', 'aviso',
+            'SH útil ' + c.shUtilK.toFixed(1) + ' K muy alto',
+            'Sobrecalentamiento útil de ' + c.shUtilK.toFixed(1) + ' K, muy por encima de ' + lim.shMax +
+            ' K. Evaporador subalimentado o baja carga térmica.');
+        }
+      }
+
+      /* Subenfriamiento: gas flash en la línea de líquido. */
+      if (fin(c.scK)) {
+        if (c.scK <= 0) {
+          marcar('tliq', 'critica',
+            'SC ' + c.scK.toFixed(1) + ' K ≤ 0 K',
+            'Sin subenfriamiento: el líquido puede llegar al dispositivo de expansión con gas flash. ' +
+            'Verifique carga, condensador y temperatura del líquido.');
+        } else if (c.scK < lim.scMin) {
+          marcar('tliq', 'aviso',
+            'SC ' + c.scK.toFixed(1) + ' K < ' + lim.scMin + ' K',
+            'Subenfriamiento de ' + c.scK.toFixed(1) + ' K, por debajo de ' + lim.scMin +
+            ' K. Revise carga y rechazo de calor del condensador.');
+        } else if (c.scK > lim.scMax + 8) {
+          marcar('tliq', 'aviso',
+            'SC ' + c.scK.toFixed(1) + ' K muy alto',
+            'Subenfriamiento de ' + c.scK.toFixed(1) + ' K, muy por encima de ' + lim.scMax +
+            ' K. Compatible con exceso de carga o condensador inundado.');
+        }
+      }
+
+      return { alarmas: alarmas, enMarcha: enMarcha, pausa: false, filas: filas, limites: lim };
+    }
+
     function actualizarReloj() {
       const ahora = new Date();
       const opciones = { 
@@ -1230,12 +1490,13 @@
     }
 
     function actualizarEtiquetas() {
-      document.getElementById('lblPSuct').innerText = `P. Succión (${pUnits[pUnitActual].label})`;
-      document.getElementById('lblPDesc').innerText = `P. Descarga (${pUnits[pUnitActual].label})`;
-      document.getElementById('lblTEvapOut').innerText = `T. Salida Evap (°${tUnitActual})`;
-      document.getElementById('lblTSuct').innerText = `T. Succión Comp. (°${tUnitActual})`;
-      document.getElementById('lblTLiq').innerText = `T. Líquido (°${tUnitActual})`;
-      document.getElementById('lblTDescReal').innerText = `T. Descarga (°${tUnitActual})`;
+      document.getElementById('lblPSuct').innerText = `P1 Succión (${pUnits[pUnitActual].label})`;
+      document.getElementById('lblPDesc').innerText = `P2 Descarga (${pUnits[pUnitActual].label})`;
+      document.getElementById('lblTEvapOut').innerText = `T2 Evaporador (°${tUnitActual})`;
+      document.getElementById('lblTSuct').innerText = `T1 Succión (°${tUnitActual})`;
+      document.getElementById('lblTLiq').innerText = `T4 Líquido (°${tUnitActual})`;
+      document.getElementById('lblTDescReal').innerText = `T3 Descarga (°${tUnitActual})`;
+      document.getElementById('lblTAmb').innerText = `T5 Ambiente (°${tUnitActual})`;
     }
 
     function cambiarUnidades() {
@@ -1331,8 +1592,6 @@
         tSuct: document.getElementById('tSuct').value,
         tLiq: document.getElementById('tLiq').value,
         tDescReal: document.getElementById('tDescReal').value,
-        vVolt: document.getElementById('vVolt').value,
-        iAmp: document.getElementById('iAmp').value,
       };
       localStorage.setItem('mollier_app_report_data', JSON.stringify(data));
     }
@@ -1365,8 +1624,6 @@
           if (data.tSuct !== undefined) document.getElementById('tSuct').value = data.tSuct;
           if (data.tLiq !== undefined) document.getElementById('tLiq').value = data.tLiq;
           if (data.tDescReal !== undefined) document.getElementById('tDescReal').value = data.tDescReal;
-          if (data.vVolt !== undefined) document.getElementById('vVolt').value = data.vVolt;
-          if (data.iAmp !== undefined) document.getElementById('iAmp').value = data.iAmp;
 
           pUnitActual = document.getElementById('pUnitSelect').value;
           tUnitActual = document.getElementById('tUnitSelect').value;
@@ -1583,7 +1840,7 @@
      */
     function evaluarDiagnostico(refData, rP, tDescRealC, tLiqC, tSatCondC,
       SHUtil, SHTotal, SC, dischargeSuperHeatK, tempAmbienteC,
-      pSuctBarAbs, pDescBarAbs, tEvapSatRef, expansionKey) {
+      pSuctBarAbs, pDescBarAbs, tEvapSatRef, expansionKey, limites, enMarcha, lecturaFresca) {
 
       const alertas = [];
       let alarmaTDesc = false;
@@ -1600,13 +1857,19 @@
       const shMax = refData.shOptimo[1];
       const scMin = refData.scOptimo[0];
       const scMax = refData.scOptimo[1];
+      /* Límites efectivos: refrigerante + aplicación + lubricante. */
+      const lim = limites || null;
+      const tDescMax = (lim && finite(lim.tDescMax)) ? lim.tDescMax : refData.tDescMax;
+      const aceiteTxt = (lim && lim.aceite) ? lim.aceite.nombre : 'lubricante de referencia';
+      const cicloActivo = (enMarcha === true);
 
       const modo = MODOS_EVAP[modoEvapActual] || MODOS_EVAP.MBP;
 
       const expansion = TIPOS_EXPANSION[expansionKey] || TIPOS_EXPANSION.TXV;
 
       // La expansión cambia la interpretación diagnóstica, no los estados termodinámicos medidos.
-      if (expansionKey === 'TXV' || expansionKey === 'EEV') {
+      // Con el equipo detenido o sin presiones, SH/SC no describen el ciclo: no se evalúan.
+      if (cicloActivo && (expansionKey === 'TXV' || expansionKey === 'EEV')) {
         if (finite(SHUtil)) {
           if (SHUtil < shMin) {
             score -= 6;
@@ -1651,31 +1914,66 @@
         alertas.push(`🔴 <b>DATOS INSUFICIENTES:</b> No es posible validar correctamente las relaciones de presión.`);
       }
 
-      if (pDescBarAbs <= pSuctBarAbs) {
+      /* Presiones invertidas: solo si la descarga es claramente menor que la
+         succión. Con el equipo detenido ambas quedan igualadas y una diferencia
+         de ruido (< 0.5 bar) NO es una incoherencia. */
+      if (lecturaFresca !== false && finite(pSuctBarAbs) && finite(pDescBarAbs) && pDescBarAbs < pSuctBarAbs - 0.5) {
         score -= 35;
-        alertas.push(`🔴 <b>INCONSISTENCIA DE MEDICIÓN:</b> La presión absoluta de descarga no supera a la de succión. Verifique manómetros, unidades y puntos de toma.`);
+        alertas.push(`🔴 <b>INCONSISTENCIA DE MEDICIÓN:</b> La presión absoluta de descarga es menor que la de succión. Verifique manómetros, unidades y puntos de toma.`);
+      }
+
+      /*
+       * BLINDAJE DEL DIAGNÓSTICO
+       * Con el equipo detenido (ΔP < 0.5 bar) o sin las dos presiones, las
+       * relaciones del ciclo no tienen significado físico: SH, SC, relación de
+       * presión y rango de aplicación darían falsas alarmas. Se explica la
+       * pausa y se devuelve un diagnóstico sin alertas de ciclo.
+       */
+      if (!cicloActivo) {
+        const motivo = (lecturaFresca === false)
+          ? 'La última lectura del equipo está congelada o no es reciente. Con datos viejos no se generan alarmas de ciclo; el aviso superior indica la antigüedad y la pausa.'
+          : (enMarcha === false)
+            ? 'Las presiones de descarga y succión están igualadas (ΔP < 0.5 bar): el compresor no está funcionando o el equipo está detenido. No se generan alarmas de temperatura, sobrecalentamiento, subenfriamiento ni condensación.'
+            : 'Falta la lectura de una o de ambas presiones. Sin las dos presiones no se pueden validar el ciclo ni sus temperaturas asociadas; no se generan alarmas para evitar falsos positivos.';
+        alertas.push(`🔵 <b>DIAGNÓSTICO DE CICLO EN PAUSA:</b> ${motivo} <span style="color:#93c5fd;">Los límites técnicos aplicados se muestran igualmente arriba. Al reanudar el equipo con presiones válidas, el diagnóstico se recalcula solo.</span>`);
+        score = Math.min(score, 70);
+        return { alertas, alarmaTDesc: false, alarmaTLiq: false, confiabilidad: Math.max(0, Math.min(100, Math.round(score))) };
       }
 
       // Clasificación de aplicación: compara la evaporación real con el modo elegido.
       // No modifica la termodinámica medida; modifica la referencia diagnóstica.
       if (finite(tEvapSatRef)) {
         if (tEvapSatRef < modo.tMin || tEvapSatRef > modo.tMax) {
-          score -= 10;
-          alertas.push(`🟠 <b>APLICACIÓN ${modoEvapActual}:</b> T. evaporación de referencia ${tEvapSatRef.toFixed(1)} °C está fuera del rango orientativo ${modo.tMin} a ${modo.tMax} °C. <span style="color:#fcd34d;">Verifique que la clasificación del compresor coincida con su ficha técnica.</span>`);
+          const exceso = (tEvapSatRef < modo.tMin)
+            ? (modo.tMin - tEvapSatRef) : (tEvapSatRef - modo.tMax);
+          const critico = exceso > 5;
+          score -= critico ? 14 : 10;
+          alertas.push(`${critico ? '🔴' : '🟠'} <b>APLICACIÓN ${modoEvapActual}${critico ? ' — FUERA DE RANGO' : ''}:</b> T. evaporación de referencia ${tEvapSatRef.toFixed(1)} °C está ${exceso.toFixed(1)} K fuera del rango orientativo ${modo.tMin} a ${modo.tMax} °C. <span style="color:${critico ? '#fca5a5' : '#fcd34d'};">Verifique que la clasificación del compresor coincida con su ficha técnica; una desviación mayor de 5 K es una condición de alarma.</span>`);
         } else {
           evidencias.push(`Aplicación ${modoEvapActual}: T. evaporación ${tEvapSatRef.toFixed(1)} °C dentro del rango orientativo ${modo.tMin} a ${modo.tMax} °C.`);
         }
       }
 
-      // Temperatura de descarga: condición crítica real, pero no atribución automática.
-      if (finite(tDescRealC) && tDescRealC > refData.tDescMax) {
+      // Temperatura de descarga: límite efectivo (refrigerante + aceite).
+      if (finite(tDescRealC) && tDescRealC > tDescMax) {
         alarmaTDesc = true;
         score -= 18;
-        evidencias.push(`Temperatura de descarga ${tDescRealC.toFixed(1)} °C por encima del límite de referencia de ${refData.tDescMax} °C.`);
-        alertas.push(`🔴 <b>CONDICIÓN CRÍTICA — T. DESCARGA:</b> ${tDescRealC.toFixed(1)} °C supera ${refData.tDescMax} °C. <span style="color:#fca5a5;">Indica una condición térmica de riesgo; la causa debe verificarse.</span>`);
-      } else if (finite(tDescRealC) && tDescRealC > refData.tDescMax - 10) {
+        evidencias.push(`Temperatura de descarga ${tDescRealC.toFixed(1)} °C por encima del máximo técnico de ${tDescMax} °C.`);
+        alertas.push(`🔴 <b>CONDICIÓN CRÍTICA — T. DESCARGA:</b> ${tDescRealC.toFixed(1)} °C supera el máximo técnico de ${tDescMax.toFixed(0)} °C (${refData.nombre} · ${aceiteTxt}). <span style="color:#fca5a5;">Por encima de ese límite el aceite se degrada y puede carbonizar válvulas y conductos. Verifique carga, condensador, ventilación y el sensor de descarga.</span>`);
+      } else if (finite(tDescRealC) && tDescRealC > tDescMax - 10) {
         score -= 4;
-        alertas.push(`🟠 <b>VIGILAR T. DESCARGA:</b> ${tDescRealC.toFixed(1)} °C está próxima al límite de referencia (${refData.tDescMax} °C).`);
+        alertas.push(`🟠 <b>VIGILAR T. DESCARGA:</b> ${tDescRealC.toFixed(1)} °C está a menos de 10 K del máximo técnico de ${tDescMax.toFixed(0)} °C (${refData.nombre} · ${aceiteTxt}).`);
+      }
+
+      // Alta condensación: la presión de descarga se interpreta como Tsat.
+      if (lim && finite(tSatCondC) && finite(lim.tCondMax)) {
+        if (tSatCondC > lim.tCondMax) {
+          score -= 15;
+          alertas.push(`🔴 <b>ALTA CONDENSACIÓN:</b> la presión de descarga equivale a ${tSatCondC.toFixed(1)} °C de saturación, por encima del máximo de ${lim.tCondMax.toFixed(0)} °C (${refData.nombre}). <span style="color:#fca5a5;">Riesgo de alta presión, aceite degradado y pérdida de capacidad. Verifique limpieza y flujo del condensador, ventiladores, recirculación de aire y temperatura ambiente.</span>`);
+        } else if (tSatCondC > lim.tCondMax - 5) {
+          score -= 5;
+          alertas.push(`🟠 <b>CONDENSACIÓN ALTA:</b> Tsat ${tSatCondC.toFixed(1)} °C, a menos de 5 K del máximo de ${lim.tCondMax.toFixed(0)} °C. <span style="color:#fcd34d;">Vigile el rechazo de calor del condensador antes de que la presión siga subiendo.</span>`);
+        }
       }
 
       // Líquido / flash gas.
@@ -1737,12 +2035,21 @@
         }
       }
 
-      // SH total y descarga: corroboración / contradicción.
+      // SH total: retorno de líquido en un extremo, evaporador estrecho en el otro.
       if (finite(SHTotal)) {
-        if (SHTotal > shMax) {
+        if (SHTotal < 2) {
+          score -= 14;
+          alertas.push(`🔴 <b>RETORNO DE LÍQUIDO — SH TOTAL BAJO:</b> ${SHTotal.toFixed(1)} K < 2 K. <span style="color:#fca5a5;">El refrigerante puede llegar líquido al compresor y diluir el aceite. Verifique sobrealimentación, sensor de succión y aislamiento de la línea.</span>`);
+        } else if (SHTotal < shMin) {
+          score -= 6;
+          alertas.push(`🟠 <b>SH TOTAL BAJO:</b> ${SHTotal.toFixed(1)} K < ${shMin} K. <span style="color:#fcd34d;">Vigile posible arrastre de líquido hacia el compresor.</span>`);
+        } else if (SHTotal > shMax + 10) {
+          score -= 5;
+          alertas.push(`🟠 <b>SH TOTAL MUY ALTO:</b> ${SHTotal.toFixed(1)} K > ${shMax + 10} K. <span style="color:#fcd34d;">Compatible con evaporador subalimentado, baja carga térmica o fuga; no confirma la causa por sí solo.</span>`);
+        } else if (SHTotal > shMax) {
           score -= 5;
           evidencias.push(`SH total ${SHTotal.toFixed(1)} K elevado.`);
-        } else if (SHTotal >= shMin && SHTotal <= shMax) {
+        } else {
           evidencias.push(`SH total ${SHTotal.toFixed(1)} K dentro del rango de referencia.`);
         }
       }
@@ -1888,13 +2195,19 @@
       const tLiqC      = aCelsius(tLiqVal);
       const tDescRealC = aCelsius(tDescVal);
 
-      const vVolt = valorDe('vVolt');
-      const iAmp = valorDe('iAmp');
-      // Potencia eléctrica estimada con el factor 0.90 de la versión base.
-      // Sin voltaje o sin amperaje no se inventa un consumo.
-      const pKw = (vVolt !== null && iAmp !== null) ? (vVolt * iAmp * 0.9) / 1000.0 : null;
-
       prepareRefrigerant(refData);
+
+      /* Límites técnicos y estado del equipo. ΔP < 0.5 bar = presiones
+         igualadas: el compresor no está trabajando. Se usa para blindar el
+         diagnóstico y las alarmas de ciclo. */
+      const limites = limitesTecnicos(refKey, refData, modoEvapActual);
+      const ambasPresiones = Number.isFinite(pSuctBarAbs) && Number.isFinite(pDescBarAbs);
+      const lecturaFresca = (typeof window.__monitorPuedeAlarmar === 'function')
+        ? window.__monitorPuedeAlarmar() : true;
+      /* Con lectura congelada no se evalúa el ciclo, aunque las presiones
+         existan: los valores son viejos y las alarmas deben quedar en pausa. */
+      const enMarcha = (ambasPresiones && lecturaFresca)
+        ? ((pDescBarAbs - pSuctBarAbs) >= 0.5) : null;
 
       const propEvap = (pSuctBarAbs !== null) ? getPropAtP(refData, pSuctBarAbs) : null;
       const propCond = (pDescBarAbs !== null) ? getPropAtP(refData, pDescBarAbs) : null;
@@ -1909,6 +2222,23 @@
       const tSatCondDew = propCond
         ? (Number.isFinite(propCond.tDew) ? propCond.tDew : propCond.tSat)
         : null;
+
+      /* Temperatura de saturación bajo cada presión (tabla P–T del motor).
+         Es la referencia que explica la alarma de presión: Tsat evap/cond. */
+      const tsatPSuct = document.getElementById('tsatPsuct');
+      if (tsatPSuct) {
+        tsatPSuct.innerHTML = (tSatEvapDew !== null)
+          ? 'Tsat <b>' + convertirTemp(tSatEvapDew).toFixed(1) + ' °' + tUnitActual + '</b>'
+          : 'Tsat <b>--.-</b>';
+        tsatPSuct.title = 'Temperatura de saturación a la presión de succión (tabla P–T de ' + refData.nombre + ').';
+      }
+      const tsatPDesc = document.getElementById('tsatPdesc');
+      if (tsatPDesc) {
+        tsatPDesc.innerHTML = (tSatCondBubble !== null)
+          ? 'Tsat <b>' + convertirTemp(tSatCondBubble).toFixed(1) + ' °' + tUnitActual + '</b>'
+          : 'Tsat <b>--.-</b>';
+        tsatPDesc.title = 'Temperatura de saturación a la presión de descarga (tabla P–T de ' + refData.nombre + ').';
+      }
 
       /* Cada sobrecalentamiento/subenfriamiento exige SU propia temperatura.
          Si falta la sonda correspondiente el resultado es null (se muestra
@@ -1928,13 +2258,13 @@
       /* ΔT de diagnóstico entre sondas (no son sobrecalentamientos):
          · descarga − líquido: cuánto enfría el condensador la línea de líquido.
          · succión − salida evap: calor ganado en la línea de succión.
-         · ambiente − líquido: calor retirado en el condensador. */
+         · líquido − ambiente: cuánto está el líquido por encima del ambiente. */
       const dtDescLiq = (tDescRealC !== null && tLiqC !== null)
         ? tDescRealC - tLiqC : null;
       const dtSuccEvap = (tSuctC !== null && tEvapOutC !== null)
         ? tSuctC - tEvapOutC : null;
-      const dtAmbLiq = (tLiqC !== null && Number.isFinite(tempAmbientePuntoFijoC))
-        ? tempAmbientePuntoFijoC - tLiqC : null;
+      const dtLiqAmb = (tLiqC !== null && Number.isFinite(tempAmbientePuntoFijoC))
+        ? tLiqC - tempAmbientePuntoFijoC : null;
 
       /* Relación de presión: la usa el motor de diagnóstico. */
       const rP = (pDescBarAbs !== null && pSuctBarAbs !== null && pSuctBarAbs > 0)
@@ -1951,20 +2281,41 @@
       const kpiSHDescargaEl = document.getElementById('kpiSHDescarga');
       if (kpiSHDescargaEl) kpiSHDescargaEl.innerText = valorKPI(dischargeSuperHeatK, 1, ' K');
       document.getElementById('kpiSC').innerText = valorKPI(subCoolK, 1, ' K');
-      document.getElementById('kpiKW').innerText = valorKPI(pKw, 2, ' kW');
       document.getElementById('kpiDeltaAmb').innerText = valorKPI(deltaTCondAmb, 1, ' K');
       const kpiDTDescLiq = document.getElementById('kpiDTDescLiq');
       if (kpiDTDescLiq) kpiDTDescLiq.innerText = valorKPI(dtDescLiq, 1, ' K');
       const kpiDTSuccEvap = document.getElementById('kpiDTSuccEvap');
       if (kpiDTSuccEvap) kpiDTSuccEvap.innerText = valorKPI(dtSuccEvap, 1, ' K');
-      const kpiDTAmbLiq = document.getElementById('kpiDTAmbLiq');
-      if (kpiDTAmbLiq) kpiDTAmbLiq.innerText = valorKPI(dtAmbLiq, 1, ' K');
+      const kpiDTLiqAmb = document.getElementById('kpiDTLiqAmb');
+      if (kpiDTLiqAmb) kpiDTLiqAmb.innerText = valorKPI(dtLiqAmb, 1, ' K');
 
       const { alertas, alarmaTDesc, alarmaTLiq, confiabilidad } = evaluarDiagnostico(
         refData, rP, tDescRealC, tLiqC, tSatCondBubble, superHeatUtilK, superHeatTotalK, subCoolK, dischargeSuperHeatK, tempAmbientePuntoFijoC,
-        pSuctBarAbs, pDescBarAbs, tSatEvapDew, expansionActual
+        pSuctBarAbs, pDescBarAbs, tSatEvapDew, expansionActual, limites, enMarcha, lecturaFresca
       );
-      
+
+      /* Alarmas técnicas por casillero: se publican para que el módulo del
+         monitor las pinte. No dependen de umbrales manuales. */
+      const evaluacionAlarmas = evaluarAlarmasTecnicas({
+        refData: refData,
+        limites: limites,
+        pSuctBarAbs: pSuctBarAbs,
+        pDescBarAbs: pDescBarAbs,
+        tSatEvapDew: tSatEvapDew,
+        tSatCondBubble: tSatCondBubble,
+        tDescRealC: tDescRealC,
+        tLiqC: tLiqC,
+        tSuctC: tSuctC,
+        tEvapOutC: tEvapOutC,
+        shUtilK: superHeatUtilK,
+        shTotalK: superHeatTotalK,
+        scK: subCoolK,
+        rPK: rP,
+        tempAmbienteC: tempAmbientePuntoFijoC
+      });
+      window.__monitorAlarmas = evaluacionAlarmas.alarmas;
+      window.__monitorLimites = evaluacionAlarmas.limites;
+
       const grpDesc = document.getElementById('grpTDescReal');
       const grpLiq = document.getElementById('grpTLiq');
       const panelAlertas = document.getElementById('panelAlertas');
@@ -1991,12 +2342,22 @@
         const titleMatch = contenido.match(/^<b>(.*?)<\/b>\s*:?\s*/);
         let title = titleMatch ? titleMatch[1].replace(/:$/,'') : 'Diagnóstico';
         let detalle = titleMatch ? contenido.slice(titleMatch[0].length) : contenido;
-        return `<tr class="${extraClass}"><td class="diag-status">${icon}</td><td class="diag-title">${title}</td><td class="diag-text">${detalle}</td></tr>`;
+        /* Las alertas críticas se pintan como fila de alarma y las de aviso en
+           ámbar, para que el motivo de la alarma del casillero se encuentre de
+           inmediato en el diagnóstico. */
+        let clase = extraClass;
+        if (!clase) {
+          if (raw.startsWith('🔴')) clase = 'diag-alarma';
+          else if (raw.startsWith('🟠')) clase = 'diag-aviso';
+        }
+        return `<tr class="${clase}"><td class="diag-status">${icon}</td><td class="diag-title">${title}</td><td class="diag-text">${detalle}</td></tr>`;
       };
 
       const filas = [];
       filas.push(`<tr class="diag-info"><td class="diag-status">⚙</td><td class="diag-title">Expansión</td><td class="diag-text">${TIPOS_EXPANSION[expansionActual]?.label || expansionActual} · ${TIPOS_EXPANSION[expansionActual]?.desc || ''}</td></tr>`);
-      filas.push(`<tr class="diag-info"><td class="diag-status">⚙</td><td class="diag-title">Aplicación</td><td class="diag-text">${modoTexto} · referencia ${MODOS_EVAP[modoEvapActual]?.tMin ?? '—'} a ${MODOS_EVAP[modoEvapActual]?.tMax ?? '—'} °C</td></tr>`);
+      const appRef = MODOS_EVAP[modoEvapActual] || MODOS_EVAP.MBP;
+      filas.push(`<tr class="diag-info"><td class="diag-status">⚙</td><td class="diag-title">Aplicación</td><td class="diag-text">${modoTexto} · referencia ${convertirTemp(appRef.tMin).toFixed(0)} a ${convertirTemp(appRef.tMax).toFixed(0)} °${tUnitActual}</td></tr>`);
+      evaluacionAlarmas.filas.forEach(f => filas.push(f));
       alertas.forEach(a => {
         let cls = '';
         if (String(a).includes('DATOS EN CONFLICTO')) cls = 'diag-conflict';
@@ -2019,6 +2380,11 @@
       panelAlertas.innerHTML = `<div class="diag-table-wrap"><table class="diag-table"><thead><tr><th class="diag-status">Est.</th><th>Indicador</th><th>Resultado / interpretación</th></tr></thead><tbody>${filas.join('')}</tbody></table></div>`;
       actualizarBarraConfiabilidad(confiabilidad);
 
+      /* El mapa de alarmas acaba de cambiar: repintar los casilleros sin
+         esperar al siguiente ciclo de sondeo. */
+      if (typeof window.__monitorRefrescarAlarmas === 'function') {
+        try { window.__monitorRefrescarAlarmas(); } catch (e) { console.warn('No se pudieron repintar las alarmas:', e); }
+      }
     }
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -2113,17 +2479,18 @@
    * Cada casillero lee UN canal y lo publica en el motor. "varMotor" es el id
    * del casillero del motor de Mollier que se alimenta con ese valor.
    * "tipo" decide qué canales admite su selector (temp o presion).
+   * No hay umbrales manuales: las alarmas las calcula el motor técnico del
+   * script 1 según refrigerante, aplicación y lubricante, y se publican en
+   * window.__monitorAlarmas.
    */
   const SLOTS = [
-    { id: 'psuct', tipo: 'pres', etiqueta: 'P. Succión',        varMotor: 'pSuct',     alarma: 'max', umbral: 120 },
-    { id: 'tsuct', tipo: 'temp', etiqueta: 'T. Succión Comp.',  varMotor: 'tSuct',     alarma: 'max', umbral: 25 },
-    { id: 'pdesc', tipo: 'pres', etiqueta: 'P. Descarga',       varMotor: 'pDesc',     alarma: 'max', umbral: 350 },
-    { id: 'tdesc', tipo: 'temp', etiqueta: 'T. Descarga',       varMotor: 'tDescReal', alarma: 'max', umbral: 100 },
-    /* Los tres casilleros de la caja de temperaturas son solo de lectura: sin
-       alarma y sin mín/máx, para que la caja quede compacta y alineada. */
-    { id: 'tevap', tipo: 'temp', etiqueta: 'T. Salida Evap',    varMotor: 'tEvapOut',  sinAlarma: true },
-    { id: 'tliq',  tipo: 'temp', etiqueta: 'T. Líquido',        varMotor: 'tLiq',      sinAlarma: true },
-    { id: 'tamb',  tipo: 'temp', etiqueta: 'T. Ambiente',       varMotor: null,        sinAlarma: true }
+    { id: 'psuct', tipo: 'pres', etiqueta: 'P. Succión',        varMotor: 'pSuct' },
+    { id: 'tsuct', tipo: 'temp', etiqueta: 'T. Succión Comp.',  varMotor: 'tSuct' },
+    { id: 'pdesc', tipo: 'pres', etiqueta: 'P. Descarga',       varMotor: 'pDesc' },
+    { id: 'tdesc', tipo: 'temp', etiqueta: 'T. Descarga',       varMotor: 'tDescReal' },
+    { id: 'tevap', tipo: 'temp', etiqueta: 'T. Salida Evap',    varMotor: 'tEvapOut' },
+    { id: 'tliq',  tipo: 'temp', etiqueta: 'T. Líquido',        varMotor: 'tLiq' },
+    { id: 'tamb',  tipo: 'temp', etiqueta: 'T. Ambiente',       varMotor: null }
   ];
   const SLOT_POR_ID = {};
   SLOTS.forEach(s => { SLOT_POR_ID[s.id] = s; });
@@ -2141,7 +2508,6 @@
   /* Se conservan los nombres que ya usaba la app del termómetro para no perder
      la referencia de hermeticidad ni la ventana elegida. */
   const K_MODO        = 'work-mode';
-  const K_ALARMAD     = 'alarmDeltaMin-input';
   const K_VENTANA_MIN = 'refrig_ventana_min';
   const K_PESO1       = 'ph-s1-weight';
   const K_DIAG_VISIBLE = 'refrig_diag_visible';
@@ -2150,9 +2516,10 @@
   const K_MED_PH      = 'pressure-measurements';
   const K_TEMA        = 'refrig_tema';
   const K_SENSOR_P    = 'refrig_sensor_p';
-  const K_ASIGNACION  = 'refrig_asignacion_sondas_v2';
-  const K_UMBRALES    = 'refrig_umbrales_slots';
-  const K_ALARMAS     = 'refrig_alarmas_slots';
+  /* v3: asignación con los nombres/canales oficiales del ESP32. La v2 queda
+     solo como respaldo para migrar equipos que ya tenían la app instalada. */
+  const K_ASIGNACION        = 'refrig_asignacion_sondas_v3';
+  const K_ASIGNACION_LEGACY = 'refrig_asignacion_sondas_v2';
 
   /* --------------------------------- ESTADO ------------------------------- */
   const $ = id => document.getElementById(id);
@@ -2179,28 +2546,25 @@
   const sensorAbsoluto = false;
 
   /* Asignación sonda -> casillero (persistida) */
+  /* La versión anterior guardaba temp4 en "salida evaporador" y temp2 en
+     "líquido". Ese mapa cruzado se corrige una sola vez al migrar a v3. */
+  function esAsignacionCruzadaVieja(a) {
+    return !!a && a.tsuct === 'temp1' && a.tevap === 'temp4' &&
+           a.tdesc === 'temp3' && a.tliq === 'temp2' && a.tamb === 'temp5';
+  }
   let asignacion = {};
   SLOTS.forEach(s => { asignacion[s.id] = ASIGNACION_INICIAL[s.id] || ''; });
   try {
-    const guardada = JSON.parse(localStorage.getItem(K_ASIGNACION) || 'null');
+    let guardada = JSON.parse(localStorage.getItem(K_ASIGNACION) || 'null');
+    if (!guardada) guardada = JSON.parse(localStorage.getItem(K_ASIGNACION_LEGACY) || 'null');
+    if (esAsignacionCruzadaVieja(guardada)) guardada = Object.assign({}, ASIGNACION_INICIAL);
     if (guardada && typeof guardada === 'object') {
       SLOTS.forEach(s => {
         if (typeof guardada[s.id] === 'string') asignacion[s.id] = guardada[s.id];
       });
     }
+    localStorage.setItem(K_ASIGNACION, JSON.stringify(asignacion));
   } catch (e) {}
-
-  /* Umbrales de alarma (en unidad canónica: °C y PSI) y series visibles */
-  const umbrales = {};
-  SLOTS.forEach(s => { umbrales[s.id] = s.umbral; });
-  try {
-    const u = JSON.parse(localStorage.getItem(K_UMBRALES) || 'null');
-    if (u && typeof u === 'object') {
-      SLOTS.forEach(s => { if (Number.isFinite(Number(u[s.id]))) umbrales[s.id] = Number(u[s.id]); });
-    }
-  } catch (e) {}
-
-  let umbralDT = 3;
 
   /* Hermeticidad */
   let pesoEvap = parseInt(localStorage.getItem(K_PESO1), 10);
@@ -2285,10 +2649,22 @@
     const n = parseInt(m[2], 10);
     return (m[1] === 'temp') ? canalTemp(fila, n) : canalPres(fila, n);
   }
+  /* Nombres oficiales del firmware del ESP32. Se usan en los selectores y en
+     los diagnósticos para que no se confunda "Sonda 2" con el canal temp2. */
+  const NOMBRES_CANAL = {
+    pres1: 'P1 Succión',
+    pres2: 'P2 Descarga',
+    temp1: 'T1 Succión',
+    temp2: 'T2 Evaporador',
+    temp3: 'T3 Descarga',
+    temp4: 'T4 Líquido',
+    temp5: 'T5 Ambiente'
+  };
   function etiquetaDeCanal(canal) {
+    if (NOMBRES_CANAL[canal]) return NOMBRES_CANAL[canal];
     const m = /^(temp|pres)(\d+)$/.exec(canal || '');
     if (!m) return 'manual';
-    return (m[1] === 'temp' ? 'Sonda ' : 'Presión ') + m[2];
+    return (m[1] === 'temp' ? 'T' : 'P') + m[2];
   }
   /* Canales que existen para un tipo, según lo que haya mandado el equipo */
   function canalesDeTipo(tipo) {
@@ -2454,8 +2830,27 @@
     actualizarTodoElMonitor();
   };
 
-  /* Valores en unidad canónica: temperatura en °C, presión en PSI manométricos */
+  /* Valores en unidad canónica: temperatura en °C, presión en PSI manométricos.
+     Si el casillero no tiene sonda asignada, el valor sale del campo manual del
+     motor: así el número y la alarma siempre corresponden al mismo dato. */
   function valorSlotActual(slotId) {
+    const s = SLOT_POR_ID[slotId];
+    if (!s) return null;
+    if (!asignacion[slotId] && s.varMotor) {
+      const el = document.getElementById(s.varMotor);
+      if (el) {
+        const txt = String(el.value).replace(',', '.').trim();
+        if (txt !== '') {
+          const n = parseFloat(txt);
+          if (Number.isFinite(n)) {
+            return (s.tipo === 'pres')
+              ? presionDeMotor(n)
+              : (tUnitActual === 'F' ? (n - 32) * 5 / 9 : n);
+          }
+        }
+      }
+      return null;
+    }
     return ultimaVista ? valorSlotDeFila(ultimaVista, slotId) : null;
   }
   function aUnidadSlot(s, canonico) {
@@ -2472,72 +2867,72 @@
   function unidadSlot(s) {
     return (s.tipo === 'pres') ? pUnits[pUnitActual].label : ('°' + tUnitActual);
   }
-  function estadisticasSlot(slotId) {
-    const s = SLOT_POR_ID[slotId];
-    let min = null, max = null;
-    if (!s) return { min: null, max: null };
-    ventanaProcesada.forEach(f => {
-      const v = valorSlotDeFila(f, slotId);
-      if (v === null) return;
-      if (min === null || v < min) min = v;
-      if (max === null || v > max) max = v;
-    });
-    return { min: min, max: max };
-  }
+  /*
+   * Devuelve la alarma técnica del casillero publicada por el motor, o null.
+   * Con datos congelados no se pinta ninguna alarma (el aviso superior ya
+   * explica la pausa); así nunca queda una alarma vieja parpadeando.
+   */
   function alarmaDeSlot(slotId) {
     const s = SLOT_POR_ID[slotId];
-    const fila = ultimaVista;
-    if (!s || s.sinAlarma) return false;
-    if (!enVivo || !fila || !datosFrescos(fila)) return false;
-    const v = valorSlotDeFila(fila, slotId);
-    const u = umbrales[slotId];
-    if (v === null || !Number.isFinite(u)) return false;
-    return (s.alarma === 'max') ? (v >= u) : (v <= u);
+    if (!s) return null;
+    /* Misma compuerta que usa el motor: frescura de la lectura o presiones
+       manuales. Así casillero y diagnóstico nunca se contradicen. */
+    if (typeof window.__monitorPuedeAlarmar === 'function' && !window.__monitorPuedeAlarmar()) return null;
+    const mapa = window.__monitorAlarmas;
+    const a = mapa && mapa[slotId];
+    return (a && a.nivel) ? a : null;
   }
 
   function pintarSlot(slotId) {
     const s = SLOT_POR_ID[slotId];
     if (!s) return;
     const canonico = valorSlotActual(slotId);
-    const activa = alarmaDeSlot(slotId);
-    const st = estadisticasSlot(slotId);
+    const alarma = alarmaDeSlot(slotId);
+    const activa = !!alarma && alarma.nivel === 'critica';
+    const aviso = !!alarma && alarma.nivel === 'aviso';
 
     poner('val' + cap(slotId), formatearSlot(s, canonico));
     poner('uni' + cap(slotId), unidadSlot(s));
-    poner('min' + cap(slotId), st.min !== null ? formatearSlot(s, st.min) : '--.-');
-    poner('max' + cap(slotId), st.max !== null ? formatearSlot(s, st.max) : '--.-');
-
-    const inpAl = $('alarma' + cap(slotId));
-    if (inpAl && document.activeElement !== inpAl) inpAl.value = formatearSlot(s, umbrales[s.id]);
 
     const cont = $('slot' + cap(slotId));
     if (cont) {
       cont.classList.toggle('sin-sonda', !asignacion[slotId]);
       cont.classList.toggle('alarma', activa);
+      cont.classList.toggle('aviso', aviso);
     }
     const msg = $('estado' + cap(slotId));
     if (msg) {
       const nombre = asignacion[slotId] ? etiquetaDeCanal(asignacion[slotId]) : 'entrada manual';
-      if (!asignacion[slotId]) msg.textContent = 'Entrada manual';
-      else if (canonico === null) msg.textContent = 'Sin datos de la ' + nombre;
-      else if (activa) msg.textContent = '¡ALARMA! ' + formatearSlot(s, canonico) + ' ' + unidadSlot(s) +
-                                          ' ≥ ' + formatearSlot(s, umbrales[s.id]) + ' ' + unidadSlot(s);
-      else msg.textContent = nombre + ' · ' + ((ultimaVista && datosFrescos(ultimaVista)) ? 'en vivo' : 'atrasada');
+      if (alarma) {
+        msg.textContent = (activa ? '⚠ ' : 'Vigilar: ') + alarma.texto;
+        msg.title = alarma.detalle || alarma.texto;
+      } else {
+        if (!asignacion[slotId]) msg.textContent = 'Entrada manual';
+        else if (canonico === null) msg.textContent = 'Sin datos de la ' + nombre;
+        else msg.textContent = nombre + ' · ' + ((ultimaVista && datosFrescos(ultimaVista)) ? 'en vivo' : 'atrasada');
+        msg.title = '';
+      }
       msg.classList.toggle('alarma', activa);
+      msg.classList.toggle('aviso', aviso);
     }
   }
 
-  window.guardarAlarmaSlot = function (slotId) {
-    const s = SLOT_POR_ID[slotId];
-    const el = $('alarma' + cap(slotId));
-    if (!s || !el) return;
-    const v = aNumero(el.value);
-    if (v === null) return;
-    umbrales[s.id] = (s.tipo === 'pres') ? presionDeMotor(v)
-                   : (tUnitActual === 'F' ? (v - 32) * 5 / 9 : v);
-    guardarJSON(K_UMBRALES, umbrales);
-    pintarSlot(slotId);
-    actualizarFilasMonitorEnTabla();
+  /*
+   * Compuerta de frescura que consulta el motor antes de evaluar alarmas:
+   *   · Presiones manuales (sin sonda asignada): se permite evaluar lo escrito.
+   *   · Presiones por sonda: solo con una lectura dentro de la ventana de
+   *     frescura; con datos congelados no se alarma.
+   */
+  window.__monitorPuedeAlarmar = function () {
+    const manual = !asignacion['psuct'] && !asignacion['pdesc'];
+    if (manual) return true;
+    return !!(ultimaVista && datosFrescos(ultimaVista));
+  };
+
+  /* Repinta casilleros y resumen cuando el motor publica un mapa nuevo. */
+  window.__monitorRefrescarAlarmas = function () {
+    SLOTS.forEach(s => pintarSlot(s.id));
+    actualizarResumenCajas();
   };
 
   /* ------------------- ALIMENTAR EL MOTOR DE DIAGNÓSTICO ------------------ */
@@ -2876,12 +3271,14 @@
 
   /* ------------------------------- ALARMAS -------------------------------- */
   function evaluarAlarmas() {
-    let nueva = false;
+    /* Solo las alarmas críticas hacen vibrar; los avisos son informativos.
+       El borde de cada caja lo marca actualizarResumenCajas(). */
+    let criticas = 0;
     SLOTS.forEach(s => {
-      const activa = alarmaDeSlot(s.id);
-      if (activa) nueva = true;
+      const a = alarmaDeSlot(s.id);
+      if (a && a.nivel === 'critica') criticas++;
     });
-    /* El borde de cada caja lo marca actualizarResumenCajas() */
+    const nueva = criticas > 0;
     if (nueva && !alarmaActiva) vibrar(600);
     alarmaActiva = nueva;
   }
@@ -2909,15 +3306,8 @@
                       ' (umbral ' + Math.round(EDAD_MAX_ESP32_MS / 1000) + ' s). Alarmas en pausa.'
                     : 'Todavía no llegó ninguna lectura del ESP32.', true));
     }
-    SLOTS.forEach(s => {
-      if (!alarmaDeSlot(s.id)) return;
-      const unidad = unidadSlot(s);
-      filas.push(filaDiagHtml('🔴', 'Alarma ' + s.etiqueta,
-        'Lectura ' + formatearSlot(s, valorSlotActual(s.id)) + ' ' + unidad +
-        ' ≥ umbral ' + formatearSlot(s, umbrales[s.id]) + ' ' + unidad +
-        ' <span style="color:#fca5a5;">(sonda: ' + escaparHtml(etiquetaDeCanal(asignacion[s.id])) +
-        '). Verifique el punto de medición antes de concluir.</span>', true));
-    });
+    /* Las alarmas técnicas (con su motivo y su límite) las añade el motor de
+       diagnóstico del script 1; aquí no se duplican. */
     if (fresco) {
       const pct = ultimaAbsoluta ? ultimaAbsoluta.bateria : null;
       const v = ultimaAbsoluta ? ultimaAbsoluta.bateriaVolt : null;
@@ -2972,6 +3362,13 @@
     const tbody = document.querySelector('#panelAlertas tbody');
     if (!tbody) return;
     tbody.querySelectorAll('tr.diag-monitor, tr.diag-monitor-alarma').forEach(tr => tr.remove());
+    /* Con datos congelados, las alarmas técnicas del último cálculo ya no son
+       válidas: se retiran. Vuelven solas cuando el motor recalcula con datos
+       frescos. Se usa la misma compuerta que los casilleros para que el modo
+       manual (presiones sin sonda) no pierda sus explicaciones. */
+    if (typeof window.__monitorPuedeAlarmar === 'function' && !window.__monitorPuedeAlarmar()) {
+      tbody.querySelectorAll('tr.diag-alarma, tr.diag-aviso').forEach(tr => tr.remove());
+    }
     const html = filasDiagnosticoMonitor().join('');
     if (html) tbody.insertAdjacentHTML('beforeend', html);
   }
@@ -2996,6 +3393,10 @@
        dispara alarmas: solo se muestra. */
     const deRespaldo = (!ultima && ultimaAbsoluta) ? ultimaAbsoluta : null;
     ultima = ultima || deRespaldo;
+    /* ¿La lectura anterior estaba congelada? Sirve para forzar un recálculo
+       cuando vuelve a llegar datos frescos, aunque los valores no cambien: así
+       reaparecen las filas de alarma que se retiraron durante la pausa. */
+    const anteriorCongelada = !!(ultimaVista && enVivo && !datosFrescos(ultimaVista));
     ultimaVista = ultima;
 
     /* Casilleros */
@@ -3029,7 +3430,12 @@
     actualizarResumenCajas();
 
     evaluarAlarmas();
-    alimentarMotor();
+    const cambioMotor = alimentarMotor();
+    /* Si la lectura venía congelada y ahora es fresca, recalcular aunque los
+       números coincidan: restaura el mapa de alarmas y sus filas de diagnóstico. */
+    if (anteriorCongelada && ultima && datosFrescos(ultima) && !cambioMotor) {
+      try { guardarYActualizar(); } catch (e) { console.warn('No se pudo recalcular al volver datos frescos:', e); }
+    }
     registrarMedidaAutomaticaPH();
     actualizarPanelPH();
     actualizarFilasMonitorEnTabla();
@@ -3047,19 +3453,28 @@
     CAJAS.forEach(caja => {
       const el = $('caja' + caja.id);
       if (!el) return;
-      let conDatos = 0, enAlarma = 0;
+      let conDatos = 0, criticas = 0, avisos = 0;
       caja.slots.forEach(id => {
         if (valorSlotActual(id) !== null) conDatos++;
-        if (alarmaDeSlot(id)) enAlarma++;
+        const a = alarmaDeSlot(id);
+        if (a) {
+          if (a.nivel === 'critica') criticas++;
+          else avisos++;
+        }
       });
       const badge = $('estadoCaja' + caja.id);
       if (badge) {
-        badge.textContent = enAlarma ? ('¡' + enAlarma + ' en alarma!')
-                          : (conDatos ? (conDatos + '/' + caja.slots.length + ' en vivo') : 'esperando');
-        badge.className = 'badge ' + (enAlarma ? 'badge-off' : (conDatos ? 'badge-ok' : 'badge-warn'));
+        badge.textContent = criticas
+          ? ('¡' + criticas + ' en alarma!')
+          : (avisos
+            ? (avisos + ' aviso' + (avisos === 1 ? '' : 's'))
+            : (conDatos ? (conDatos + '/' + caja.slots.length + ' en vivo') : 'esperando'));
+        badge.className = 'badge ' + (criticas ? 'badge-off'
+          : (avisos ? 'badge-warn' : (conDatos ? 'badge-ok' : 'badge-warn')));
       }
-      /* El borde de la caja también avisa cuando alguno de sus casilleros alarma */
-      el.classList.toggle('con-alarma', enAlarma > 0);
+      /* El borde de la caja solo se marca en rojo con alarmas críticas; los
+         avisos quedan en el badge ámbar para no alarmar de más. */
+      el.classList.toggle('con-alarma', criticas > 0);
     });
   }
 
@@ -3612,6 +4027,9 @@
     setInterval(sondearUltima, INTERVALO_SONDEO_MS);
     setInterval(() => {
       actualizarBadgeConexion();
+      /* Repintar los estados: si la lectura envejece, las alarmas desaparecen
+         de los casilleros aunque no llegue una lectura nueva. */
+      SLOTS.forEach(s => pintarSlot(s.id));
       evaluarAlarmas();
       actualizarFilasMonitorEnTabla();
       pintarBannerSistema();

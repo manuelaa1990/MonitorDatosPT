@@ -181,6 +181,7 @@
 
   const VENTANAS_MIN = [10, 30, 60, 120, 240, 480, 1440];
   const PASO_TICK_MIN = { 10: 2, 30: 5, 60: 15, 120: 30, 240: 60, 480: 120, 1440: 180 };
+  const SUAVIZADO_PRESION_MS = 5 * 60 * 1000;   // promedio móvil de 5 min
 
   /* Mismos canales y mismos alias que la página principal */
   const ALIAS_TEMP = [
@@ -192,19 +193,35 @@
     ['presion_descarga','presionDescarga','presion2','pres2','p_descarga','pDescarga','p2','presion_alta']
   ];
   const ASIGNACION_INICIAL = { psuct:'pres1', pdesc:'pres2', tsuct:'temp1', tevap:'temp2', tdesc:'temp3', tliq:'temp4', tamb:'temp5' };
+  const K_ASIGNACION        = 'refrig_asignacion_sondas_v3';
+  const K_ASIGNACION_LEGACY = 'refrig_asignacion_sondas_v2';
 
+  /* Orden pedido: P1 · T1 · P2 · T4 · T2 · T3 · T5. Los nombres T1..T5 son
+     los del firmware del ESP32; "Salida Evap" se conserva como referencia. */
   const SERIES = [
-    { id:'tsuct', etiqueta:'T. Succión',     color:'#f87171', eje:'y',  varSlot:'tsuct' },
-    { id:'tdesc', etiqueta:'T. Descarga',    color:'#fb923c', eje:'y',  varSlot:'tdesc' },
-    { id:'tliq',  etiqueta:'T. Líquido',     color:'#34d399', eje:'y',  varSlot:'tliq'  },
-    { id:'tevap', etiqueta:'T. Salida Evap', color:'#38bdf8', eje:'y',  varSlot:'tevap' },
-    { id:'tamb',  etiqueta:'T. Ambiente',    color:'#a78bfa', eje:'y',  varSlot:'tamb'  },
-    { id:'dt',    etiqueta:'ΔT',             color:'#fbbf24', eje:'y' },
-    { id:'psuct', etiqueta:'P. Succión',     color:'#818cf8', eje:'y2', varSlot:'psuct', presion:true },
-    { id:'pdesc', etiqueta:'P. Descarga',    color:'#f472b6', eje:'y2', varSlot:'pdesc', presion:true },
-    { id:'phe',   etiqueta:'P.H. esperada',  color:'#22d3ee', eje:'y2', presion:true },
-    { id:'phm',   etiqueta:'P.H. medida',    color:'#a7f3d0', eje:'y2', presion:true, soloPuntos:true }
+    { id:'psuct', etiqueta:'P1 Succión',     color:'#818cf8', eje:'y2', varSlot:'psuct', presion:true, suavizar:true },
+    { id:'tsuct', etiqueta:'T1 Succión',     color:'#f87171', eje:'y',  varSlot:'tsuct' },
+    { id:'pdesc', etiqueta:'P2 Descarga',    color:'#f472b6', eje:'y3', varSlot:'pdesc', presion:true, suavizar:true },
+    { id:'tliq',  etiqueta:'T4 Líquido',     color:'#34d399', eje:'y6', varSlot:'tliq'  },
+    { id:'tevap', etiqueta:'T2 Salida Evap', color:'#38bdf8', eje:'y4', varSlot:'tevap' },
+    { id:'tdesc', etiqueta:'T3 Descarga',    color:'#fb923c', eje:'y5', varSlot:'tdesc' },
+    { id:'tamb',  etiqueta:'T5 Ambiente',    color:'#a78bfa', eje:'y7', varSlot:'tamb'  },
+    { id:'phe',   etiqueta:'P.H. esperada',  color:'#22d3ee', eje:'y3', presion:true },
+    { id:'phm',   etiqueta:'P.H. medida',    color:'#a7f3d0', eje:'y3', presion:true, soloPuntos:true }
   ];
+
+  /* Cada temperatura tiene su propia escala. El eje "y" queda para T1 y los
+     demás usan y4..y7. */
+  const EJES_TEMP = [
+    { id:'tsuct', eje:'y',  minSpan:2   },
+    { id:'tliq',  eje:'y6', minSpan:1.5 },
+    { id:'tevap', eje:'y4', minSpan:1.5 },
+    { id:'tdesc', eje:'y5', minSpan:5   },
+    { id:'tamb',  eje:'y7', minSpan:2   }
+  ].map(d => ({
+    ...d,
+    color: (SERIES.find(s => s.id === d.id) || {}).color || '#64748b'
+  }));
 
   /* ============================================================
      ESTADO
@@ -220,8 +237,15 @@
   let seriesVisibles = {};
   SERIES.forEach(s => { seriesVisibles[s.id] = ['tsuct','tdesc','tevap'].indexOf(s.id) >= 0; });
 
+  /* La v2 guardó intercambiados temp4 (evaporador) y temp2 (líquido). */
+  function esAsignacionCruzadaVieja(a) {
+    return !!a && a.tsuct === 'temp1' && a.tevap === 'temp4' &&
+           a.tdesc === 'temp3' && a.tliq === 'temp2' && a.tamb === 'temp5';
+  }
   try {
-    const a = JSON.parse(localStorage.getItem('refrig_asignacion_sondas_v2') || 'null');
+    let a = JSON.parse(localStorage.getItem(K_ASIGNACION) || 'null');
+    if (!a) a = JSON.parse(localStorage.getItem(K_ASIGNACION_LEGACY) || 'null');
+    if (esAsignacionCruzadaVieja(a)) a = Object.assign({}, ASIGNACION_INICIAL);
     if (a && typeof a === 'object') Object.keys(ASIGNACION_INICIAL).forEach(k => { if (typeof a[k] === 'string') asignacion[k] = a[k]; });
   } catch (e) {}
   /* El monitor pasa su asignación en la URL: así el líquido/descarga no se
@@ -232,10 +256,11 @@
       const m = JSON.parse(mapaUrl);
       if (m && typeof m === 'object') {
         Object.keys(ASIGNACION_INICIAL).forEach(k => { if (typeof m[k] === 'string') asignacion[k] = m[k]; });
-        localStorage.setItem('refrig_asignacion_sondas_v2', JSON.stringify(asignacion));
       }
     }
   } catch (e) {}
+  if (esAsignacionCruzadaVieja(asignacion)) asignacion = Object.assign({}, ASIGNACION_INICIAL);
+  try { localStorage.setItem(K_ASIGNACION, JSON.stringify(asignacion)); } catch (e) {}
   try {
     const sv = JSON.parse(localStorage.getItem('refrig_series_grafica') || 'null');
     if (sv && typeof sv === 'object') SERIES.forEach(s => { if (typeof sv[s.id] === 'boolean') seriesVisibles[s.id] = sv[s.id]; });
@@ -282,24 +307,55 @@
   }
   function valorSlot(row, slot) { return valorCanal(row, asignacion[slot]); }
 
-  /* Etiqueta con la sonda real: deja ver de un golpe si líquido y descarga
-     están cruzados (p. ej. «T. Líquido · S4»). */
+  /* Etiqueta con la sonda real: si una serie se reasigna a otro canal, se
+     añade el canal oficial para que se vea el cruce (p. ej.
+     «T4 Líquido · T2»). Con la asignación de fábrica queda limpia. */
+  const CANAL_INICIAL_SERIE = {
+    psuct:'pres1', pdesc:'pres2',
+    tsuct:'temp1', tevap:'temp2', tdesc:'temp3', tliq:'temp4', tamb:'temp5'
+  };
   function etiquetaSerie(s) {
-    const canal = s.varSlot ? asignacion[s.varSlot] : null;
-    if (!canal || !/^temp\d+$/.test(canal)) return s.etiqueta;
-    return s.etiqueta + ' · S' + canal.replace('temp', '');
+    if (!s.varSlot) return s.etiqueta;
+    const canal = asignacion[s.varSlot];
+    if (!canal || canal === CANAL_INICIAL_SERIE[s.varSlot]) return s.etiqueta;
+    const m = /^(temp|pres)(\d+)$/.exec(canal);
+    const nombre = m ? ((m[1] === 'temp' ? 'T' : 'P') + m[2]) : canal;
+    return s.etiqueta + ' · ' + nombre;
+  }
+
+  /* Promedio móvil causal para las presiones. Se calcula solamente para
+     dibujar: los valores crudos siguen intactos en Supabase, en el monitor y
+     en el motor de alarmas. Si hay un hueco de datos se reinicia la ventana. */
+  function promedioMovilPresion(puntos, ventanaMs) {
+    const salida = [];
+    let ventana = [];
+    let ultimaX = null;
+    (puntos || []).forEach(p => {
+      const y = (p && p.y !== null && p.y !== undefined && Number.isFinite(p.y)) ? p.y : null;
+      if (!p || !Number.isFinite(p.x) || y === null) {
+        ventana = [];
+        ultimaX = null;
+        salida.push({ x: p ? p.x : null, y: null });
+        return;
+      }
+      if (ultimaX !== null && (p.x - ultimaX) > GAP_MS) ventana = [];
+      ultimaX = p.x;
+      ventana.push({ x: p.x, y: y });
+      const desde = p.x - ventanaMs;
+      while (ventana.length && ventana[0].x < desde) ventana.shift();
+      let suma = 0;
+      for (let i = 0; i < ventana.length; i++) suma += ventana[i].y;
+      salida.push({ x: p.x, y: suma / ventana.length });
+    });
+    return salida;
   }
 
   function procesarFila(row) {
     if (!row) return null;
     const vals = {};
     SERIES.forEach(s => {
-      vals[s.id] = s.varSlot ? valorSlot(row, s.varSlot)
-                : (s.id === 'dt' ? null : null);
+      vals[s.id] = s.varSlot ? valorSlot(row, s.varSlot) : null;
     });
-    const tEvap = valorSlot(row, 'tevap');
-    const tDesc = valorSlot(row, 'tdesc');
-    vals.dt = (tEvap !== null && tDesc !== null) ? Math.abs(tEvap - tDesc) : null;
     vals.created_at = row.created_at;
     vals.bateriaVolt = aNumero(row.bateriaVolt);
     vals.wifi = row.wifi || row.ssid || null;
@@ -543,7 +599,6 @@
     };
     if (s.soloPuntos) { ds.showLine = false; ds.borderWidth = 0; }
     if (s.id === 'phe') ds.borderDash = [6, 4];
-    if (s.id === 'dt') ds.borderDash = [3, 3];
     return ds;
   });
 
@@ -559,21 +614,62 @@
           type: 'time',
           time: { tooltipFormat: 'dd/MM/yyyy, HH:mm:ss',
                   displayFormats: { second: 'HH:mm:ss', minute: 'HH:mm', hour: 'HH:mm', day: 'dd/MM' } },
-          ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, padding: 4 },
-          grid: { display: false, drawBorder: false },
+          ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
           border: { display: false }
         },
         y: {
+          position: 'left',
           grace: '10%',
-          ticks: { color: '#64748b', font: { size: 11 }, padding: 4 },
+          ticks: { color: '#f87171', font: { size: 9 }, padding: 3 },
           grid: { color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
           border: { display: false }
         },
         y2: {
           position: 'right', display: false,
           grace: '10%',
-          ticks: { color: '#818cf8', font: { size: 11 }, padding: 4 },
-          grid: { display: false, drawBorder: false },
+          ticks: { color: '#818cf8', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y3: {
+          position: 'right', display: false,
+          grace: '10%',
+          ticks: { color: '#f472b6', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y4: {
+          position: 'left', display: false,
+          grace: '10%',
+          ticks: { color: '#38bdf8', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y5: {
+          position: 'left', display: false,
+          grace: '10%',
+          ticks: { color: '#fb923c', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y6: {
+          position: 'left', display: false,
+          grace: '10%',
+          ticks: { color: '#34d399', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y7: {
+          position: 'left', display: false,
+          grace: '10%',
+          ticks: { color: '#a78bfa', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
           border: { display: false },
           title: { display: false }
         }
@@ -623,6 +719,25 @@
       }
     });
     return { max: max.y === -Infinity ? null : max, min: min.y === Infinity ? null : min };
+  }
+
+  /* Escala independiente para cada serie. El ancho mínimo evita que un
+     ruido de 0,1 PSI/°C se vea como una montaña rusa. */
+  function escalaSerie(valores, minSpan) {
+    const v = (valores || []).filter(Number.isFinite);
+    if (!v.length) return null;
+    const min = Math.min.apply(null, v);
+    const max = Math.max.apply(null, v);
+    const centro = (min + max) / 2;
+    const ancho = Math.max(max - min, minSpan || 0, Math.abs(centro) * 0.05);
+    const margen = ancho * 0.10;
+    const mitad = Math.max(ancho / 2, (max - min) / 2 + margen);
+    const decimales = Math.abs(centro) >= 50 ? 0 : 1;
+    const factor = Math.pow(10, decimales);
+    return {
+      min: Math.floor((centro - mitad) * factor) / factor,
+      max: Math.ceil((centro + mitad) * factor) / factor
+    };
   }
 
   function renderChart() {
@@ -684,6 +799,12 @@
       });
     }
 
+    /* Suavizado solo visual de P1/P2: promedio móvil de los últimos 5 min.
+       No se aplica a P.H. esperada/medida ni a las temperaturas. */
+    SERIES.forEach(s => {
+      if (s.suavizar) conjuntos[s.id] = promedioMovilPresion(conjuntos[s.id], SUAVIZADO_PRESION_MS);
+    });
+
     SERIES.forEach((s, i) => {
       const ds = tempChart.data.datasets[i];
       ds.data = conjuntos[s.id];
@@ -691,10 +812,12 @@
       ds.borderWidth = s.soloPuntos ? 0 : (seriesVisibles[s.id] ? 2.5 : 0);
     });
 
-    /* Burbujas de máximo y mínimo de las temperaturas visibles */
+    /* Burbujas de máximo y mínimo de las temperaturas y de P1/P2. */
     try {
       const anotaciones = {};
-      const visiblesTemp = SERIES.filter(s => seriesVisibles[s.id] && s.eje === 'y');
+      const seriesConBurbuja = SERIES.filter(s =>
+        seriesVisibles[s.id] && s.id !== 'phe' && s.id !== 'phm'
+      );
       if (!filas.length) {
         const now = Date.now();
         anotaciones.vacio = {
@@ -713,28 +836,47 @@
           return 0;
         };
 
-        visiblesTemp.forEach(s => {
+        seriesConBurbuja.forEach(s => {
           const ext = getExtrema(conjuntos[s.id]);
+          const unidad = s.presion ? ' PSI' : ' °C';
+          /* Las presiones van al lado contrario que las temperaturas para que
+             los cuadritos no se pisen cuando comparten el mismo extremo. */
+          const fuente = s.presion ? { size: 9, weight: 'bold' } : { size: 10, weight: 'bold' };
+          const relleno = s.presion
+            ? { top: 2, bottom: 2, left: 4, right: 4 }
+            : { top: 3, bottom: 3, left: 5, right: 5 };
+          const ladoMax = s.presion ? 'top' : 'bottom';
+          const ladoMin = s.presion ? 'bottom' : 'top';
+          /* Si el extremo cae cerca de un borde, las dos presiones se separan
+             hacia adentro para que P1 y P2 no se tapen entre sí. */
+          const desplazamientoX = base => {
+            if (!s.presion) return 0;
+            if (base > 5) return s.id === 'psuct' ? 0 : 72;
+            if (base < -5) return s.id === 'psuct' ? -72 : 0;
+            return s.id === 'psuct' ? -36 : 36;
+          };
+          const ajusteMax = ext.max ? ajusteBorde(ext.max.x) : 0;
+          const ajusteMin = ext.min ? ajusteBorde(ext.min.x) : 0;
           if (ext.max) {
             anotaciones['max_' + s.id] = {
-              type: 'label', xValue: ext.max.x, yValue: ext.max.y,
-              xAdjust: ajusteBorde(ext.max.x),
-              content: [ext.max.y.toFixed(2) + ' °C'],
+              type: 'label', xValue: ext.max.x, yValue: ext.max.y, yScaleID: s.eje,
+              xAdjust: ajusteMax + desplazamientoX(ajusteMax),
+              content: [ext.max.y.toFixed(2) + unidad],
               backgroundColor: 'rgba(255,255,255,0.95)', borderColor: s.color, borderWidth: 1, borderRadius: 6,
-              color: '#1e293b', font: { size: 10, weight: 'bold' },
-              padding: { top: 3, bottom: 3, left: 5, right: 5 },
-              callout: { display: true, borderColor: s.color, borderWidth: 1, margin: 4, position: 'bottom' }
+              color: '#1e293b', font: fuente,
+              padding: relleno,
+              callout: { display: true, borderColor: s.color, borderWidth: 1, margin: 4, position: ladoMax }
             };
           }
           if (ext.min) {
             anotaciones['min_' + s.id] = {
-              type: 'label', xValue: ext.min.x, yValue: ext.min.y,
-              xAdjust: ajusteBorde(ext.min.x),
-              content: [ext.min.y.toFixed(2) + ' °C'],
+              type: 'label', xValue: ext.min.x, yValue: ext.min.y, yScaleID: s.eje,
+              xAdjust: ajusteMin + desplazamientoX(ajusteMin),
+              content: [ext.min.y.toFixed(2) + unidad],
               backgroundColor: 'rgba(255,255,255,0.95)', borderColor: s.color, borderWidth: 1, borderRadius: 6,
-              color: '#1e293b', font: { size: 10, weight: 'bold' },
-              padding: { top: 3, bottom: 3, left: 5, right: 5 },
-              callout: { display: true, borderColor: s.color, borderWidth: 1, margin: 4, position: 'top' }
+              color: '#1e293b', font: fuente,
+              padding: relleno,
+              callout: { display: true, borderColor: s.color, borderWidth: 1, margin: 4, position: ladoMin }
             };
           }
         });
@@ -749,24 +891,58 @@
       tempChart.options.scales.x.max = fin;
     }
 
-    /* Escala de temperatura: se ajusta a lo visible con un 10 % de margen */
-    const temps = [];
-    SERIES.forEach(s => {
-      if (!seriesVisibles[s.id] || s.eje !== 'y') return;
-      conjuntos[s.id].forEach(p => { if (p.y !== null && Number.isFinite(p.y)) temps.push(p.y); });
+    const valoresEje = eje => {
+      const vals = [];
+      SERIES.forEach(s => {
+        if (!seriesVisibles[s.id] || s.eje !== eje) return;
+        (conjuntos[s.id] || []).forEach(p => {
+          if (p && p.y !== null && Number.isFinite(p.y)) vals.push(p.y);
+        });
+      });
+      return vals;
+    };
+
+    /* Temperaturas: cada una tiene su propia escala. Para no comerse el ancho
+       en pantallas angostas se muestran como máximo 2–5 ejes izquierdos; las
+       series sin eje visible conservan igual su escala y sus burbujas de
+       máximo/mínimo. En pantallas anchas se muestran los cinco. */
+    const anchoGrafica = tempChart.width || window.innerWidth || 800;
+    const maxEjesTemp = anchoGrafica >= 760 ? 5 : (anchoGrafica >= 560 ? 3 : 2);
+    const tempVisibles = EJES_TEMP.filter(d => seriesVisibles[d.id]);
+    const tempConDatos = tempVisibles.filter(d => valoresEje(d.eje).length);
+    /* Si todavía no hay datos, se muestra un solo eje de referencia. */
+    const candidatos = tempConDatos.length ? tempConDatos : tempVisibles.slice(0, 1);
+    const ejesTempVisibles = new Set(candidatos.slice(0, maxEjesTemp).map(d => d.eje));
+    const ejeTempPrimario = candidatos.length ? candidatos[0].eje : null;
+
+    EJES_TEMP.forEach(d => {
+      const sc = tempChart.options.scales[d.eje];
+      const escala = escalaSerie(valoresEje(d.eje), d.minSpan);
+      sc.display = ejesTempVisibles.has(d.eje);
+      sc.grid.display = (d.eje === ejeTempPrimario);
+      sc.min = escala ? escala.min : (d.eje === ejeTempPrimario ? 0 : undefined);
+      sc.max = escala ? escala.max : (d.eje === ejeTempPrimario ? 50 : undefined);
     });
-    if (temps.length) {
-      const tMin = Math.min.apply(null, temps), tMax = Math.max.apply(null, temps);
-      const margen = Math.max(1, (tMax - tMin) * 0.10);
-      tempChart.options.scales.y.min = Math.floor((tMin - margen) / 2) * 2;
-      tempChart.options.scales.y.max = Math.ceil((tMax + margen) / 2) * 2;
-    } else {
-      tempChart.options.scales.y.min = undefined;
-      tempChart.options.scales.y.max = undefined;
+    if (!candidatos.length) {
+      tempChart.options.scales.y.display = false;
+      tempChart.options.scales.y.grid.display = false;
     }
 
-    const hayPresion = SERIES.some(s => seriesVisibles[s.id] && s.eje === 'y2');
-    tempChart.options.scales.y2.display = hayPresion;
+    /* Presiones: P1 en y2 y P2/P.H. en y3. */
+    const hayP1 = SERIES.some(s => seriesVisibles[s.id] && s.eje === 'y2');
+    const hayP2 = SERIES.some(s => seriesVisibles[s.id] && s.eje === 'y3');
+    tempChart.options.scales.y2.display = hayP1;
+    tempChart.options.scales.y3.display = hayP2;
+    /* Los ejes derechos ya reservan su propio ancho; acá solo dejamos un
+       pequeño margen. Antes sobraban decenas de píxeles a la derecha. */
+    tempChart.options.layout.padding.right = (hayP1 || hayP2) ? 14 : 26;
+
+    const escalaP1 = escalaSerie(valoresEje('y2'), 1);
+    const escalaP2 = escalaSerie(valoresEje('y3'), 5);
+    tempChart.options.scales.y2.min = escalaP1 ? escalaP1.min : undefined;
+    tempChart.options.scales.y2.max = escalaP1 ? escalaP1.max : undefined;
+    tempChart.options.scales.y3.min = escalaP2 ? escalaP2.min : undefined;
+    tempChart.options.scales.y3.max = escalaP2 ? escalaP2.max : undefined;
 
     const paso = PASO_TICK_MIN[rangoMin] || 5;
     tempChart.options.scales.x.time.unit = (rangoMin <= 30) ? 'minute' : 'hour';
@@ -981,8 +1157,8 @@
     pintarToggles();
     ajustarPadding();
     updatePortraitHint();
-    window.addEventListener('resize', () => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); });
-    window.addEventListener('orientationchange', () => setTimeout(() => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); }, 300));
+    window.addEventListener('resize', () => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); renderChart(); });
+    window.addEventListener('orientationchange', () => setTimeout(() => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); renderChart(); }, 300));
     document.querySelector('#portrait-hint button')?.addEventListener('click', enterFullscreen);
 
     await loadAllHistory();
