@@ -181,24 +181,6 @@
     details.card[open] > summary::after { content: "▴"; }
     details.card > summary + * { margin-top: 5px; }
 
-    /* Ajuste manual: plegado para que el monitor quede despejado */
-    details.ajuste-manual {
-      margin-top: 7px;
-      border-top: 1px dashed var(--borde);
-      padding-top: 5px;
-    }
-    details.ajuste-manual > summary {
-      cursor: pointer;
-      list-style: none;
-      font-size: .56rem;
-      font-weight: 700;
-      color: var(--sutil);
-    }
-    details.ajuste-manual > summary::-webkit-details-marker { display: none; }
-    details.ajuste-manual > summary::after { content: " ▾"; }
-    details.ajuste-manual[open] > summary::after { content: " ▴"; }
-    details.ajuste-manual > .controls-grid { margin-top: 5px; }
-
     /* --------------------------- Formularios ---------------------------- */
     .prof-grid {
       display: grid;
@@ -243,11 +225,10 @@
     .config-row .input-group-app { flex: 1; min-width: 0; }
     .config-row .input-group-exp { flex: 1.25; min-width: 0; }
     .config-row .input-group-unit { flex: .8; min-width: 0; }
-
-    .controls-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-      gap: 3px;
+    .config-ciclo {
+      margin: 2px 0 7px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--borde);
     }
 
     /* Marca de origen del dato (auto desde sonda / manual) */
@@ -415,18 +396,6 @@
     .diag-table .diag-alarma .diag-title { font-weight: 800; }
     .diag-table .diag-aviso td { background: rgba(245,158,11,.10); color: var(--alerta); }
 
-    /* Campos que el motor marca en condición crítica (T. descarga / T. líquido) */
-    .alarm-field-active {
-      animation: blink-field .8s infinite alternate !important;
-      border-radius: 6px;
-      padding: 2px 4px !important;
-    }
-    .alarm-field-active input { background: #7f1d1d !important; color: #fff !important; border-color: var(--peligro) !important; font-weight: bold; }
-    .alarm-field-active label { color: #fca5a5 !important; font-weight: bold; }
-    @keyframes blink-field {
-      0%   { background-color: rgba(239,68,68,.9);  box-shadow: 0 0 10px rgba(239,68,68,.8); }
-      100% { background-color: rgba(127,29,29,.3);  box-shadow: 0 0 2px rgba(239,68,68,.2); }
-    }
 
     /* --------------------------- Prueba de hermeticidad ---------------- */
     .ph-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 5px; }
@@ -601,7 +570,7 @@
           <span id="estadoSupabase" class="badge badge-warn" title="Estado de la conexión con Supabase">Supabase: verificando…</span>
           <span id="estadoEsp32" class="badge badge-warn" title="Estado del ESP32 según la antigüedad de la última lectura">ESP32: verificando…</span>
         </span>
-        <span class="badge" id="badgeBateria" title="Batería del ESP32">🔋 --%</span>
+        <span class="badge oculto" id="badgeBateria" title="Batería del ESP32"></span>
         <span class="sutil" id="wifiValor" title="Red del ESP32">Wifi: "—"</span>
         <span>📍 Punto Fijo: <span id="txtTempAmb">Cargando...</span></span>
         <button class="btn-mini" id="btnTema" onclick="alternarTema()" title="Alternar tema claro / oscuro">🌙 Claro</button>
@@ -619,7 +588,7 @@
     </div>
 
 <details class="card" id="cardIdentificacion">
-      <summary>Identificación y configuración del ciclo</summary>
+      <summary>Identificación y datos del servicio</summary>
       <div class="prof-grid">
         <div class="input-group">
           <label for="empresaNombre">Empresa</label>
@@ -643,89 +612,6 @@
         </div>
       </div>
 
-      <div class="sutil" style="margin:5px 0 2px;">Configuración del ciclo</div>
-      <div class="config-row">
-        <div class="input-group input-group-ref">
-          <label for="refSelect">Refrigerante</label>
-          <select id="refSelect" onchange="guardarYActualizar()">
-            <optgroup label="Puros y Tradicionales">
-              <option value="R134a">R-134a</option>
-              <option value="R22">R-22</option>
-              <option value="R410A">R-410A</option>
-              <option value="R32">R-32</option>
-              <option value="R717">R-717 (Amoníaco)</option>
-              <option value="R744">R-744 (CO₂)</option>
-            </optgroup>
-            <optgroup label="Hidrocarburos (HC)">
-              <option value="R290">R-290 (Propano)</option>
-              <option value="R600a">R-600a (Isobutano)</option>
-            </optgroup>
-            <optgroup label="Mezclas HFC / HFO de uso frecuente">
-              <option value="R404A" selected>R-404A</option>
-              <option value="R507A">R-507A</option>
-              <option value="R407C">R-407C</option>
-              <option value="R407F">R-407F</option>
-              <option value="R448A">R-448A</option>
-              <option value="R449A">R-449A</option>
-              <option value="R513A">R-513A</option>
-            </optgroup>
-            <optgroup label="Alternativas / reemplazos de R-22">
-              <option value="R422D">R-422D (reemplazo R-22)</option>
-              <option value="R427A">R-427A (reemplazo R-22)</option>
-              <option value="R438A">R-438A (reemplazo R-22)</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <div class="input-group input-group-app">
-          <label for="modoEvapSelect">Aplicación Evap.</label>
-          <select id="modoEvapSelect" onchange="cambiarModoEvaporacion()">
-            <option value="LBP">LBP — Baja</option>
-            <option value="MBP" selected>MBP — Media</option>
-            <option value="HBP">HBP — Alta</option>
-            <option value="CBP">CBP — Comercial</option>
-          </select>
-        </div>
-
-        <div class="input-group input-group-exp">
-          <label for="expansionSelect">Expansión</label>
-          <select id="expansionSelect" onchange="cambiarExpansion()">
-            <optgroup label="Dispositivos de orificio fijo">
-              <option value="CAPILAR">Capilar</option>
-              <option value="ORIFICIO">Orificio fijo</option>
-              <option value="PISTON">Pistón calibrado</option>
-              <option value="SHORT_TUBE">Short-Tube / Restrictor</option>
-            </optgroup>
-            <optgroup label="Válvulas de expansión">
-              <option value="TXV" selected>VET / TXV</option>
-              <option value="AEV">Válvula automática (AEV)</option>
-              <option value="MANUAL">Válvula manual</option>
-              <option value="EEV">Válvula electrónica (EEV)</option>
-            </optgroup>
-            <optgroup label="Control por nivel">
-              <option value="FLOAT_H">Flotador alta presión</option>
-              <option value="FLOAT_L">Flotador baja presión</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <div class="input-group input-group-unit">
-          <label for="pUnitSelect">U. Presión</label>
-          <select id="pUnitSelect" onchange="cambiarUnidades()">
-            <option value="psi" selected>PSI</option>
-            <option value="bar">Bar</option>
-            <option value="kpa">kPa</option>
-          </select>
-        </div>
-
-        <div class="input-group input-group-unit">
-          <label for="tUnitSelect">U. Temp</label>
-          <select id="tUnitSelect" onchange="cambiarUnidades()">
-            <option value="C" selected>°C</option>
-            <option value="F">°F</option>
-          </select>
-        </div>
-      </div>
     </details>
 
     <!-- ========================== MONITOR EN VIVO ============================ -->
@@ -735,6 +621,102 @@
         <span>Mediciones del ciclo</span>
         <span class="h2-acciones"><span class="sutil" id="txtUltimaLectura">Última lectura: —</span></span>
       </h2>
+
+      <div class="config-ciclo">
+        <div class="sutil" style="margin:0 0 2px;">Configuración del ciclo</div>
+        <div class="config-row">
+          <div class="input-group input-group-ref">
+            <label for="refSelect">Refrigerante</label>
+            <select id="refSelect" onchange="guardarYActualizar()">
+              <optgroup label="Puros y Tradicionales">
+                <option value="R134a">R-134a</option>
+                <option value="R22">R-22</option>
+                <option value="R410A">R-410A</option>
+                <option value="R32">R-32</option>
+                <option value="R717">R-717 (Amoníaco)</option>
+                <option value="R744">R-744 (CO₂)</option>
+              </optgroup>
+              <optgroup label="Hidrocarburos (HC)">
+                <option value="R290">R-290 (Propano)</option>
+                <option value="R600a">R-600a (Isobutano)</option>
+              </optgroup>
+              <optgroup label="Mezclas HFC / HFO de uso frecuente">
+                <option value="R404A" selected>R-404A</option>
+                <option value="R507A">R-507A</option>
+                <option value="R407C">R-407C</option>
+                <option value="R407F">R-407F</option>
+                <option value="R448A">R-448A</option>
+                <option value="R449A">R-449A</option>
+                <option value="R513A">R-513A</option>
+              </optgroup>
+              <optgroup label="Alternativas / reemplazos de R-22">
+                <option value="R422D">R-422D (reemplazo R-22)</option>
+                <option value="R427A">R-427A (reemplazo R-22)</option>
+                <option value="R438A">R-438A (reemplazo R-22)</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="input-group input-group-app">
+            <label for="modoEvapSelect">Aplicación Evap.</label>
+            <select id="modoEvapSelect" onchange="cambiarModoEvaporacion()">
+              <option value="LBP">LBP — Baja</option>
+              <option value="MBP" selected>MBP — Media</option>
+              <option value="HBP">HBP — Alta</option>
+              <option value="CBP">CBP — Comercial</option>
+            </select>
+          </div>
+
+          <div class="input-group input-group-exp">
+            <label for="expansionSelect">Capilar / Expansión</label>
+            <select id="expansionSelect" onchange="cambiarExpansion()">
+              <optgroup label="Dispositivos de orificio fijo">
+                <option value="CAPILAR">Capilar</option>
+                <option value="ORIFICIO">Orificio fijo</option>
+                <option value="PISTON">Pistón calibrado</option>
+                <option value="SHORT_TUBE">Short-Tube / Restrictor</option>
+              </optgroup>
+              <optgroup label="Válvulas de expansión">
+                <option value="TXV" selected>VET / TXV</option>
+                <option value="AEV">Válvula automática (AEV)</option>
+                <option value="MANUAL">Válvula manual</option>
+                <option value="EEV">Válvula electrónica (EEV)</option>
+              </optgroup>
+              <optgroup label="Control por nivel">
+                <option value="FLOAT_H">Flotador alta presión</option>
+                <option value="FLOAT_L">Flotador baja presión</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="input-group input-group-unit">
+            <label for="pUnitSelect">U. Presión</label>
+            <select id="pUnitSelect" onchange="cambiarUnidades()">
+              <option value="psi" selected>PSI</option>
+              <option value="bar">Bar</option>
+              <option value="kpa">kPa</option>
+            </select>
+          </div>
+
+          <div class="input-group input-group-unit">
+            <label for="tUnitSelect">U. Temp</label>
+            <select id="tUnitSelect" onchange="cambiarUnidades()">
+              <option value="C" selected>°C</option>
+              <option value="F">°F</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Entradas internas del motor: las llena el ESP32; ya no hay ajuste manual visible. -->
+      <div class="oculto" aria-hidden="true">
+        <input type="number" id="pSuct" value="" step="1">
+        <input type="number" id="pDesc" value="" step="1">
+        <input type="number" id="tEvapOut" value="" step="0.5">
+        <input type="number" id="tSuct" value="" step="0.5">
+        <input type="number" id="tLiq" value="" step="0.5">
+        <input type="number" id="tDescReal" value="" step="1">
+      </div>
 
             <div class="monitor-grid">
         <div class="caja-doble" id="cajaSuccion">
@@ -835,35 +817,7 @@
         </div>
       </div>
 
-      <details class="ajuste-manual">
-      <summary>Ajuste manual del ciclo (solo sin sondas asignadas)</summary>
-      <div class="controls-grid">
-        <div class="input-group" id="grpTEvapOut">
-          <label for="tEvapOut" id="lblTEvapOutManual">T2 Evaporador</label>
-          <input type="number" id="tEvapOut" value="-12" step="0.5" oninput="entradaManual()">
-        </div>
-        <div class="input-group" id="grpTSuct">
-          <label for="tSuct" id="lblTSuctManual">T1 Succión</label>
-          <input type="number" id="tSuct" value="-10" step="0.5" oninput="entradaManual()">
-        </div>
-        <div class="input-group" id="grpTLiq">
-          <label for="tLiq" id="lblTLiqManual">T4 Líquido</label>
-          <input type="number" id="tLiq" value="45" step="0.5" oninput="entradaManual()">
-        </div>
-        <div class="input-group" id="grpTDescReal">
-          <label for="tDescReal" id="lblTDescRealManual">T3 Descarga</label>
-          <input type="number" id="tDescReal" value="90" step="1" oninput="entradaManual()">
-        </div>
-        <div class="input-group" id="grpPSuct">
-          <label for="pSuct" id="lblPSuctManual">P1 Succión</label>
-          <input type="number" id="pSuct" value="25" step="1" oninput="entradaManual()">
-        </div>
-        <div class="input-group" id="grpPDesc">
-          <label for="pDesc" id="lblPDescManual">P2 Descarga</label>
-          <input type="number" id="pDesc" value="290" step="1" oninput="entradaManual()">
-        </div>
-      </div>
-      </details>
+
 
       <div class="sutil" style="margin:8px 0 2px;display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;">
         <span>Indicadores del ciclo</span><span id="txtFuenteTermo">Motor: —</span>
@@ -1018,6 +972,15 @@
     let pUnitActual = 'psi';
     let tUnitActual = 'C';
     let tempAmbientePuntoFijoC = 30.0;
+    /* Si el compresor está detenido (presiones igualadas) pero el evaporador
+       ya supera este umbral, se informa como posible deshielo/desescarche. */
+    const UMBRAL_DESHIELO_C = 10.0;
+    /* Un deshielo/desescarche normal no debería mantenerse más de 40 min en
+       esa condición. Pasado ese tiempo se informa como posible falla. */
+    const MAX_MINUTOS_DESHIELO = 40;
+    /* Criterio de apoyo (no obligatorio): T líquido a menos de 5 K del
+       ambiente refuerza la hipótesis de equilibrio térmico durante el deshielo. */
+    const UMBRAL_LIQ_AMB_K = 5.0;
 
     const P_ATM_BAR = 1.01325;
     const P_ATM_PSI = 14.696;
@@ -1337,11 +1300,40 @@
           'La presión absoluta de descarga es menor que la de succión. Revise manómetros, unidades y puntos de toma.');
       }
 
-      /* Compuerta 3: equipo detenido (ΔP < 0.5 bar) → ciclo en pausa. */
+      /* Compuerta 3: equipo detenido (ΔP < 0.5 bar) → ciclo en pausa.
+         Si el evaporador ya superó 10 °C, se informa la hipótesis de deshielo:
+         la presión común puede subir mientras la batería se calienta y la
+         línea de líquido tiende a acercarse a la ambiente. */
       if (!enMarcha) {
-        filaInfo('⏸', 'Equipo detenido — alarmas de ciclo en pausa',
-          'ΔP ' + (pD - pS).toFixed(2) + ' bar (< 0.5 bar): las presiones están igualadas o el compresor no está funcionando. ' +
-          'Se mantiene la alarma de medición si existe, pero no se generan alarmas de temperatura, sobrecalentamiento ni condensación.');
+        if (c.deshielo && c.deshielo.activa) {
+          const minutos = Math.max(0, c.deshielo.minutos || 0);
+          const excedido = minutos > MAX_MINUTOS_DESHIELO;
+          const tiempo = (c.deshielo.estimado ? 'al menos ' : '') + Math.floor(minutos) + ' min';
+          let detalle = 'ΔP ' + Math.abs(pD - pS).toFixed(2) + ' bar (< 0.5 bar) · T2 evaporador ' +
+            fT(c.deshielo.tEvapC) + ' (> ' + fT(UMBRAL_DESHIELO_C) + ') · tiempo en la condición: ' + tiempo +
+            '. La presión común puede subir progresivamente mientras el evaporador se calienta.';
+          if (Number.isFinite(c.deshielo.presionSubeBar) && c.deshielo.presionSubeBar >= 0.1) {
+            detalle += ' Presión común +' + c.deshielo.presionSubeBar.toFixed(2) + ' bar desde el inicio.';
+          }
+          if (Number.isFinite(c.deshielo.tLiqC) && Number.isFinite(c.deshielo.deltaLiqAmb)) {
+            const dLiq = c.deshielo.deltaLiqAmb;
+            detalle += ' T líquido ' + fT(c.deshielo.tLiqC) + ' vs ambiente ' + fT(c.deshielo.tAmbC) +
+              ' (Δ ' + dLiq.toFixed(1) + ' K' +
+              (Math.abs(dLiq) <= UMBRAL_LIQ_AMB_K ? ', cerca del equilibrio térmico' : ', aún sin igualarse') + ').';
+          }
+          if (excedido) {
+            detalle += ' Supera el máximo de ' + MAX_MINUTOS_DESHIELO + ' min: posible falla del control/terminación del deshielo.';
+          } else {
+            detalle += ' Compatible con un deshielo/desescarche normal.';
+          }
+          filaInfo(excedido ? '🟠' : '🟢',
+            excedido ? 'Posible falla — deshielo prolongado' : 'Posible proceso de deshielo',
+            detalle);
+        } else {
+          filaInfo('⏸', 'Equipo detenido — alarmas de ciclo en pausa',
+            'ΔP ' + (pD - pS).toFixed(2) + ' bar (< 0.5 bar): las presiones están igualadas o el compresor no está funcionando. ' +
+            'Se mantiene la alarma de medición si existe, pero no se generan alarmas de temperatura, sobrecalentamiento ni condensación.');
+        }
         return { alarmas: alarmas, enMarcha: false, pausa: true, filas: filas, limites: lim };
       }
 
@@ -1518,6 +1510,7 @@
 
       ['pSuct', 'pDesc'].forEach(id => {
         const elem = document.getElementById(id);
+        if (!elem) return;
         const texto = String(elem.value).trim();
         if (texto === '') return;               // vacío sigue vacío (NULL)
         const valBar = parseFloat(texto.replace(',', '.')) / pFactorViejo;
@@ -1530,6 +1523,7 @@
       if (tUnitActual !== nuevaTUnit) {
         ['tEvapOut', 'tSuct', 'tLiq', 'tDescReal'].forEach(id => {
           const elem = document.getElementById(id);
+          if (!elem) return;
           const texto = String(elem.value).trim();
           if (texto === '') return;
           const val = parseFloat(texto.replace(',', '.'));
@@ -1596,12 +1590,6 @@
         expansionSelect: document.getElementById('expansionSelect').value,
         pUnitSelect: document.getElementById('pUnitSelect').value,
         tUnitSelect: document.getElementById('tUnitSelect').value,
-        pSuct: document.getElementById('pSuct').value,
-        pDesc: document.getElementById('pDesc').value,
-        tEvapOut: document.getElementById('tEvapOut').value,
-        tSuct: document.getElementById('tSuct').value,
-        tLiq: document.getElementById('tLiq').value,
-        tDescReal: document.getElementById('tDescReal').value,
       };
       localStorage.setItem('mollier_app_report_data', JSON.stringify(data));
     }
@@ -1628,12 +1616,6 @@
           }
           if (data.pUnitSelect) document.getElementById('pUnitSelect').value = data.pUnitSelect;
           if (data.tUnitSelect) document.getElementById('tUnitSelect').value = data.tUnitSelect;
-          if (data.pSuct !== undefined) document.getElementById('pSuct').value = data.pSuct;
-          if (data.pDesc !== undefined) document.getElementById('pDesc').value = data.pDesc;
-          if (data.tEvapOut !== undefined) document.getElementById('tEvapOut').value = data.tEvapOut;
-          if (data.tSuct !== undefined) document.getElementById('tSuct').value = data.tSuct;
-          if (data.tLiq !== undefined) document.getElementById('tLiq').value = data.tLiq;
-          if (data.tDescReal !== undefined) document.getElementById('tDescReal').value = data.tDescReal;
 
           pUnitActual = document.getElementById('pUnitSelect').value;
           tUnitActual = document.getElementById('tUnitSelect').value;
@@ -1850,7 +1832,8 @@
      */
     function evaluarDiagnostico(refData, rP, tDescRealC, tLiqC, tSatCondC,
       SHUtil, SHTotal, SC, dischargeSuperHeatK, tempAmbienteC,
-      pSuctBarAbs, pDescBarAbs, tEvapSatRef, expansionKey, limites, enMarcha, lecturaFresca) {
+      pSuctBarAbs, pDescBarAbs, tEvapSatRef, expansionKey, limites, enMarcha, lecturaFresca,
+      estadoDeshielo) {
 
       const alertas = [];
       let alarmaTDesc = false;
@@ -1860,6 +1843,7 @@
       let score = 100;
 
       const finite = v => Number.isFinite(v);
+      const fT = v => (finite(v) ? convertirTemp(v).toFixed(1) + ' °' + tUnitActual : '—');
       /* null - 30 daría -30: si falta la presión de descarga, no hay ΔT. */
       const deltaTCondAmb = (finite(tSatCondC) && finite(tempAmbienteC))
         ? tSatCondC - tempAmbienteC : null;
@@ -1940,6 +1924,48 @@
        * pausa y se devuelve un diagnóstico sin alertas de ciclo.
        */
       if (!cicloActivo) {
+        /* Deshielo/desescarche: el compresor está parado y las presiones
+           igualadas, pero el evaporador ya supera 10 °C. Durante el deshielo
+           la presión común sube progresivamente y la línea de líquido tiende
+           a acercarse a la ambiente; ambos son evidencias de apoyo. */
+        if (enMarcha === false && lecturaFresca !== false &&
+            estadoDeshielo && estadoDeshielo.activa &&
+            Number.isFinite(estadoDeshielo.tEvapC)) {
+          const minutos = Math.max(0, estadoDeshielo.minutos || 0);
+          const excedido = minutos > MAX_MINUTOS_DESHIELO;
+          const tiempo = (estadoDeshielo.estimado ? 'al menos ' : '') +
+            Math.floor(minutos) + ' min';
+          const detalles = [
+            'ΔP ' + Math.abs(pDescBarAbs - pSuctBarAbs).toFixed(2) + ' bar',
+            'T2 evaporador ' + fT(estadoDeshielo.tEvapC) + ' (> ' +
+              fT(UMBRAL_DESHIELO_C) + ')'
+          ];
+          if (Number.isFinite(estadoDeshielo.presionSubeBar) &&
+              estadoDeshielo.presionSubeBar >= 0.1) {
+            detalles.push('presión común +' + estadoDeshielo.presionSubeBar.toFixed(2) +
+              ' bar desde el inicio');
+          }
+          if (Number.isFinite(estadoDeshielo.tLiqC) &&
+              Number.isFinite(estadoDeshielo.deltaLiqAmb) &&
+              Number.isFinite(estadoDeshielo.tAmbC)) {
+            const dLiq = estadoDeshielo.deltaLiqAmb;
+            const cerca = Math.abs(dLiq) <= UMBRAL_LIQ_AMB_K;
+            detalles.push('T líquido ' + fT(estadoDeshielo.tLiqC) +
+              ' vs ambiente ' + fT(estadoDeshielo.tAmbC) + ' (Δ ' +
+              dLiq.toFixed(1) + ' K' +
+              (cerca ? ', cerca del equilibrio térmico' : ', aún sin igualarse') + ')');
+          }
+          const base = '<b>' + (excedido ? 'POSIBLE FALLA — DESHIELO PROLONGADO' : 'POSIBLE PROCESO DE DESHIELO') +
+            ':</b> ' + detalles.join(' · ') + '. Tiempo en la condición: <b>' + tiempo + '</b>. ';
+          if (excedido) {
+            alertas.push(`🟠 ${base}<span style="color:#fcd34d;">Supera el máximo de ${MAX_MINUTOS_DESHIELO} min. El evaporador debería haber terminado el deshielo y volver a enfriar. Revise el control/tiempo de deshielo, la terminación por temperatura, la sonda T2 y el mecanismo de deshielo (resistencia, gas caliente o válvula de inversión) antes de concluir una falla.</span>`);
+          } else {
+            alertas.push(`🟢 ${base}<span style="color:#86efac;">Compatible con un deshielo/desescarche normal. La presión común puede subir mientras el evaporador se calienta y la línea de líquido tiende a igualarse con el ambiente. Confirme con el controlador y la temperatura de la batería.</span>`);
+          }
+          score = Math.min(score, 70);
+          return { alertas, alarmaTDesc: false, alarmaTLiq: false, confiabilidad: Math.max(0, Math.min(100, Math.round(score))) };
+        }
+
         const motivo = (lecturaFresca === false)
           ? 'La última lectura del equipo está congelada o no es reciente. Con datos viejos no se generan alarmas de ciclo; el aviso superior indica la antigüedad y la pausa.'
           : (enMarcha === false)
@@ -2219,6 +2245,35 @@
       const enMarcha = (ambasPresiones && lecturaFresca)
         ? ((pDescBarAbs - pSuctBarAbs) >= 0.5) : null;
 
+      /* Racha de deshielo (presiones igualadas + T2 > 10 °C). El monitor
+         conserva el inicio para poder avisar si supera los 40 min. La
+         condición se confirma con los valores actuales del motor, no solo con
+         el histórico, para que también funcione con entradas manuales. */
+      const deshieloActual = (enMarcha === false && lecturaFresca !== false &&
+        ambasPresiones && Math.abs(pDescBarAbs - pSuctBarAbs) < 0.5 &&
+        tEvapOutC !== null && tEvapOutC > UMBRAL_DESHIELO_C);
+      let estadoDeshielo = (typeof window.__monitorEstadoDeshielo === 'function')
+        ? window.__monitorEstadoDeshielo()
+        : { activa: false, minutos: 0 };
+      if (!deshieloActual) {
+        estadoDeshielo = { activa: false, minutos: 0 };
+      } else if (!estadoDeshielo || !estadoDeshielo.activa) {
+        estadoDeshielo = {
+          activa: true,
+          minutos: 0,
+          estimado: false,
+          fresco: lecturaFresca !== false,
+          tEvapC: tEvapOutC,
+          dp: pDescBarAbs - pSuctBarAbs,
+          presionActualBar: (pDescBarAbs + pSuctBarAbs) / 2,
+          presionSubeBar: 0,
+          tLiqC: tLiqC,
+          tAmbC: Number.isFinite(tempAmbientePuntoFijoC) ? tempAmbientePuntoFijoC : null,
+          deltaLiqAmb: (tLiqC !== null && Number.isFinite(tempAmbientePuntoFijoC))
+            ? tLiqC - tempAmbientePuntoFijoC : null
+        };
+      }
+
       const propEvap = (pSuctBarAbs !== null) ? getPropAtP(refData, pSuctBarAbs) : null;
       const propCond = (pDescBarAbs !== null) ? getPropAtP(refData, pDescBarAbs) : null;
 
@@ -2299,9 +2354,10 @@
       const kpiDTLiqAmb = document.getElementById('kpiDTLiqAmb');
       if (kpiDTLiqAmb) kpiDTLiqAmb.innerText = valorKPI(dtLiqAmb, 1, ' K');
 
-      const { alertas, alarmaTDesc, alarmaTLiq, confiabilidad } = evaluarDiagnostico(
+      const { alertas, confiabilidad } = evaluarDiagnostico(
         refData, rP, tDescRealC, tLiqC, tSatCondBubble, superHeatUtilK, superHeatTotalK, subCoolK, dischargeSuperHeatK, tempAmbientePuntoFijoC,
-        pSuctBarAbs, pDescBarAbs, tSatEvapDew, expansionActual, limites, enMarcha, lecturaFresca
+        pSuctBarAbs, pDescBarAbs, tSatEvapDew, expansionActual, limites, enMarcha, lecturaFresca,
+        estadoDeshielo
       );
 
       /* Alarmas técnicas por casillero: se publican para que el módulo del
@@ -2321,20 +2377,13 @@
         shTotalK: superHeatTotalK,
         scK: subCoolK,
         rPK: rP,
-        tempAmbienteC: tempAmbientePuntoFijoC
+        tempAmbienteC: tempAmbientePuntoFijoC,
+        deshielo: estadoDeshielo
       });
       window.__monitorAlarmas = evaluacionAlarmas.alarmas;
       window.__monitorLimites = evaluacionAlarmas.limites;
 
-      const grpDesc = document.getElementById('grpTDescReal');
-      const grpLiq = document.getElementById('grpTLiq');
       const panelAlertas = document.getElementById('panelAlertas');
-
-      if (alarmaTDesc) grpDesc.classList.add('alarm-field-active');
-      else grpDesc.classList.remove('alarm-field-active');
-
-      if (alarmaTLiq) grpLiq.classList.add('alarm-field-active');
-      else grpLiq.classList.remove('alarm-field-active');
 
       const fuenteTermo = refData.thermoSource || (window.CoolProp ? 'CoolProp disponible' : 'tabla local de respaldo');
       const modoTexto = MODOS_EVAP[modoEvapActual] ? MODOS_EVAP[modoEvapActual].label : modoEvapActual;
@@ -2526,6 +2575,7 @@
   const K_MED_PH      = 'pressure-measurements';
   const K_TEMA        = 'refrig_tema';
   const K_SENSOR_P    = 'refrig_sensor_p';
+  const K_DESHIELO    = 'refrig_deshielo_estado';
   /* v3: asignación con los nombres/canales oficiales del ESP32. La v2 queda
      solo como respaldo para migrar equipos que ya tenían la app instalada. */
   const K_ASIGNACION        = 'refrig_asignacion_sondas_v3';
@@ -2541,6 +2591,7 @@
   let finVentana     = new Date();
   let enVivo         = true;
   let datosCrudos    = [];
+  let historialDeshielo = [];
   let ultimaVista    = null;
   let ultimaAbsoluta = null;
   let alarmaActiva   = false;
@@ -2722,6 +2773,194 @@
     return Number.isFinite(t) && (Date.now() - t) <= EDAD_MAX_ESP32_MS;
   }
 
+  /* ------------------- DESHIELO: DURACIÓN DE LA CONDICIÓN ----------------- */
+  /*
+   * Con el compresor detenido las presiones se igualan, pero durante un
+   * deshielo la presión común sube poco a poco porque el evaporador se está
+   * calentando. Por eso la condición no exige una presión baja ni estable:
+   * exige ΔP < 0.5 bar y T2 evaporador > 10 °C. La temperatura de líquido
+   * acercándose a la ambiente y el ascenso de la presión común se usan como
+   * evidencia de apoyo, nunca como datos obligatorios.
+   *
+   * La duración se sigue con la racha de lecturas cargadas y se persiste en
+   * localStorage para no perder el inicio si la app se recarga. Si la ventana
+   * visible es de 10 min y la condición viene de antes, el tiempo es "al menos".
+   */
+  function leerEstadoDeshieloGuardado() {
+    try {
+      const g = JSON.parse(localStorage.getItem(K_DESHIELO) || 'null');
+      if (g && Number.isFinite(Number(g.inicio))) {
+        return { inicio: Number(g.inicio), ultima: Number(g.ultima) || 0 };
+      }
+    } catch (e) {}
+    return null;
+  }
+  let estadoDeshielo = leerEstadoDeshieloGuardado();
+
+  function tempCanalC(fila, slotId) {
+    /* valorSlotDeFila devuelve el canal crudo: temperatura en °C. */
+    return valorSlotDeFila(fila, slotId);
+  }
+  function presionCanalAbsBar(fila, slotId) {
+    /* valorSlotDeFila devuelve presión manométrica en PSI. */
+    const psi = valorSlotDeFila(fila, slotId);
+    if (psi === null) return null;
+    return Math.max((psi + ATM_PSI) / PSI_POR_BAR, 0.005);
+  }
+  function condicionDeshieloFila(fila) {
+    const pS = presionCanalAbsBar(fila, 'psuct');
+    const pD = presionCanalAbsBar(fila, 'pdesc');
+    const tE = tempCanalC(fila, 'tevap');
+    if (!Number.isFinite(pS) || !Number.isFinite(pD) || !Number.isFinite(tE)) return null;
+    const dp = pD - pS;
+    return {
+      pS: pS,
+      pD: pD,
+      dp: dp,
+      tEvapC: tE,
+      activa: (Math.abs(dp) < 0.5) && (tE > UMBRAL_DESHIELO_C)
+    };
+  }
+  function limpiarEstadoDeshielo() {
+    estadoDeshielo = null;
+    try { localStorage.removeItem(K_DESHIELO); } catch (e) {}
+  }
+  const HISTORIAL_DESHIELO_MS = 2 * 3600000;
+  const MAX_GAP_DESHIELO_MS = 5 * 60000;
+  let cargandoHistorialDeshielo = false;
+  async function cargarHistorialDeshielo() {
+    if (cargandoHistorialDeshielo) return;
+    cargandoHistorialDeshielo = true;
+    try {
+      const fin = Date.now();
+      const filas = await traerVentana(fin - HISTORIAL_DESHIELO_MS, fin);
+      historialDeshielo = normalizarFilas(filas);
+      if (historialDeshielo.length) {
+        /* Recalcular para que el tiempo acumulado no dependa de la ventana
+           visible de 10 min si la app se abrió con el deshielo ya en curso. */
+        try { renderMonitor(); } catch (e) {}
+      }
+    } catch (e) {
+      /* Sin histórico adicional se usa la ventana visible y el estado guardado. */
+    } finally {
+      cargandoHistorialDeshielo = false;
+    }
+  }
+  function filasRachaDeshielo() {
+    /* Une el histórico de 2 h con la ventana visible, sin duplicar timestamps. */
+    const mapa = new Map();
+    const agregar = f => {
+      const t = new Date(f && f.created_at).getTime();
+      if (Number.isFinite(t)) mapa.set(t, f);
+    };
+    historialDeshielo.forEach(agregar);
+    datosCrudos.forEach(agregar);
+    return Array.from(mapa.values())
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }
+  window.__monitorEstadoDeshielo = function () {
+    /* Otra pestaña o una recarga reciente puede tener un inicio anterior. Se
+       toma solo si fue actualizado hace poco, para no arrastrar una condición
+       vieja que ya había terminado. */
+    const guardado = leerEstadoDeshieloGuardado();
+    if (guardado) {
+      const edadUltima = Date.now() - (guardado.ultima || 0);
+      if (edadUltima >= 0 && edadUltima <= 30 * 60000 &&
+          (!estadoDeshielo || guardado.inicio < estadoDeshielo.inicio)) {
+        estadoDeshielo = guardado;
+      }
+    }
+
+    const fila = ultimaVista ||
+      (datosCrudos.length ? datosCrudos[datosCrudos.length - 1] : null);
+    if (!fila) return { activa: false, minutos: 0, motivo: 'sin lectura' };
+
+    const cond = condicionDeshieloFila(fila);
+    if (!cond) {
+      limpiarEstadoDeshielo();
+      return { activa: false, minutos: 0, motivo: 'faltan presión o T2 evaporador' };
+    }
+    if (!cond.activa) {
+      limpiarEstadoDeshielo();
+      return { activa: false, minutos: 0, tEvapC: cond.tEvapC, dp: cond.dp };
+    }
+
+    const tActual = new Date(fila.created_at).getTime();
+    const ahora = Number.isFinite(tActual) ? tActual : Date.now();
+
+    /* Racha actual: se recorre hacia atrás hasta la primera lectura que ya no
+       cumple. Si toda la ventana cumple, el inicio puede ser anterior a ella. */
+    let inicio = null;
+    let inicioCond = null;
+    let estimado = false;
+    const filasRacha = filasRachaDeshielo();
+    if (filasRacha.length) {
+      let anteriorT = null;
+      for (let i = filasRacha.length - 1; i >= 0; i--) {
+        const f = filasRacha[i];
+        const t = new Date(f.created_at).getTime();
+        if (!Number.isFinite(t)) break;
+        /* Un hueco de datos no se cuenta como deshielo continuo. */
+        if (anteriorT !== null && (anteriorT - t) > MAX_GAP_DESHIELO_MS) break;
+        const c = condicionDeshieloFila(f);
+        if (!c || !c.activa) break;
+        inicio = t;
+        inicioCond = c;
+        anteriorT = t;
+      }
+      if (inicio !== null) {
+        const primeraT = new Date(filasRacha[0].created_at).getTime();
+        estimado = Number.isFinite(primeraT) && (inicio === primeraT);
+      }
+    }
+
+    /* El inicio persistido evita perder los minutos al recargar la app. Solo
+       se usa si la racha visible empieza en el borde de la ventana (no hay una
+       lectura inactiva que demuestre que la condición se reinició). */
+    const rachaExacta = (inicio !== null && !estimado);
+    if (estadoDeshielo && Number.isFinite(estadoDeshielo.inicio)) {
+      const edad = ahora - estadoDeshielo.inicio;
+      if (edad >= 0 && edad <= 6 * 3600000 &&
+          (inicio === null || (!rachaExacta && estadoDeshielo.inicio < inicio))) {
+        inicio = estadoDeshielo.inicio;
+        estimado = false;
+      }
+    }
+    if (inicio === null) {
+      inicio = ahora;
+      inicioCond = cond;
+      estimado = true;
+    }
+
+    const minutos = Math.max(0, (ahora - inicio) / 60000);
+    const presActual = (cond.pS + cond.pD) / 2;
+    const presInicio = inicioCond ? ((inicioCond.pS + inicioCond.pD) / 2) : presActual;
+    const presionSubeBar = Number.isFinite(presActual) && Number.isFinite(presInicio)
+      ? presActual - presInicio : null;
+
+    const tLiqC = tempCanalC(fila, 'tliq');
+    const tAmbC = Number.isFinite(tempAmbientePuntoFijoC) ? tempAmbientePuntoFijoC : null;
+    const deltaLiqAmb = (tLiqC !== null && tAmbC !== null) ? (tLiqC - tAmbC) : null;
+
+    estadoDeshielo = { inicio: inicio, ultima: ahora };
+    guardarJSON(K_DESHIELO, estadoDeshielo);
+
+    return {
+      activa: true,
+      minutos: minutos,
+      inicio: inicio,
+      estimado: estimado,
+      fresco: datosFrescos(fila),
+      tEvapC: cond.tEvapC,
+      dp: cond.dp,
+      presionActualBar: presActual,
+      presionSubeBar: presionSubeBar,
+      tLiqC: tLiqC,
+      tAmbC: tAmbC,
+      deltaLiqAmb: deltaLiqAmb
+    };
+  };
+
   /* --------------------------- CONVERSIÓN DE UNIDADES --------------------- */
   function factorPresion() {
     return (pUnitActual === 'psi') ? PSI_POR_BAR : ((pUnitActual === 'kpa') ? 100 : 1.0);
@@ -2831,21 +3070,34 @@
     const elegido = sel.value;
     const anterior = asignacion[slotId];
     const duenio = elegido ? slotQueUsaCanal(elegido) : null;
+    const limpiarCampoMotor = id => {
+      if (asignacion[id]) return;
+      const slot = SLOT_POR_ID[id];
+      if (!slot || !slot.varMotor) return;
+      const el = document.getElementById(slot.varMotor);
+      if (el) el.value = '';
+    };
     if (duenio && duenio !== slotId) {
       /* Intercambio: la sonda que estaba aquí pasa al casillero de donde salió */
       asignacion[duenio] = anterior || '';
       pintarSlot(duenio);
     }
     asignacion[slotId] = elegido;
+    /* Al quitar una sonda, el motor no debe conservar la última lectura como
+       si fuera un valor manual: el casillero interno queda vacío (NULL). */
+    limpiarCampoMotor(slotId);
+    if (duenio) limpiarCampoMotor(duenio);
     guardarJSON(K_ASIGNACION, asignacion);
     pintarSlot(slotId);
     pintarSelectores();
     actualizarTodoElMonitor();
+    /* Recalcular también los KPI: al quitar una sonda el casillero interno
+       queda vacío y el motor debe mostrar NULL, no el último valor. */
+    actualizarTodo();
   };
 
   /* Valores en unidad canónica: temperatura en °C, presión en PSI manométricos.
-     Si el casillero no tiene sonda asignada, el valor sale del campo manual del
-     motor: así el número y la alarma siempre corresponden al mismo dato. */
+     Si el casillero no tiene sonda asignada, no hay valor (NULL). */
   function valorSlotActual(slotId) {
     const s = SLOT_POR_ID[slotId];
     if (!s) return null;
@@ -2962,8 +3214,12 @@
       const el = $(s.varMotor);
       if (!el) return;
 
-      /* Casillero manual (sin sonda): no se toca lo que escribió el usuario. */
-      if (!asignacion[s.id]) return;
+      /* Sin sonda asignada no hay valor: se vacía el campo interno para que
+         el motor reciba NULL y no reutilice la última lectura. */
+      if (!asignacion[s.id]) {
+        if (el.value !== '') { el.value = ''; cambio = true; }
+        return;
+      }
 
       const crudo = valorSlotDeFila(fila, s.id);
       if (crudo === null) {
@@ -2994,22 +3250,6 @@
   }
   /* El motor consulta esto para no pisar la lectura de la sonda con el clima */
   window.__ambientePorSonda = function () { return valorSlotActual('tamb') !== null; };
-
-  /* --------------------- CAMPOS MANUALES DEL CICLO ----------------------- */
-  /* Si una sonda alimenta una variable del motor, su casillero manual se
-     oculta: el número ya está a la vista en la caja de esa sonda. */
-  function slotDeVariable(variable) {
-    for (let i = 0; i < SLOTS.length; i++) if (SLOTS[i].varMotor === variable) return SLOTS[i];
-    return null;
-  }
-  function pintarCamposManuales() {
-    ['tEvapOut', 'tSuct', 'tLiq', 'tDescReal', 'pSuct', 'pDesc'].forEach(variable => {
-      const slot = slotDeVariable(variable);
-      const alimentado = !!(slot && asignacion[slot.id]);
-      const grp = $('grp' + cap(variable));
-      if (grp) grp.classList.toggle('oculto', alimentado);
-    });
-  }
 
   /* ------------------------------ ORIGEN DE DATOS ------------------------- */
   /*
@@ -3506,7 +3746,6 @@
     /* Casilleros */
     pintarSelectores();
     SLOTS.forEach(s => pintarSlot(s.id));
-    pintarCamposManuales();
 
     /* Encabezado del monitor */
     if (ultima) {
@@ -4123,6 +4362,7 @@
     renderMonitor();
     sondearUltima();
     cargarHistorico();
+    cargarHistorialDeshielo();
 
     window.addEventListener('coolprop-ready', () => { actualizarTodoElMonitor(); });
     window.addEventListener('coolprop-failed', () => { actualizarTodoElMonitor(); });

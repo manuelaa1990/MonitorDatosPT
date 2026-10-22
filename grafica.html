@@ -69,8 +69,23 @@
       border-color: #334155; background: #1e293b; color: #94a3b8; opacity: 0.45;
     }
     .series-toggle.active { opacity: 1; color: #e2e8f0; background: #334155; border-color: #475569; }
+    #btn-ejes.on { background: #0284c7; border-color: #0ea5e9; color: #ffffff; }
+    #btn-pcomun.on { background: #a21caf; border-color: #d946ef; color: #ffffff; }
     .history-badge { background: #7c3aed; color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
     #toggles-series { max-height: 34vh; overflow-y: auto; }
+
+    /* Valor de un máximo/mínimo al tocarlo */
+    .valor-extremo-oculto { display: none !important; }
+    #valor-extremo {
+      position: fixed; z-index: 60; pointer-events: none;
+      background: rgba(15, 23, 42, 0.97); color: #e2e8f0;
+      border: 1px solid #475569; border-radius: 8px;
+      padding: 7px 10px; font-size: 11px; line-height: 1.35;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+      max-width: 240px;
+    }
+    #valor-extremo .fecha { margin-top: 2px; color: #94a3b8; font-size: 10px; }
+    #valor-extremo b { color: #ffffff; }
   </style>
 </head>
 
@@ -132,6 +147,8 @@
   <canvas id="tempChart"></canvas>
 </div>
 
+<div id="valor-extremo" class="valor-extremo-oculto"></div>
+
 <div id="bottombar" class="ui-bar border-t">
   <div class="flex items-center justify-between px-3 py-2 text-[11px] gap-2 flex-wrap">
     <div id="bat-box" class="flex items-center gap-1.5 shrink-0">
@@ -151,6 +168,20 @@
     </div>
 
     <div class="flex items-center gap-1.5 shrink-0">
+      <button id="btn-ejes" onclick="toggleEjes()" title="Ocultar ejes laterales" aria-pressed="true"
+        class="on px-2 py-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700">
+        Ejes
+      </button>
+      <button id="btn-pcomun" onclick="togglePresionComun()" title="Usar un solo eje para P1 y P2" aria-pressed="false"
+        class="px-2 py-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700">
+        P común
+      </button>
+      <button onclick="descargarGrafica()" title="Descargar gráfica en alta resolución" aria-label="Descargar gráfica en alta resolución"
+        class="p-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 border border-slate-700">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+      </button>
       <button onclick="resetZoom()" title="Reset zoom"
         class="p-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 border border-slate-700">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -237,6 +268,15 @@
   let asignacion = Object.assign({}, ASIGNACION_INICIAL);
   let seriesVisibles = {};
   SERIES.forEach(s => { seriesVisibles[s.id] = ['tsuct','tdesc','tevap'].indexOf(s.id) >= 0; });
+
+  let ejesVisibles = true;
+  let presionComun = false;
+  let extremosGrafica = [];
+  let temporizadorTooltip = null;
+  try {
+    ejesVisibles = localStorage.getItem('refrig_ejes_visibles') !== '0';
+    presionComun = localStorage.getItem('refrig_presion_comun') === '1';
+  } catch (e) {}
 
   /* La v2 guardó intercambiados temp4 (evaporador) y temp2 (líquido). */
   function esAsignacionCruzadaVieja(a) {
@@ -713,6 +753,33 @@
     plugins: [pluginCinta]
   });
 
+  /* Cierra solo los tooltips después de 5 s sin mover el cursor/tocar la
+     gráfica. No afecta los datos ni la selección de series. */
+  function ocultarTooltipChart() {
+    if (!tempChart || !tempChart.tooltip) return;
+    tempChart.setActiveElements([]);
+    tempChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+    tempChart.update('none');
+  }
+
+  function ocultarTooltips() {
+    ocultarTooltipChart();
+    ocultarValorExtremo();
+    if (temporizadorTooltip) {
+      clearTimeout(temporizadorTooltip);
+      temporizadorTooltip = null;
+    }
+  }
+
+  function programarOcultarTooltip() {
+    if (temporizadorTooltip) clearTimeout(temporizadorTooltip);
+    temporizadorTooltip = setTimeout(ocultarTooltips, 5000);
+  }
+
+  ['pointermove', 'pointerdown', 'touchstart'].forEach(ev => {
+    tempChart.canvas.addEventListener(ev, programarOcultarTooltip, { passive: true });
+  });
+
   /* Reserva el alto real de las barras para que los números del eje X no queden
      debajo de la barra inferior. */
   function ajustarPadding() {
@@ -755,6 +822,8 @@
   }
 
   function renderChart() {
+    extremosGrafica = [];
+    ocultarValorExtremo();
     const slice = getSlice();
     const filas = slice.map(procesarFila).filter(Boolean);
     const ph = leerPH();
@@ -823,13 +892,15 @@
       const ds = tempChart.data.datasets[i];
       ds.data = conjuntos[s.id];
       ds.hidden = !seriesVisibles[s.id];        // sin esto, la línea no se apagaba
+      ds.yAxisID = (presionComun && s.presion) ? 'y3' : s.eje;
       ds.borderWidth = s.soloPuntos ? 0 : (seriesVisibles[s.id] ? 2.5 : 0);
     });
 
-    /* Burbujas de máximo y mínimo de las temperaturas y de P1/P2. */
+    /* Puntos de máximo y mínimo de las temperaturas y de P1/P2.
+       Sin etiquetas ni líneas de llamada: el valor se muestra al tocar el punto. */
     try {
       const anotaciones = {};
-      const seriesConBurbuja = SERIES.filter(s =>
+      const seriesConExtremos = SERIES.filter(s =>
         seriesVisibles[s.id] && s.id !== 'phe' && s.id !== 'phm'
       );
       if (!filas.length) {
@@ -839,59 +910,31 @@
           content: ['Sin datos en este rango'], font: { size: 14, weight: 'bold' }, color: '#64748b'
         };
       } else {
-        /* Desplazamiento horizontal para que la burbuja no se corte en el borde */
-        const ajusteBorde = valorX => {
-          const area = tempChart.chartArea;
-          if (!area || !valorX) return 0;
-          const px = tempChart.scales.x.getPixelForValue(valorX);
-          const MARGEN = 78;
-          if (px < area.left + MARGEN) return MARGEN - (px - area.left);
-          if (px > area.right - MARGEN) return -(px - (area.right - MARGEN));
-          return 0;
-        };
-
-        seriesConBurbuja.forEach(s => {
+        seriesConExtremos.forEach(s => {
           const ext = getExtrema(conjuntos[s.id]);
           const unidad = s.presion ? ' PSI' : ' °C';
-          /* Las presiones van al lado contrario que las temperaturas para que
-             los cuadritos no se pisen cuando comparten el mismo extremo. */
-          const fuente = s.presion ? { size: 9, weight: 'bold' } : { size: 10, weight: 'bold' };
-          const relleno = s.presion
-            ? { top: 2, bottom: 2, left: 4, right: 4 }
-            : { top: 3, bottom: 3, left: 5, right: 5 };
-          const ladoMax = s.presion ? 'top' : 'bottom';
-          const ladoMin = s.presion ? 'bottom' : 'top';
-          /* Si el extremo cae cerca de un borde, las dos presiones se separan
-             hacia adentro para que P1 y P2 no se tapen entre sí. */
-          const desplazamientoX = base => {
-            if (!s.presion) return 0;
-            if (base > 5) return s.id === 'psuct' ? 0 : 72;
-            if (base < -5) return s.id === 'psuct' ? -72 : 0;
-            return s.id === 'psuct' ? -36 : 36;
+          const ejePunto = (presionComun && s.presion) ? 'y3' : s.eje;
+          const registrar = (tipo, punto) => {
+            if (!punto) return;
+            extremosGrafica.push({
+              id: s.id, etiqueta: etiquetaSerie(s), color: s.color, tipo,
+              x: punto.x, y: punto.y, eje: ejePunto, valor: punto.y, unidad
+            });
+            anotaciones['ext_' + s.id + '_' + tipo] = {
+              type: 'point',
+              xValue: punto.x,
+              yValue: punto.y,
+              yScaleID: ejePunto,
+              radius: s.presion ? 3 : 3.5,
+              backgroundColor: s.color,
+              borderColor: '#ffffff',
+              borderWidth: 1.5,
+              drawTime: 'afterDatasetsDraw'
+            };
           };
-          const ajusteMax = ext.max ? ajusteBorde(ext.max.x) : 0;
-          const ajusteMin = ext.min ? ajusteBorde(ext.min.x) : 0;
-          if (ext.max) {
-            anotaciones['max_' + s.id] = {
-              type: 'label', xValue: ext.max.x, yValue: ext.max.y, yScaleID: s.eje,
-              xAdjust: ajusteMax + desplazamientoX(ajusteMax),
-              content: [ext.max.y.toFixed(2) + unidad],
-              backgroundColor: 'rgba(255,255,255,0.95)', borderColor: s.color, borderWidth: 1, borderRadius: 6,
-              color: '#1e293b', font: fuente,
-              padding: relleno,
-              callout: { display: true, borderColor: s.color, borderWidth: 1, margin: 4, position: ladoMax }
-            };
-          }
-          if (ext.min) {
-            anotaciones['min_' + s.id] = {
-              type: 'label', xValue: ext.min.x, yValue: ext.min.y, yScaleID: s.eje,
-              xAdjust: ajusteMin + desplazamientoX(ajusteMin),
-              content: [ext.min.y.toFixed(2) + unidad],
-              backgroundColor: 'rgba(255,255,255,0.95)', borderColor: s.color, borderWidth: 1, borderRadius: 6,
-              color: '#1e293b', font: fuente,
-              padding: relleno,
-              callout: { display: true, borderColor: s.color, borderWidth: 1, margin: 4, position: ladoMin }
-            };
+          registrar('max', ext.max);
+          if (ext.min && (!ext.max || ext.min.x !== ext.max.x || ext.min.y !== ext.max.y)) {
+            registrar('min', ext.min);
           }
         });
 
@@ -994,7 +1037,7 @@
 
     /* Temperaturas: cada una tiene su propia escala. Para no comerse el ancho
        en pantallas angostas se muestran como máximo 2–5 ejes izquierdos; las
-       series sin eje visible conservan igual su escala y sus burbujas de
+       series sin eje visible conservan igual su escala y sus puntos de
        máximo/mínimo. En pantallas anchas se muestran los cinco. */
     const anchoGrafica = tempChart.width || window.innerWidth || 800;
     const maxEjesTemp = anchoGrafica >= 760 ? 5 : (anchoGrafica >= 560 ? 3 : 2);
@@ -1008,31 +1051,44 @@
     EJES_TEMP.forEach(d => {
       const sc = tempChart.options.scales[d.eje];
       const escala = escalaSerie(valoresEje(d.eje), d.minSpan);
-      sc.display = ejesTempVisibles.has(d.eje);
-      sc.grid.display = (d.eje === ejeTempPrimario);
+      sc.display = ejesVisibles && ejesTempVisibles.has(d.eje);
+      sc.grid.display = ejesVisibles && (d.eje === ejeTempPrimario);
       sc.min = escala ? escala.min : (d.eje === ejeTempPrimario ? 0 : undefined);
       sc.max = escala ? escala.max : (d.eje === ejeTempPrimario ? 50 : undefined);
     });
-    if (!candidatos.length) {
+    if (!candidatos.length || !ejesVisibles) {
       tempChart.options.scales.y.display = false;
       tempChart.options.scales.y.grid.display = false;
     }
 
-    /* Presiones: P1 en y2 y P2/P.H. en y3. */
+    /* Presiones: por defecto P1 en y2 y P2/P.H. en y3. Con "P común"
+       comparten y3 para que la igualación se vea en el mismo nivel. */
     const hayP1 = SERIES.some(s => seriesVisibles[s.id] && s.eje === 'y2');
     const hayP2 = SERIES.some(s => seriesVisibles[s.id] && s.eje === 'y3');
-    tempChart.options.scales.y2.display = hayP1;
-    tempChart.options.scales.y3.display = hayP2;
-    /* Los ejes derechos ya reservan su propio ancho; acá solo dejamos un
-       pequeño margen. Antes sobraban decenas de píxeles a la derecha. */
-    tempChart.options.layout.padding.right = (hayP1 || hayP2) ? 14 : 26;
-
+    const hayPresion = hayP1 || hayP2;
     const escalaP1 = escalaSerie(valoresEje('y2'), 1);
     const escalaP2 = escalaSerie(valoresEje('y3'), 5);
+    let escalaComun = null;
+    if (presionComun) {
+      const vals = [];
+      SERIES.forEach(s => {
+        if (!seriesVisibles[s.id] || !s.presion) return;
+        (conjuntos[s.id] || []).forEach(p => {
+          if (p && p.y !== null && Number.isFinite(p.y)) vals.push(p.y);
+        });
+      });
+      escalaComun = escalaSerie(vals, 1);
+    }
+    tempChart.options.scales.y2.display = ejesVisibles && !presionComun && hayP1;
+    tempChart.options.scales.y3.display = ejesVisibles && (presionComun ? hayPresion : hayP2);
     tempChart.options.scales.y2.min = escalaP1 ? escalaP1.min : undefined;
     tempChart.options.scales.y2.max = escalaP1 ? escalaP1.max : undefined;
-    tempChart.options.scales.y3.min = escalaP2 ? escalaP2.min : undefined;
-    tempChart.options.scales.y3.max = escalaP2 ? escalaP2.max : undefined;
+    const escalaY3 = presionComun ? escalaComun : escalaP2;
+    tempChart.options.scales.y3.min = escalaY3 ? escalaY3.min : undefined;
+    tempChart.options.scales.y3.max = escalaY3 ? escalaY3.max : undefined;
+    tempChart.options.scales.y3.ticks.color = presionComun ? '#cbd5e1' : '#f472b6';
+    tempChart.options.layout.padding.left = ejesVisibles ? 12 : 4;
+    tempChart.options.layout.padding.right = ejesVisibles ? (hayPresion ? 14 : 4) : 4;
 
     const paso = PASO_TICK_MIN[rangoMin] || 5;
     tempChart.options.scales.x.time.unit = (rangoMin <= 30) ? 'minute' : 'hour';
@@ -1082,6 +1138,204 @@
     pintarToggles();
     renderChart();
     ajustarPadding();
+  }
+
+  function pintarBotonesEjes() {
+    const b = document.getElementById('btn-ejes');
+    if (b) {
+      b.classList.toggle('on', ejesVisibles);
+      b.setAttribute('aria-pressed', ejesVisibles ? 'true' : 'false');
+      b.title = ejesVisibles ? 'Ocultar ejes laterales' : 'Mostrar ejes laterales';
+    }
+    const p = document.getElementById('btn-pcomun');
+    if (p) {
+      p.classList.toggle('on', presionComun);
+      p.setAttribute('aria-pressed', presionComun ? 'true' : 'false');
+      p.title = presionComun
+        ? 'Separar P1 y P2 en ejes independientes'
+        : 'Compartir un solo eje para P1 y P2';
+    }
+  }
+
+  function toggleEjes() {
+    ejesVisibles = !ejesVisibles;
+    try { localStorage.setItem('refrig_ejes_visibles', ejesVisibles ? '1' : '0'); } catch (e) {}
+    pintarBotonesEjes();
+    ocultarValorExtremo();
+    renderChart();
+    ajustarPadding();
+  }
+
+  function togglePresionComun() {
+    presionComun = !presionComun;
+    try { localStorage.setItem('refrig_presion_comun', presionComun ? '1' : '0'); } catch (e) {}
+    pintarBotonesEjes();
+    ocultarValorExtremo();
+    renderChart();
+    ajustarPadding();
+  }
+
+  function ocultarValorExtremo() {
+    const el = document.getElementById('valor-extremo');
+    if (el) el.classList.add('valor-extremo-oculto');
+  }
+
+  function mostrarValorExtremo(p, clientX, clientY) {
+    const el = document.getElementById('valor-extremo');
+    if (!el) return;
+    const tipo = p.tipo === 'max' ? 'Máximo' : 'Mínimo';
+    const fecha = new Date(p.x).toLocaleString([], {
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    el.innerHTML =
+      '<div><span style="color:' + p.color + '">●</span> <b>' + p.etiqueta + '</b> · ' + tipo + '</div>' +
+      '<div><b>' + p.valor.toFixed(2) + p.unidad + '</b></div>' +
+      '<div class="fecha">' + fecha + '</div>';
+    el.classList.remove('valor-extremo-oculto');
+    const pad = 8;
+    const r = el.getBoundingClientRect();
+    let left = clientX + 12;
+    let top = clientY - r.height - 12;
+    if (left + r.width > window.innerWidth - pad) left = clientX - r.width - 12;
+    if (top < pad) top = clientY + 16;
+    if (top + r.height > window.innerHeight - pad) top = window.innerHeight - r.height - pad;
+    el.style.left = Math.max(pad, left) + 'px';
+    el.style.top = Math.max(pad, top) + 'px';
+    programarOcultarTooltip();
+  }
+
+  function extremoEnPunto(clientX, clientY) {
+    const rect = tempChart.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    let mejor = null;
+    let mejorDist = 24;
+    extremosGrafica.forEach(p => {
+      const escala = tempChart.scales[p.eje];
+      if (!escala) return;
+      const px = tempChart.scales.x.getPixelForValue(p.x);
+      const py = escala.getPixelForValue(p.y);
+      const dist = Math.hypot(px - x, py - y);
+      if (dist < mejorDist) { mejorDist = dist; mejor = p; }
+    });
+    return mejor;
+  }
+
+  tempChart.canvas.addEventListener('click', ev => {
+    const p = extremoEnPunto(ev.clientX, ev.clientY);
+    if (p) {
+      ev.stopPropagation();
+      mostrarValorExtremo(p, ev.clientX, ev.clientY);
+    } else {
+      ocultarValorExtremo();
+    }
+    programarOcultarTooltip();
+  });
+
+  document.addEventListener('pointerdown', ev => {
+    const t = ev.target;
+    if (t && t.closest && !t.closest('#tempChart')) ocultarValorExtremo();
+  });
+
+  async function descargarGrafica() {
+    let dataUrl = null;
+    const dprOriginal = tempChart.options.devicePixelRatio;
+    const anchoCss = tempChart.width || tempChart.canvas.clientWidth || 1200;
+    const dpr = Math.min(3, Math.max(2, 3200 / Math.max(1, anchoCss)));
+    try {
+      tempChart.options.devicePixelRatio = dpr;
+      tempChart.resize();
+      tempChart.update('none');
+      /* No usar requestAnimationFrame: en una pestaña en segundo plano no se
+         ejecuta y la exportación quedaría colgada. */
+      await new Promise(resolve => setTimeout(resolve, 60));
+      dataUrl = tempChart.toBase64Image('image/png', 1);
+    } catch (err) {
+      console.error('No se pudo preparar la exportación:', err);
+    } finally {
+      tempChart.options.devicePixelRatio = dprOriginal;
+      tempChart.resize();
+      renderChart();
+      ajustarPadding();
+    }
+    if (!dataUrl) return;
+
+    const img = new Image();
+    /* img.decode() puede quedarse esperando en una pestaña en segundo plano.
+       Con onload + timeout la exportación siempre termina. */
+    const imagenLista = await new Promise(resolve => {
+      let listo = false;
+      const terminar = ok => { if (!listo) { listo = true; resolve(ok); } };
+      const timer = setTimeout(() => terminar(false), 8000);
+      img.onload = () => { clearTimeout(timer); terminar(true); };
+      img.onerror = () => { clearTimeout(timer); terminar(false); };
+      img.src = dataUrl;
+    });
+    if (!imagenLista) { console.error('No se pudo cargar la imagen para exportar.'); return; }
+
+    const s = img.width / Math.max(1, anchoCss);
+    const margen = Math.round(24 * s);
+    const headerH = Math.round(88 * s);
+    const visibles = SERIES.filter(serie => seriesVisibles[serie.id]);
+    const columnas = Math.min(4, Math.max(1, Math.floor((img.width - margen * 2) / Math.max(1, 250 * s))));
+    const filas = Math.ceil(visibles.length / columnas);
+    const legendH = Math.round((48 + filas * 24) * s);
+
+    const out = document.createElement('canvas');
+    out.width = img.width + margen * 2;
+    out.height = headerH + img.height + legendH + margen;
+    const c = out.getContext('2d');
+    c.fillStyle = '#0f172a';
+    c.fillRect(0, 0, out.width, out.height);
+    c.textBaseline = 'top';
+
+    const rango = (document.getElementById('time-range-label') || {}).textContent || '';
+    c.fillStyle = '#38bdf8';
+    c.fillRect(margen, Math.round(14 * s), Math.round(46 * s), Math.round(3 * s));
+    c.fillStyle = '#e2e8f0';
+    c.font = 'bold ' + Math.round(21 * s) + 'px system-ui, -apple-system, Segoe UI, sans-serif';
+    c.fillText('Gráfica Live · Mediciones del ciclo', margen, Math.round(26 * s));
+    c.fillStyle = '#94a3b8';
+    c.font = Math.round(11 * s) + 'px system-ui, -apple-system, Segoe UI, sans-serif';
+    c.fillText(rango, margen, Math.round(56 * s));
+    c.fillText('Generado: ' + new Date().toLocaleString(), margen, Math.round(70 * s));
+
+    c.drawImage(img, margen, headerH);
+
+    const legendY = headerH + img.height + Math.round(16 * s);
+    c.fillStyle = '#e2e8f0';
+    c.font = 'bold ' + Math.round(12 * s) + 'px system-ui, -apple-system, Segoe UI, sans-serif';
+    c.fillText('Leyenda', margen, legendY);
+    c.font = Math.round(11 * s) + 'px system-ui, -apple-system, Segoe UI, sans-serif';
+    const colW = (out.width - margen * 2) / columnas;
+    visibles.forEach((serie, i) => {
+      const col = i % columnas;
+      const fila = Math.floor(i / columnas);
+      const x = margen + col * colW;
+      const y = legendY + Math.round(24 * s) + fila * Math.round(24 * s);
+      c.strokeStyle = serie.color;
+      c.lineWidth = Math.round(3 * s);
+      c.beginPath();
+      c.moveTo(x, y + Math.round(5 * s));
+      c.lineTo(x + Math.round(18 * s), y + Math.round(5 * s));
+      c.stroke();
+      c.fillStyle = '#cbd5e1';
+      c.fillText(etiquetaSerie(serie), x + Math.round(25 * s), y);
+    });
+
+    const nombre = (() => {
+      const d = new Date();
+      const p2 = n => String(n).padStart(2, '0');
+      return 'grafica_hvac_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' +
+        p2(d.getHours()) + p2(d.getMinutes()) + '.png';
+    })();
+
+    const a = document.createElement('a');
+    a.href = out.toDataURL('image/png');
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   function updateStatusBar() {
@@ -1251,6 +1505,7 @@
     if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
     document.querySelectorAll('.range-btn[data-min]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.min, 10) === rangoMin));
     pintarToggles();
+    pintarBotonesEjes();
     ajustarPadding();
     updatePortraitHint();
     window.addEventListener('resize', () => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); renderChart(); });
