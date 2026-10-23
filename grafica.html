@@ -273,6 +273,9 @@
   let presionComun = false;
   let extremosGrafica = [];
   let temporizadorTooltip = null;
+  /* Tiempo que el cuadro de valores permanece visible después de salir de la
+     gráfica, para poder mover el cursor al botón de descarga. */
+  const TOOLTIP_HOLD_MS = 8000;
   try {
     ejesVisibles = localStorage.getItem('refrig_ejes_visibles') !== '0';
     presionComun = localStorage.getItem('refrig_presion_comun') === '1';
@@ -662,6 +665,9 @@
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
       interaction: { mode: 'index', intersect: false },
+      /* Sin 'mouseout': al salir del canvas el tooltip no se cierra de golpe.
+         Lo oculta el temporizador propio después de TOOLTIP_HOLD_MS. */
+      events: ['mousemove', 'click', 'touchstart', 'touchmove'],
       layout: { padding: { top: 34, right: 42, bottom: 8, left: 12 } },
       scales: {
         x: {
@@ -753,8 +759,8 @@
     plugins: [pluginCinta]
   });
 
-  /* Cierra solo los tooltips después de 5 s sin mover el cursor/tocar la
-     gráfica. No afecta los datos ni la selección de series. */
+  /* Cierra solo los tooltips después de TOOLTIP_HOLD_MS sin mover el cursor o
+     tocar la gráfica. No afecta los datos ni la selección de series. */
   function ocultarTooltipChart() {
     if (!tempChart || !tempChart.tooltip) return;
     tempChart.setActiveElements([]);
@@ -773,10 +779,12 @@
 
   function programarOcultarTooltip() {
     if (temporizadorTooltip) clearTimeout(temporizadorTooltip);
-    temporizadorTooltip = setTimeout(ocultarTooltips, 5000);
+    temporizadorTooltip = setTimeout(ocultarTooltips, TOOLTIP_HOLD_MS);
   }
 
-  ['pointermove', 'pointerdown', 'touchstart'].forEach(ev => {
+  /* pointerleave reinicia el plazo al salir: así quedan visibles unos segundos
+     completos aunque el cursor se haya detenido antes de abandonar la línea. */
+  ['pointermove', 'pointerdown', 'touchstart', 'pointerleave'].forEach(ev => {
     tempChart.canvas.addEventListener(ev, programarOcultarTooltip, { passive: true });
   });
 
@@ -1239,6 +1247,14 @@
 
   async function descargarGrafica() {
     let dataUrl = null;
+    /* Si hay un tooltip activo, se congela su cierre durante la exportación
+       para que la imagen se capture con el cuadro de valores visible. */
+    const conservarTooltip = !!(tempChart.tooltip &&
+      tempChart.tooltip.getActiveElements().length);
+    if (conservarTooltip && temporizadorTooltip) {
+      clearTimeout(temporizadorTooltip);
+      temporizadorTooltip = null;
+    }
     const dprOriginal = tempChart.options.devicePixelRatio;
     const anchoCss = tempChart.width || tempChart.canvas.clientWidth || 1200;
     const dpr = Math.min(3, Math.max(2, 3200 / Math.max(1, anchoCss)));
@@ -1257,6 +1273,7 @@
       tempChart.resize();
       renderChart();
       ajustarPadding();
+      if (conservarTooltip) programarOcultarTooltip();
     }
     if (!dataUrl) return;
 
