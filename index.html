@@ -419,6 +419,15 @@
     .tabla-historial th { color: var(--acento); font-size: .50rem; text-transform: uppercase; }
     .scroll-x { width: 100%; overflow-x: auto; }
 
+    /* Coloreo celdas resumen por intervalos */
+    .tabla-historial td.resumen-ok { background: rgba(16,185,129,.08); }
+    .tabla-historial td.resumen-warn { background: rgba(167,139,250,.12); }
+    .tabla-historial td.resumen-crit { background: rgba(239,68,68,.12); }
+    /* Modo claro */
+    html[data-tema="claro"] .tabla-historial td.resumen-ok { background: rgba(16,185,129,.12); }
+    html[data-tema="claro"] .tabla-historial td.resumen-warn { background: rgba(167,139,250,.18); }
+    html[data-tema="claro"] .tabla-historial td.resumen-crit { background: rgba(239,68,68,.15); }
+
     /* -------------------- Ajustes para el reporte impreso -------------- */
 
     body.generating-pdf { background: #fff !important; color: #000 !important; }
@@ -853,6 +862,46 @@
       </h2>
       <div class="diag-container" id="panelAlertas"></div>
     </section>
+
+    <!-- ======================= RESUMEN POR INTERVALOS (NUEVO) ======================== -->
+    <details class="card" id="cardResumen5min">
+      <summary>Resumen por intervalos — máx/mín <span class="sutil" id="resumen5minInfo"></span></summary>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
+        <label class="input-group" style="min-width:120px;">
+          <span style="font-size:.52rem; color:var(--acento); font-weight:700;">Intervalo (min)</span>
+          <input type="number" id="resumenIntervaloMin" value="5" min="1" max="60" step="1" style="height:28px; font-size:.7rem; width:70px;">
+        </label>
+        <label class="input-group" style="min-width:120px;">
+          <span style="font-size:.52rem; color:var(--acento); font-weight:700;">Rango (horas)</span>
+          <input type="number" id="resumenRangoHoras" value="4" min="0.5" max="168" step="0.5" style="height:28px; font-size:.7rem; width:70px;">
+        </label>
+        <button class="btn btn-mini" onclick="cargarResumen5min()" title="Actualizar ahora">↻ Actualizar</button>
+        <button class="btn btn-mini" onclick="exportarResumen5minCSV()" title="Descargar CSV">⬇ CSV</button>
+        <span class="sutil" id="resumen5minEstado">Listo</span>
+      </div>
+      <div class="scroll-x">
+        <table class="tabla-historial" id="tablaResumen5min" style="min-width:1500px;">
+          <thead>
+            <tr>
+              <th style="min-width:140px;">Intervalo (inicio)</th>
+              <th style="min-width:140px;">P1 Succión<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">P2 Descarga<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">T1 Succión<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">T2 Evap<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">T3 Desc<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">T4 Líquido<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">T5 Amb<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">SH Total<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">SH Útil<br><span class="sutil">min / max</span></th>
+              <th style="min-width:140px;">Subenfriamiento (SC)<br><span class="sutil">min / max</span></th>
+              <th style="min-width:80px; text-align:center;">Muestras</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="sutil" style="margin-top:4px;" id="resumen5minNota"></div>
+    </details>
 
     <!-- ====================== PRUEBA DE HERMETICIDAD ======================== -->
     <details class="card" id="cardHermeticidad" open>
@@ -2462,6 +2511,9 @@
       // El clima solo actualiza el Delta T después; no bloquea el diagnóstico.
       obtenerClimaPuntoFijo().catch(e => console.warn('Clima no disponible:', e));
 
+      // Cargar resumen 5 min (no bloquea el resto)
+      setTimeout(() => cargarResumen5min().catch(e => console.warn('Resumen 5 min:', e)), 500);
+
       // Si CoolProp termina de cargar después del primer render,
       // sustituimos las tablas locales por la EOS y recalculamos.
       window.addEventListener('coolprop-ready', () => {
@@ -3395,6 +3447,385 @@
     const hh = String(Math.floor(abs / 60)).padStart(2, '0');
     const mm = String(abs % 60).padStart(2, '0');
     return 'UTC' + signo + hh + (mm === '00' ? '' : ':' + mm);
+  }
+
+  /* =========================== RESUMEN POR INTERVALOS ============================= */
+  /* Agrupa lecturas en intervalos configurables y calcula min/max por variable. */
+  let resumen5minCargando = false;
+  let resumen5minDatos = null;
+
+  async function cargarResumen5min() {
+    if (resumen5minCargando) return;
+    const intervaloMin = parseFloat(document.getElementById('resumenIntervaloMin').value);
+    const rangoHoras = parseFloat(document.getElementById('resumenRangoHoras').value);
+    if (!Number.isFinite(intervaloMin) || intervaloMin < 1) { alert('Intervalo inválido'); return; }
+    if (!Number.isFinite(rangoHoras) || rangoHoras < 0.5) { alert('Rango inválido'); return; }
+
+    const fin = Date.now();
+    const inicio = fin - rangoHoras * 3600000;
+
+    const btn = document.querySelector('#cardResumen5min button[onclick="cargarResumen5min()"]');
+    const estado = document.getElementById('resumen5minEstado');
+    const nota = document.getElementById('resumen5minNota');
+    const info = document.getElementById('resumen5minInfo');
+
+    resumen5minCargando = true;
+    if (btn) btn.disabled = true;
+    if (estado) estado.textContent = 'Cargando…';
+    if (nota) nota.textContent = '';
+
+    try {
+      const filas = await traerVentana(inicio, fin);
+      const normalizadas = normalizarFilas(filas);
+      resumen5minDatos = agruparEnIntervalos(normalizadas, intervaloMin);
+      renderTablaResumen5min();
+      if (info) info.textContent = ` · ${resumen5minDatos.length} intervalos de ${intervaloMin} min · ${normalizadas.length} lecturas · ${rangoHoras} h`;
+      if (estado) estado.textContent = 'Listo';
+    } catch (err) {
+      if (estado) estado.textContent = 'Error';
+      if (nota) nota.textContent = 'No se pudo cargar: ' + interpretarError(err);
+    } finally {
+      resumen5minCargando = false;
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function agruparEnIntervalos(filas, intervaloMin) {
+    if (!filas.length) return [];
+    const INTERVALO_MS = intervaloMin * 60000;
+    const buckets = new Map();
+
+    filas.forEach(f => {
+      const t = new Date(f.created_at).getTime();
+      if (!Number.isFinite(t)) return;
+      const bucketInicio = Math.floor(t / INTERVALO_MS) * INTERVALO_MS;
+      if (!buckets.has(bucketInicio)) {
+        buckets.set(bucketInicio, {
+          inicio: bucketInicio,
+          p1: [], p2: [],
+          t1: [], t2: [], t3: [], t4: [], t5: [],
+          shTotal: [], shUtil: [], sc: [],
+          count: 0
+        });
+      }
+      const b = buckets.get(bucketInicio);
+      b.count++;
+
+      // Usamos la asignación actual para leer los canales correctos
+      const vals = {};
+      SLOTS.forEach(s => {
+        vals[s.id] = valorSlotDeFila(f, s.id);
+      });
+
+      if (vals.psuct !== null) b.p1.push(vals.psuct);
+      if (vals.pdesc !== null) b.p2.push(vals.pdesc);
+      if (vals.tsuct !== null) b.t1.push(vals.tsuct);
+      if (vals.tevap !== null) b.t2.push(vals.tevap);
+      if (vals.tdesc !== null) b.t3.push(vals.tdesc);
+      if (vals.tliq !== null) b.t4.push(vals.tliq);
+      if (vals.tamb !== null) b.t5.push(vals.tamb);
+
+      // Calcular SH Total, SH Útil y SC para esta lectura
+      // SH Total = T1 Succión - Tsat(P1 Succión)
+      // SH Útil   = T2 Evap - Tsat(P1 Succión)
+      // SC        = Tsat(P2 Descarga) - T4 Líquido
+      // Necesitamos tabla P-T del refrigerante actual
+      const refKey = document.getElementById('refSelect')?.value || 'R404A';
+      const refData = refrigerantes[refKey];
+      if (refData && refData.dome && refData.dome.length) {
+        // Interpolación simple en la tabla dome para Tsat a partir de presión (PSI manométrica -> bar abs)
+        const pSuctBarAbs = (vals.psuct !== null) ? Math.max((vals.psuct + ATM_PSI) / PSI_POR_BAR, 0.005) : null;
+        const pDescBarAbs = (vals.pdesc !== null) ? Math.max((vals.pdesc + ATM_PSI) / PSI_POR_BAR, 0.005) : null;
+
+        let tsatSuct = null, tsatDesc = null;
+        if (pSuctBarAbs !== null) tsatSuct = interpolarTsat(refData.dome, pSuctBarAbs);
+        if (pDescBarAbs !== null) tsatDesc = interpolarTsat(refData.dome, pDescBarAbs);
+
+        if (vals.tsuct !== null && tsatSuct !== null) {
+          b.shTotal.push(vals.tsuct - tsatSuct);
+        }
+        if (vals.tevap !== null && tsatSuct !== null) {
+          b.shUtil.push(vals.tevap - tsatSuct);
+        }
+        if (vals.tliq !== null && tsatDesc !== null) {
+          b.sc.push(tsatDesc - vals.tliq);
+        }
+      }
+    });
+
+    // Convertir a array ordenado (más reciente primero)
+    const resultado = Array.from(buckets.values())
+      .map(b => ({
+        inicio: b.inicio,
+        p1: minMax(b.p1),
+        p2: minMax(b.p2),
+        t1: minMax(b.t1),
+        t2: minMax(b.t2),
+        t3: minMax(b.t3),
+        t4: minMax(b.t4),
+        t5: minMax(b.t5),
+        shTotal: minMax(b.shTotal),
+        shUtil: minMax(b.shUtil),
+        sc: minMax(b.sc),
+        count: b.count
+      }))
+      .sort((a, b) => b.inicio - a.inicio);
+
+    return resultado;
+  }
+
+  // Interpolación lineal de Tsat en la tabla dome (presión en bar abs -> °C)
+  function interpolarTsat(dome, pBarAbs) {
+    if (!dome || !dome.length) return null;
+    // Buscar los dos puntos que rodean la presión
+    for (let i = 0; i < dome.length - 1; i++) {
+      if (pBarAbs >= dome[i].p && pBarAbs <= dome[i + 1].p) {
+        const f = (pBarAbs - dome[i].p) / (dome[i + 1].p - dome[i].p);
+        return dome[i].tSat + f * (dome[i + 1].tSat - dome[i].tSat);
+      }
+    }
+    // Fuera de rango: extrapolar con el más cercano
+    if (pBarAbs < dome[0].p) return dome[0].tSat;
+    if (pBarAbs > dome[dome.length - 1].p) return dome[dome.length - 1].tSat;
+    return null;
+  }
+
+  // Interpolación inversa: temperatura (°C) -> presión de saturación (bar abs) usando dome
+  function presionSaturacionDome(dome, tSatC) {
+    if (!dome || !dome.length) return null;
+    // Buscar los dos puntos que rodean la temperatura
+    for (let i = 0; i < dome.length - 1; i++) {
+      if (tSatC >= dome[i].tSat && tSatC <= dome[i + 1].tSat) {
+        const f = (tSatC - dome[i].tSat) / (dome[i + 1].tSat - dome[i].tSat);
+        return dome[i].p + f * (dome[i + 1].p - dome[i].p);
+      }
+    }
+    // Fuera de rango: extrapolar logarítmicamente con el más cercano
+    if (tSatC <= dome[0].tSat) return dome[0].p;
+    if (tSatC >= dome[dome.length - 1].tSat) return dome[dome.length - 1].p;
+    return null;
+  }
+
+  /* Evalúa un par min/max contra rangos estándar.
+     Devuelve: 'ok' | 'warn' (púrpura: medio fuera) | 'crit' (rojo: fuera crítico) */
+  function evaluarRangoResumen(variable, minVal, maxVal, limites) {
+    if (minVal === null && maxVal === null) return 'ok';
+    // Rangos según variable (usando límites técnicos del refrigerante/aplicación actual)
+    let optMin, optMax, critLow, critHigh, warnMargin = 0.3; // 30% fuera del óptimo = warn
+    const app = limites.app;
+    const refKey = limites.refKey;
+    const refData = refrigerantes[refKey];
+    const dome = refData?.dome;
+
+    switch (variable) {
+      case 'p1': // P1 Succión - rango de evaporación de la aplicación
+        if (dome) {
+          const pSuctMinBar = presionSaturacionDome(dome, app.tMin);
+          const pSuctMaxBar = presionSaturacionDome(dome, app.tMax);
+          if (pSuctMinBar && pSuctMaxBar) {
+            optMin = pSuctMinBar * PSI_POR_BAR - ATM_PSI; // PSI manométrico
+            optMax = pSuctMaxBar * PSI_POR_BAR - ATM_PSI;
+          }
+        }
+        break;
+      case 'p2': // P2 Descarga - hasta tCondMax
+        if (dome) {
+          const pCondMaxBar = presionSaturacionDome(dome, limites.tCondMax);
+          if (pCondMaxBar) {
+            optMin = 0;
+            optMax = pCondMaxBar * PSI_POR_BAR - ATM_PSI;
+          }
+        }
+        break;
+      case 't1': // T1 Succión - SH total óptimo sobre Tsat(P1), pero usamos rango app + SH
+      case 't2': // T2 Evap - rango de evaporación app
+        optMin = app.tMin;
+        optMax = app.tMax;
+        break;
+      case 't3': // T3 Descarga - hasta tDescMax
+        optMin = -50;
+        optMax = limites.tDescMax;
+        break;
+      case 't4': // T4 Líquido - subenfriado: por debajo de Tsat(P2) pero no muy bajo
+        // Óptimo: Tsat(P2) - scMax  a  Tsat(P2) - scMin
+        // Para simplificar: hasta tCondMax
+        optMin = -20;
+        optMax = limites.tCondMax;
+        break;
+      case 't5': // T5 Ambiente - rango amplio
+        optMin = -10;
+        optMax = 50;
+        break;
+      case 'shTotal':
+      case 'shUtil':
+        optMin = limites.shMin;
+        optMax = limites.shMax;
+        // SH bajo es crítico, alto es warning
+        break;
+      case 'sc':
+        optMin = limites.scMin;
+        optMax = limites.scMax;
+        // SC bajo (o negativo) es crítico, alto es warning
+        break;
+      default:
+        return 'ok';
+    }
+
+    if (optMin === undefined || optMax === undefined) return 'ok';
+
+    // Evaluar el peor caso entre min y max del intervalo
+    const vals = [minVal, maxVal].filter(v => v !== null);
+    let worst = 'ok';
+    for (const v of vals) {
+      let status = 'ok';
+      if (variable === 'shTotal' || variable === 'shUtil' || variable === 'sc') {
+        // Para SH y SC: por debajo del mínimo = crítico, por encima del máximo = warning
+        if (v < optMin) status = 'crit';
+        else if (v > optMax) status = 'warn';
+      } else {
+        // Para temperaturas/presiones: fuera del rango = crit, en los bordes ±30% = warn
+        if (v < optMin || v > optMax) status = 'crit';
+        else if (v < optMin + (optMax - optMin) * warnMargin || v > optMax - (optMax - optMin) * warnMargin) status = 'warn';
+      }
+      if (status === 'crit') return 'crit';
+      if (status === 'warn') worst = 'warn';
+    }
+    return worst;
+  }
+
+  function minMax(arr) {
+    if (!arr.length) return { min: null, max: null };
+    let min = Infinity, max = -Infinity;
+    for (const v of arr) {
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    return { min, max };
+  }
+
+  function fmtTemp(v) {
+    if (v === null) return '—';
+    return convertirTemp(v).toFixed(1);
+  }
+  function fmtPres(v) {
+    if (v === null) return '—';
+    // Las presiones ya están en PSI manométrico en procesarFila
+    return v.toFixed(1);
+  }
+  function fmtMinMax(min, max, fmt) {
+    if (min === null || max === null) return '— / —';
+    return fmt(min) + ' / ' + fmt(max);
+  }
+
+  function renderTablaResumen5min() {
+    const tbody = document.querySelector('#tablaResumen5min tbody');
+    if (!tbody || !resumen5minDatos) return;
+    // Obtener límites técnicos actuales para evaluar rangos
+    const refKey = document.getElementById('refSelect')?.value || 'R404A';
+    const refData = refrigerantes[refKey];
+    const appKey = document.getElementById('modoEvapSelect')?.value || 'MBP';
+    const limites = refData ? limitesTecnicos(refKey, refData, appKey) : null;
+
+    tbody.innerHTML = '';
+    resumen5minDatos.forEach(row => {
+      const tr = document.createElement('tr');
+      const fecha = new Date(row.inicio);
+      const fechaStr = fecha.toLocaleString('es-VE', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+      });
+
+      // Evaluar cada variable y obtener clase CSS
+      const cls = (variable, minV, maxV) => {
+        if (!limites) return '';
+        const status = evaluarRangoResumen(variable, minV, maxV, limites);
+        return status === 'ok' ? '' : ` class="resumen-${status}"`;
+      };
+
+      tr.innerHTML = `
+        <td>${fechaStr}</td>
+        <td${cls('p1', row.p1.min, row.p1.max)}>${fmtMinMax(row.p1.min, row.p1.max, fmtPres)}</td>
+        <td${cls('p2', row.p2.min, row.p2.max)}>${fmtMinMax(row.p2.min, row.p2.max, fmtPres)}</td>
+        <td${cls('t1', row.t1.min, row.t1.max)}>${fmtMinMax(row.t1.min, row.t1.max, fmtTemp)}</td>
+        <td${cls('t2', row.t2.min, row.t2.max)}>${fmtMinMax(row.t2.min, row.t2.max, fmtTemp)}</td>
+        <td${cls('t3', row.t3.min, row.t3.max)}>${fmtMinMax(row.t3.min, row.t3.max, fmtTemp)}</td>
+        <td${cls('t4', row.t4.min, row.t4.max)}>${fmtMinMax(row.t4.min, row.t4.max, fmtTemp)}</td>
+        <td${cls('t5', row.t5.min, row.t5.max)}>${fmtMinMax(row.t5.min, row.t5.max, fmtTemp)}</td>
+        <td${cls('shTotal', row.shTotal.min, row.shTotal.max)}>${fmtMinMax(row.shTotal.min, row.shTotal.max, fmtTemp)}</td>
+        <td${cls('shUtil', row.shUtil.min, row.shUtil.max)}>${fmtMinMax(row.shUtil.min, row.shUtil.max, fmtTemp)}</td>
+        <td${cls('sc', row.sc.min, row.sc.max)}>${fmtMinMax(row.sc.min, row.sc.max, fmtTemp)}</td>
+        <td style="text-align:center;">${row.count}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function exportarResumen5minCSV() {
+    if (!resumen5minDatos || !resumen5minDatos.length) {
+      alert('No hay datos para exportar. Cargue el resumen primero.');
+      return;
+    }
+    const intervaloMin = document.getElementById('resumenIntervaloMin').value;
+    const rangoHoras = document.getElementById('resumenRangoHoras').value;
+    const pUnit = pUnits[pUnitActual].label;
+    const tUnit = tUnitActual === 'C' ? '°C' : '°F';
+
+    const headers = [
+      'Intervalo_inicio',
+      `P1_Succion_min_${pUnit}`, `P1_Succion_max_${pUnit}`,
+      `P2_Descarga_min_${pUnit}`, `P2_Descarga_max_${pUnit}`,
+      `T1_Succion_min_${tUnit}`, `T1_Succion_max_${tUnit}`,
+      `T2_Evap_min_${tUnit}`, `T2_Evap_max_${tUnit}`,
+      `T3_Desc_min_${tUnit}`, `T3_Desc_max_${tUnit}`,
+      `T4_Liquido_min_${tUnit}`, `T4_Liquido_max_${tUnit}`,
+      `T5_Amb_min_${tUnit}`, `T5_Amb_max_${tUnit}`,
+      `SH_Total_min_${tUnit}`, `SH_Total_max_${tUnit}`,
+      `SH_Util_min_${tUnit}`, `SH_Util_max_${tUnit}`,
+      `SC_min_${tUnit}`, `SC_max_${tUnit}`,
+      'Muestras'
+    ];
+
+    const rows = resumen5minDatos.map(row => {
+      // Formato sin segundos: YYYY-MM-DD HH:MM
+      const d = new Date(row.inicio);
+      const fecha = d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0') + ' ' +
+        String(d.getHours()).padStart(2, '0') + ':' +
+        String(d.getMinutes()).padStart(2, '0');
+      return [
+        fecha,
+        row.p1.min !== null ? row.p1.min.toFixed(2) : '',
+        row.p1.max !== null ? row.p1.max.toFixed(2) : '',
+        row.p2.min !== null ? row.p2.min.toFixed(2) : '',
+        row.p2.max !== null ? row.p2.max.toFixed(2) : '',
+        row.t1.min !== null ? convertirTemp(row.t1.min).toFixed(2) : '',
+        row.t1.max !== null ? convertirTemp(row.t1.max).toFixed(2) : '',
+        row.t2.min !== null ? convertirTemp(row.t2.min).toFixed(2) : '',
+        row.t2.max !== null ? convertirTemp(row.t2.max).toFixed(2) : '',
+        row.t3.min !== null ? convertirTemp(row.t3.min).toFixed(2) : '',
+        row.t3.max !== null ? convertirTemp(row.t3.max).toFixed(2) : '',
+        row.t4.min !== null ? convertirTemp(row.t4.min).toFixed(2) : '',
+        row.t4.max !== null ? convertirTemp(row.t4.max).toFixed(2) : '',
+        row.t5.min !== null ? convertirTemp(row.t5.min).toFixed(2) : '',
+        row.t5.max !== null ? convertirTemp(row.t5.max).toFixed(2) : '',
+        row.shTotal.min !== null ? convertirTemp(row.shTotal.min).toFixed(2) : '',
+        row.shTotal.max !== null ? convertirTemp(row.shTotal.max).toFixed(2) : '',
+        row.shUtil.min !== null ? convertirTemp(row.shUtil.min).toFixed(2) : '',
+        row.shUtil.max !== null ? convertirTemp(row.shUtil.max).toFixed(2) : '',
+        row.sc.min !== null ? convertirTemp(row.sc.min).toFixed(2) : '',
+        row.sc.max !== null ? convertirTemp(row.sc.max).toFixed(2) : '',
+        row.count
+      ].join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resumen_${intervaloMin}min_${rangoHoras}h_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function cargarHistorico() {
