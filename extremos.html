@@ -264,8 +264,7 @@
       color: var(--tenue);
     }
 
-    .tabla-extremos tbody td,
-    .tabla-extremos tfoot td {
+    .tabla-extremos tbody td {
       padding: 9px 14px;
       border-bottom: 1px solid var(--line);
       text-align: right;
@@ -274,8 +273,7 @@
       color: var(--sutil);
     }
 
-    .tabla-extremos tbody td:first-child,
-    .tabla-extremos tfoot td:first-child {
+    .tabla-extremos tbody td:first-child {
       position: sticky;
       left: 0;
       z-index: 2;
@@ -292,18 +290,6 @@
     .tabla-extremos tbody tr:hover td:first-child { background: var(--panel2); }
 
     .tabla-extremos tbody td.vacio { color: var(--tenue); }
-
-    .tabla-extremos tfoot td {
-      position: sticky;
-      bottom: 0;
-      z-index: 3;
-      background: var(--panel2);
-      border-top: 1px solid var(--line-fuerte);
-      border-bottom: none;
-      font-weight: 700;
-      color: var(--texto);
-    }
-    .tabla-extremos tfoot td:first-child { z-index: 4; }
 
     .celda-warn {
       background: color-mix(in srgb, var(--warn) 16%, transparent) !important;
@@ -381,7 +367,7 @@
       .linea-estado, .nota { color: #333; }
       .tabla-caja { max-height: none; overflow: visible; }
       .tabla-extremos { min-width: 0; font-size: 8.5px; }
-      .tabla-extremos thead th, .tabla-extremos tbody td, .tabla-extremos tfoot td {
+      .tabla-extremos thead th, .tabla-extremos tbody td {
         position: static;
         padding: 4px 6px;
         white-space: normal;
@@ -467,7 +453,6 @@
           <tbody id="cuerpo">
             <tr><td colspan="12" class="sin-datos">Pulsa «Cargar» para leer el histórico.</td></tr>
           </tbody>
-          <tfoot id="pie"></tfoot>
         </table>
       </div>
 
@@ -485,9 +470,9 @@
      REGISTRO DE EXTREMOS · MÁX/MÍN POR INTERVALO
      --------------------------------------------------------------------------
      Página independiente del monitor. Lee la misma tabla `lecturas_hvac` de
-     Supabase (o el Worker de respaldo si Supabase falla) y agrupa las lecturas
-     en intervalos configurables para mostrar el mínimo y el máximo de cada
-     canal, incluidos los indicadores derivados SH Total, SH Útil y SC.
+     Supabase y agrupa las lecturas en intervalos configurables para mostrar
+     el mínimo y el máximo de cada canal, incluidos los indicadores derivados
+     SH Total, SH Útil y SC.
 
      No usa CoolProp: la temperatura de saturación se interpola con la tabla
      `dome` del refrigerante, que ya viene incluida. Así funciona sin red de
@@ -498,13 +483,11 @@
   const SB_URL   = 'https://qiidodrtxchurazrghyr.supabase.co';
   const SB_TABLA = 'lecturas_hvac';
   const SB_CLAVE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaWRvZHJ0eGNodXJhenJnaHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDkwMDQsImV4cCI6MjEwODAyNTAwNH0.12wbnPavwGr4tEH1kz9ZtgSxHUYvL9gyrbMqFOBX2hg';
-  const API_URL  = 'https://api-termometro.manuelaa1990.workers.dev';
 
-  const PAGINA          = 1000;
-  const MAX_FILAS       = 20000;
-  const MAX_HORAS_WORKER = 72;
-  const ATM_PSI          = 14.696;
-  const PSI_POR_BAR      = 14.5038;
+  const PAGINA     = 1000;
+  const MAX_FILAS  = 20000;
+  const ATM_PSI    = 14.696;
+  const PSI_POR_BAR = 14.5038;
 
   const K_PREFS  = 'refrig_extremos_prefs';
   const K_ASIGN  = 'refrig_asignacion_sondas_v3';
@@ -688,6 +671,7 @@
   let tUnit = 'C';
   let prefs = {};
   let filasPorIntervalo = [];
+  let filasCrudas = [];
   let ultimaCarga = null;
   let cargando = false;
 
@@ -699,9 +683,9 @@
     { key: 't3',      label: 'T3 Descarga',         tipo: 'temp' },
     { key: 't4',      label: 'T4 Líquido',          tipo: 'temp' },
     { key: 't5',      label: 'T5 Ambiente',         tipo: 'temp' },
-    { key: 'shTotal', label: 'SH Total',            tipo: 'temp' },
-    { key: 'shUtil',  label: 'SH Útil',             tipo: 'temp' },
-    { key: 'sc',      label: 'SC · Subenfriamiento', tipo: 'temp' }
+    { key: 'shTotal', label: 'SH Total',            tipo: 'temp', delta: true },
+    { key: 'shUtil',  label: 'SH Útil',             tipo: 'temp', delta: true },
+    { key: 'sc',      label: 'SC · Subenfriamiento', tipo: 'temp', delta: true }
   ];
 
   /* ------------------------------ ASIGNACIÓN ------------------------------ */
@@ -816,6 +800,15 @@
     if (v === null || v === undefined) return null;
     return tUnit === 'F' ? (v * 9 / 5) + 32 : v;
   }
+  /* SH y SC son diferencias de temperatura: en °F se multiplican por 9/5,
+     sin sumar 32 (eso daría 39 °F en vez de 7 °F para 4 K). */
+  function convDelta(v) {
+    if (v === null || v === undefined) return null;
+    return tUnit === 'F' ? v * 9 / 5 : v;
+  }
+  function unidadTempDelta() {
+    return tUnit === 'F' ? 'Δ°F' : 'K';
+  }
   function convPres(v) {
     if (v === null || v === undefined) return null;
     if (pUnit === 'bar') return v / PSI_POR_BAR;
@@ -851,12 +844,15 @@
     };
   }
 
-  /* Interpolación lineal en la tabla dome. */
+  /* Interpolación en log(P) sobre la tabla dome: la presión de saturación
+     crece de forma casi exponencial con la temperatura. Interpolar en presión
+     lineal se desviaba hasta ~5 K en R-410A y ~4 K en R-32; así queda en ~2 K. */
   function interpolarTsat(dome, pBarAbs) {
-    if (!dome || !dome.length) return null;
+    if (!dome || !dome.length || !(pBarAbs > 0)) return null;
     for (let i = 0; i < dome.length - 1; i++) {
       if (pBarAbs >= dome[i].p && pBarAbs <= dome[i + 1].p) {
-        const f = (pBarAbs - dome[i].p) / (dome[i + 1].p - dome[i].p);
+        const f = (Math.log(pBarAbs) - Math.log(dome[i].p)) /
+                  (Math.log(dome[i + 1].p) - Math.log(dome[i].p));
         return dome[i].tSat + f * (dome[i + 1].tSat - dome[i].tSat);
       }
     }
@@ -870,7 +866,8 @@
     for (let i = 0; i < dome.length - 1; i++) {
       if (tSatC >= dome[i].tSat && tSatC <= dome[i + 1].tSat) {
         const f = (tSatC - dome[i].tSat) / (dome[i + 1].tSat - dome[i].tSat);
-        return dome[i].p + f * (dome[i + 1].p - dome[i].p);
+        return Math.exp(Math.log(dome[i].p) +
+                        f * (Math.log(dome[i + 1].p) - Math.log(dome[i].p)));
       }
     }
     if (tSatC <= dome[0].tSat) return dome[0].p;
@@ -988,18 +985,6 @@
     return res.json();
   }
 
-  async function traerJSON(ruta) {
-    const res = await conTimeout(fetch(API_URL + ruta, {
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store'
-    }), 15000);
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error('HTTP ' + res.status + (txt ? ': ' + txt.substring(0, 100) : ''));
-    }
-    return res.json();
-  }
-
   function interpretarError(err) {
     const msg = String((err && err.message) || err || 'Error desconocido');
     if (msg.indexOf('TIMEOUT') >= 0) return 'el servidor no respondió a tiempo.';
@@ -1011,39 +996,23 @@
   }
 
   async function traerVentana(inicioMs, finMs) {
-    /* 1) Supabase, paginando de 1000 en 1000. */
-    try {
-      const desde = encodeURIComponent(new Date(inicioMs).toISOString());
-      const hasta = encodeURIComponent(new Date(finMs).toISOString());
-      const base = 'select=*&created_at=gte.' + desde + '&created_at=lte.' + hasta +
-                   '&order=created_at.asc,id.asc';
-      const filas = [];
-      let offset = 0;
-      let truncado = false;
+    const desde = encodeURIComponent(new Date(inicioMs).toISOString());
+    const hasta = encodeURIComponent(new Date(finMs).toISOString());
+    const base = 'select=*&created_at=gte.' + desde + '&created_at=lte.' + hasta +
+                 '&order=created_at.asc,id.asc';
+    const filas = [];
+    let offset = 0;
+    let truncado = false;
 
-      while (offset < MAX_FILAS) {
-        const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
-        if (!Array.isArray(lote) || !lote.length) break;
-        filas.push.apply(filas, lote);
-        if (lote.length < PAGINA) break;
-        offset += lote.length;
-        if (offset >= MAX_FILAS) truncado = true;
-      }
-      return { filas: filas, origen: 'Supabase', truncado: truncado };
-    } catch (err) {
-      /* 2) Worker de respaldo: entrega hasta 72 h hacia atrás. */
-      const horasPedidas = Math.ceil((Date.now() - inicioMs) / 3600000) + 1;
-      const horas = Math.min(horasPedidas, MAX_HORAS_WORKER);
-      const datos = await traerJSON('/range?hours=' + horas);
-      const filas = Array.isArray(datos) ? datos
-                  : (datos && (datos.datos || datos.data || datos.filas)) || [];
-      return {
-        filas: filas,
-        origen: 'Worker',
-        truncado: horasPedidas > MAX_HORAS_WORKER,
-        motivo: interpretarError(err)
-      };
+    while (offset < MAX_FILAS) {
+      const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
+      if (!Array.isArray(lote) || !lote.length) break;
+      filas.push.apply(filas, lote);
+      if (lote.length < PAGINA) break;
+      offset += lote.length;
+      if (offset >= MAX_FILAS) truncado = true;
     }
+    return { filas: filas, truncado: truncado };
   }
 
   /* ------------------------------- AGRUPACIÓN ----------------------------- */
@@ -1131,16 +1100,17 @@
   }
 
   /* -------------------------------- FORMATO ------------------------------- */
-  function fmtValor(v, tipo) {
+  function fmtValor(v, col) {
     if (v === null || v === undefined) return '—';
-    const x = (tipo === 'pres') ? convPres(v) : convTemp(v);
+    const x = (col.tipo === 'pres') ? convPres(v)
+            : (col.delta ? convDelta(v) : convTemp(v));
     if (x === null || !Number.isFinite(x)) return '—';
     return x.toFixed(1);
   }
 
-  function fmtMinMax(par, tipo) {
-    const a = fmtValor(par.min, tipo);
-    const b = fmtValor(par.max, tipo);
+  function fmtMinMax(par, col) {
+    const a = fmtValor(par.min, col);
+    const b = fmtValor(par.max, col);
     if (a === '—' && b === '—') return '—';
     return a + ' / ' + b;
   }
@@ -1149,10 +1119,11 @@
   function renderCabecera() {
     const uP = unidadPres();
     const uT = unidadTemp();
+    const uD = unidadTempDelta();
     let html = '<tr><th>Intervalo (inicio)<small>hora local</small></th>';
 
     COLS.forEach(c => {
-      const u = (c.tipo === 'pres') ? uP : uT;
+      const u = (c.tipo === 'pres') ? uP : (c.delta ? uD : uT);
       html += '<th>' + c.label + '<small>mín / máx · ' + u + '</small></th>';
     });
 
@@ -1163,7 +1134,6 @@
   /* --------------------------------- RENDER ------------------------------- */
   function render() {
     const cuerpo = $('cuerpo');
-    const pie = $('pie');
     const lim = limitesActuales($('selRef').value, $('selApp').value);
 
     renderCabecera();
@@ -1172,7 +1142,6 @@
     if (!filasPorIntervalo.length) {
       cuerpo.innerHTML = '<tr><td colspan="12" class="sin-datos">' +
         'No hay lecturas en el rango solicitado.</td></tr>';
-      pie.innerHTML = '';
       $('resumenInfo').textContent = '';
       return;
     }
@@ -1185,44 +1154,25 @@
         const par = row[c.key];
         const estado = evaluar(c.key, par.min, par.max, lim);
         const clase = estado === 'ok' ? '' : ' class="celda-' + estado + '"';
-        celdas += '<td' + clase + '>' + fmtMinMax(par, c.tipo) + '</td>';
+        celdas += '<td' + clase + '>' + fmtMinMax(par, c) + '</td>';
       });
 
       celdas += '<td>' + row.muestras + '</td>';
       filas.push('<tr>' + celdas + '</tr>');
     });
     cuerpo.innerHTML = filas.join('');
-
-    /* Pie: extremo global del rango (mín de mínimos, máx de máximos). */
-    let celdasPie = '<td>Total del rango</td>';
-    let muestras = 0;
-    const totales = {};
-
-    COLS.forEach(c => {
-      let min = null, max = null;
-      filasPorIntervalo.forEach(row => {
-        const par = row[c.key];
-        if (par.min !== null && (min === null || par.min < min)) min = par.min;
-        if (par.max !== null && (max === null || par.max > max)) max = par.max;
-      });
-      totales[c.key] = { min: min, max: max };
-      const estado = evaluar(c.key, min, max, lim);
-      const clase = estado === 'ok' ? '' : ' class="celda-' + estado + '"';
-      celdasPie += '<td' + clase + '>' + fmtMinMax(totales[c.key], c.tipo) + '</td>';
-    });
-
-    filasPorIntervalo.forEach(row => { muestras += row.muestras; });
-    celdasPie += '<td>' + muestras + '</td>';
-    pie.innerHTML = '<tr>' + celdasPie + '</tr>';
   }
 
   function pintarLimites(lim) {
     const uT = unidadTemp();
+    const uD = unidadTempDelta();
+    const abs = v => tUnit === 'F' ? convTemp(v).toFixed(0) : String(v);
+    const dif = v => tUnit === 'F' ? convDelta(v).toFixed(1) : String(v);
     const txt = lim.ref.nombre + ' · ' + lim.app.label +
-      ' · SH ' + lim.shMin + '–' + lim.shMax + ' K' +
-      ' · SC ' + lim.scMin + '–' + lim.scMax + ' K' +
-      ' · descarga ≤ ' + lim.tDescMax + uT +
-      ' · condensación ≤ ' + lim.tCondMax + uT;
+      ' · SH ' + dif(lim.shMin) + '–' + dif(lim.shMax) + ' ' + uD +
+      ' · SC ' + dif(lim.scMin) + '–' + dif(lim.scMax) + ' ' + uD +
+      ' · descarga ≤ ' + abs(lim.tDescMax) + uT +
+      ' · condensación ≤ ' + abs(lim.tCondMax) + uT;
     $('subLimites').textContent = txt;
   }
 
@@ -1248,10 +1198,6 @@
     if (intervaloMin === null) { aviso('El intervalo debe estar entre 1 y 120 minutos.', true); return; }
     if (rangoHoras === null) { aviso('El rango debe estar entre 0,5 y 72 horas.', true); return; }
 
-    const refKey = $('selRef').value;
-    const appKey = $('selApp').value;
-    const lim = limitesActuales(refKey, appKey);
-
     const fin = Date.now();
     const inicio = fin - rangoHoras * 3600000;
 
@@ -1264,35 +1210,40 @@
 
     try {
       const resp = await traerVentana(inicio, fin);
-      const normalizadas = normalizarFilas(resp.filas);
-      filasPorIntervalo = agruparEnIntervalos(normalizadas, intervaloMin, lim);
+      /* La consulta filtra por created_at, pero se recorta igualmente a la
+         ventana exacta para descartar lecturas en el borde. */
+      filasCrudas = normalizarFilas(resp.filas).filter(f => {
+        const t = new Date(f.created_at).getTime();
+        return t >= inicio - 2000 && t <= fin + 2000;
+      });
+
+      /* Si el usuario cambió el intervalo o el refrigerante mientras se
+         descargaba, se respeta el valor actual. */
+      const intervaloAplicado = leerIntervalo() || intervaloMin;
+      const limAplicado = limitesActuales($('selRef').value, $('selApp').value);
+      filasPorIntervalo = agruparEnIntervalos(filasCrudas, intervaloAplicado, limAplicado);
+
       ultimaCarga = {
-        intervaloMin: intervaloMin,
+        intervaloMin: intervaloAplicado,
         rangoHoras: rangoHoras,
         desde: inicio,
         hasta: fin,
-        lecturas: normalizadas.length,
+        lecturas: filasCrudas.length,
         intervalos: filasPorIntervalo.length,
-        origen: resp.origen,
-        lim: lim
+        origen: 'Supabase',
+        lim: limAplicado
       };
 
       render();
-      $('estado').textContent = 'Listo · ' + resp.origen;
+      $('estado').textContent = 'Listo · Supabase';
       $('resumenInfo').textContent =
-        normalizadas.length + ' lecturas · ' +
-        filasPorIntervalo.length + ' intervalos de ' + intervaloMin + ' min · ' +
+        filasCrudas.length + ' lecturas · ' +
+        filasPorIntervalo.length + ' intervalos de ' + intervaloAplicado + ' min · ' +
         fechaCorta(inicio) + ' → ' + fechaCorta(fin);
 
       const notas = [];
       if (resp.truncado) {
         notas.push('Se alcanzó el tope de ' + MAX_FILAS + ' lecturas: reduzca el rango o aumente el intervalo.');
-      }
-      if (resp.origen === 'Worker' && resp.motivo) {
-        notas.push('Supabase no respondió (' + resp.motivo + '); se usó el Worker de respaldo.');
-      }
-      if (resp.origen === 'Worker' && resp.truncado) {
-        notas.push('El Worker solo entrega hasta ' + MAX_HORAS_WORKER + ' h hacia atrás.');
       }
       $('nota').textContent = notas.join(' ');
       guardarPrefs();
@@ -1301,11 +1252,43 @@
       $('estado').classList.add('error');
       $('nota').textContent = 'No se pudo cargar: ' + interpretarError(err);
       filasPorIntervalo = [];
+      filasCrudas = [];
+      ultimaCarga = null;
       render();
     } finally {
       cargando = false;
       $('btnCargar').disabled = false;
     }
+  }
+
+  /* Reagrupa las filas ya descargadas (cambio de intervalo, refrigerante o
+     aplicación) sin volver a pedir datos a la red. */
+  function recalcular() {
+    if (!filasCrudas.length || !ultimaCarga) return false;
+
+    const intervaloMin = leerIntervalo();
+    if (intervaloMin === null) {
+      aviso('El intervalo debe estar entre 1 y 120 minutos.', true);
+      $('estado').textContent = 'Listo · ' + ultimaCarga.origen;
+      return false;
+    }
+
+    const lim = limitesActuales($('selRef').value, $('selApp').value);
+    filasPorIntervalo = agruparEnIntervalos(filasCrudas, intervaloMin, lim);
+
+    ultimaCarga.intervaloMin = intervaloMin;
+    ultimaCarga.lim = lim;
+    ultimaCarga.lecturas = filasCrudas.length;
+    ultimaCarga.intervalos = filasPorIntervalo.length;
+
+    render();
+    $('estado').textContent = 'Listo · ' + ultimaCarga.origen;
+    $('resumenInfo').textContent =
+      filasCrudas.length + ' lecturas · ' +
+      filasPorIntervalo.length + ' intervalos de ' + intervaloMin + ' min · ' +
+      fechaCorta(ultimaCarga.desde) + ' → ' + fechaCorta(ultimaCarga.hasta);
+    guardarPrefs();
+    return true;
   }
 
   /* ---------------------------------- CSV --------------------------------- */
@@ -1319,9 +1302,10 @@
     return txt;
   }
 
-  function numeroCSV(v, tipo) {
+  function numeroCSV(v, col) {
     if (v === null || v === undefined) return '';
-    const x = (tipo === 'pres') ? convPres(v) : convTemp(v);
+    const x = (col.tipo === 'pres') ? convPres(v)
+            : (col.delta ? convDelta(v) : convTemp(v));
     if (x === null || !Number.isFinite(x)) return '';
     return x.toFixed(2).replace('.', ',');
   }
@@ -1334,10 +1318,11 @@
 
     const uP = unidadPres();
     const uT = unidadTemp();
+    const uD = unidadTempDelta();
     const cabecera = ['Intervalo_inicio'];
 
     COLS.forEach(c => {
-      const u = (c.tipo === 'pres') ? uP : uT;
+      const u = (c.tipo === 'pres') ? uP : (c.delta ? uD : uT);
       const etiqueta = c.label.replace(/\s*·\s*/g, ' ').trim();
       cabecera.push(etiqueta + '_min (' + u + ')');
       cabecera.push(etiqueta + '_max (' + u + ')');
@@ -1349,29 +1334,12 @@
     filasPorIntervalo.forEach(row => {
       const campos = [fechaCorta(row.inicio)];
       COLS.forEach(c => {
-        campos.push(numeroCSV(row[c.key].min, c.tipo));
-        campos.push(numeroCSV(row[c.key].max, c.tipo));
+        campos.push(numeroCSV(row[c.key].min, c));
+        campos.push(numeroCSV(row[c.key].max, c));
       });
       campos.push(row.muestras);
       lineas.push(campos.map(celdaCSV).join(';'));
     });
-
-    /* Fila final con el extremo global del rango. */
-    const totales = ['TOTAL_DEL_RANGO'];
-    COLS.forEach(c => {
-      let min = null, max = null;
-      filasPorIntervalo.forEach(row => {
-        const par = row[c.key];
-        if (par.min !== null && (min === null || par.min < min)) min = par.min;
-        if (par.max !== null && (max === null || par.max > max)) max = par.max;
-      });
-      totales.push(numeroCSV(min, c.tipo));
-      totales.push(numeroCSV(max, c.tipo));
-    });
-    let muestras = 0;
-    filasPorIntervalo.forEach(row => { muestras += row.muestras; });
-    totales.push(muestras);
-    lineas.push(totales.map(celdaCSV).join(';'));
 
     const csv = '\uFEFF' + lineas.join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1493,9 +1461,9 @@
       $(id).addEventListener('change', () => {
         /* Cambiar de refrigerante cambia SH/SC y los límites: se recalcula
            el agrupado con la tabla P–T nueva sin volver a pedir los datos. */
-        if (ultimaCarga) {
+        if (filasCrudas.length && ultimaCarga) {
           $('estado').textContent = 'Recalculando…';
-          cargar();
+          recalcular();
         } else {
           render();
           guardarPrefs();
@@ -1503,7 +1471,12 @@
       });
     });
 
-    $('inIntervalo').addEventListener('change', () => { if (ultimaCarga) cargar(); });
+    $('inIntervalo').addEventListener('change', () => {
+      if (filasCrudas.length && ultimaCarga) {
+        $('estado').textContent = 'Recalculando…';
+        recalcular();
+      }
+    });
     $('inRango').addEventListener('change', () => { if (ultimaCarga) cargar(); });
 
     document.addEventListener('keydown', evento => {

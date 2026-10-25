@@ -202,11 +202,9 @@
   /* ============================================================
      CONFIGURACIÓN
      ============================================================ */
-  const API_URL   = "https://api-termometro.manuelaa1990.workers.dev";
   const POLL_MS   = 10000;
   const MAX_AGE_MS = 35000;
   const GAP_MS    = 2 * 60 * 1000;
-  const MAX_HISTORY_HOURS = 168;
   const ATM_PSI   = 14.696;
   const PA_POR_PSI = 6894.757293168;
 
@@ -416,12 +414,10 @@
   /* ---------------------------- ORIGEN DE DATOS ---------------------------
      Supabase: tabla lecturas_hvac
        created_at, presion_baja, presion_alta, temp1..temp5
-     Si SB_CLAVE queda vacía se usa el Worker de siempre. */
+     Es la única fuente de datos de la página. */
   const SB_URL   = 'https://qiidodrtxchurazrghyr.supabase.co';
   const SB_TABLA = 'lecturas_hvac';
   const SB_CLAVE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaWRvZHJ0eGNodXJhenJnaHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDkwMDQsImV4cCI6MjEwODAyNTAwNH0.12wbnPavwGr4tEH1kz9ZtgSxHUYvL9gyrbMqFOBX2hg';
-
-  function usarSupabase() { return SB_CLAVE.length > 20; }
 
   async function sbPedir(consulta) {
     const url = SB_URL + '/rest/v1/' + SB_TABLA + '?' + consulta;
@@ -433,87 +429,37 @@
     return res.json();
   }
 
-  async function fetchJSON(path) {
-    const res = await withTimeout(fetch(API_URL + path, { cache: 'no-store' }), 12000);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res.json();
-  }
-  async function fetchRange(hours, offset) {
-    const q = offset ? ('/range?hours=' + hours + '&offset=' + offset) : ('/range?hours=' + hours);
-    const data = await fetchJSON(q);
-    return Array.isArray(data) ? data : [];
-  }
-
-  /* Última lectura y ventana exacta (con Supabase, por rango de fechas) */
+  /* Última lectura y ventana exacta, por rango de fechas */
   async function fetchUltima() {
-    if (usarSupabase()) {
-      const filas = await sbPedir('select=*&order=created_at.desc&limit=1');
-      return (Array.isArray(filas) && filas.length) ? filas[0] : null;
-    }
-    return fetchJSON('/latest');
+    const filas = await sbPedir('select=*&order=created_at.desc&limit=1');
+    return (Array.isArray(filas) && filas.length) ? filas[0] : null;
   }
   async function fetchVentana(desdeMs, hastaMs) {
-    if (usarSupabase()) {
-      const d = encodeURIComponent(new Date(desdeMs).toISOString());
-      const h = encodeURIComponent(new Date(hastaMs).toISOString());
-      /* Supabase/PostgREST entrega como máximo 1000 filas por consulta.
-         Se pagina con offset para no dejar vacíos en 4 h, 8 h y 24 h. */
-      const base = 'select=*&created_at=gte.' + d + '&created_at=lte.' + h +
-                   '&order=created_at.asc,id.asc';
-      const filas = [];
-      const PAGINA = 1000;
-      const MAX_FILAS = 20000;
-      let offset = 0;
-      while (offset < MAX_FILAS) {
-        const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
-        if (!Array.isArray(lote) || !lote.length) break;
-        filas.push(...lote);
-        if (lote.length < PAGINA) break;
-        offset += lote.length;
-      }
-      return filas;
+    const d = encodeURIComponent(new Date(desdeMs).toISOString());
+    const h = encodeURIComponent(new Date(hastaMs).toISOString());
+    /* Supabase/PostgREST entrega como máximo 1000 filas por consulta.
+       Se pagina con offset para no dejar vacíos en 4 h, 8 h y 24 h. */
+    const base = 'select=*&created_at=gte.' + d + '&created_at=lte.' + h +
+                 '&order=created_at.asc,id.asc';
+    const filas = [];
+    const PAGINA = 1000;
+    const MAX_FILAS = 20000;
+    let offset = 0;
+    while (offset < MAX_FILAS) {
+      const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
+      if (!Array.isArray(lote) || !lote.length) break;
+      filas.push(...lote);
+      if (lote.length < PAGINA) break;
+      offset += lote.length;
     }
-    /* Worker: pide las horas necesarias y el filtro fino lo hace getSlice() */
-    const horas = Math.ceil((Date.now() - desdeMs) / 3600000) + 1;
-    return fetchRange(horas, 0);
+    return filas;
   }
 
   /* ============================================================
      CARGA DE HISTORIAL
      ============================================================ */
   async function loadAllHistory() {
-    if (usarSupabase()) {
-      await recargarVentana();
-      return;
-    }
-    const chunks = [];
-    let gotBig = false;
-    try {
-      const big = await fetchRange(MAX_HISTORY_HOURS, 0);
-      if (big.length > 1) {
-        const t0 = parseTs(big[0].created_at), t1 = parseTs(big[big.length - 1].created_at);
-        if (t0 && t1 && (t1 - t0) / 3600000 >= 12) { chunks.push(big); gotBig = true; }
-      }
-    } catch (e) { console.warn('Fallo carga 7d:', e); }
-    if (!gotBig) {
-      let prevFirst = null;
-      for (let i = 0; i < 8; i++) {
-        try {
-          const chunk = await fetchRange(24, i * 24);
-          if (!chunk.length) break;
-          const firstTs = parseTs(chunk[0].created_at);
-          if (prevFirst !== null && Math.abs(firstTs - prevFirst) < 60000) break;
-          prevFirst = firstTs;
-          chunks.push(chunk);
-        } catch (e) { break; }
-      }
-    }
-    const seen = new Set(), merged = [];
-    chunks.forEach(chunk => chunk.forEach(row => {
-      if (row && row.created_at && !seen.has(row.created_at)) { seen.add(row.created_at); merged.push(row); }
-    }));
-    merged.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
-    allData = merged;
+    await recargarVentana();
     if (!allData.length) {
       const badge = document.getElementById('status-badge');
       badge.textContent = '⚠️ Sin datos del equipo';
@@ -1431,17 +1377,7 @@
     if (isRefreshing) return;
     isRefreshing = true;
     try {
-      /* Con Supabase la ventana se pide por fecha: no hace falta el Worker
-         (que además rechaza orígenes que no sean el publicado). */
-      if (usarSupabase()) { await recargarVentana(); return; }
-      const recientes = await fetchRange(24, 0);
-      const vistos = new Set(allData.map(r => r.created_at));
-      let sumados = 0;
-      recientes.forEach(row => { if (row && row.created_at && !vistos.has(row.created_at)) { allData.push(row); sumados++; } });
-      if (sumados) {
-        allData.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
-        if (offsetMin === 0) renderChart();
-      }
+      await recargarVentana();
     } catch (e) {} finally { isRefreshing = false; }
   }
 
@@ -1453,7 +1389,7 @@
     const hist = offsetMin > 0;
     document.getElementById('btn-actual').classList.toggle('hidden', !hist);
     document.getElementById('btn-forward').classList.toggle('hidden', !hist);
-    if (usarSupabase()) { recargarVentana(); } else { renderChart(); }
+    recargarVentana();
     updateBadge();
   }
   function setVentana(min) {
@@ -1464,7 +1400,7 @@
     if (tempChart.resetZoom) tempChart.resetZoom();
     document.getElementById('btn-actual').classList.add('hidden');
     document.getElementById('btn-forward').classList.add('hidden');
-    if (usarSupabase()) { recargarVentana(); } else { renderChart(); }
+    recargarVentana();
     updateBadge();
   }
   function resetZoom() {

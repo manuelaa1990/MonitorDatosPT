@@ -9,12 +9,12 @@
  *  · Archivos propios (íconos, manifiesto): caché primero.
  *  · Bibliotecas externas (Plotly, Chart.js, CoolProp…): red primero y se
  *    guarda copia, de modo que al segundo arranque funcionan sin internet.
- *  · Supabase y el Worker: NO se tocan. Los datos en vivo jamás salen de caché.
+ *  · Supabase: NO se toca. Los datos en vivo jamás salen de caché.
  *
  * Al cambiar archivos de la app, subí el número de VERSION para forzar la
  * limpieza de la caché anterior.
  */
-const VERSION = 'v25';
+const VERSION = 'v26';
 const CACHE = 'monitor-hvac-' + VERSION;
 
 const SHELL = [
@@ -50,7 +50,11 @@ self.addEventListener('activate', evento => {
 });
 
 function guardar(request, respuesta) {
-  if (!respuesta || !respuesta.ok) return;
+  if (!respuesta) return;
+  /* Las respuestas "opaque" (scripts de CDN sin CORS) tienen status 0 y
+     ok === false, pero sí se pueden guardar: sin esto, las bibliotecas
+     externas no quedaban disponibles sin internet. */
+  if (!respuesta.ok && respuesta.type !== 'opaque') return;
   caches.open(CACHE).then(cache => cache.put(request, respuesta)).catch(() => {});
 }
 
@@ -62,14 +66,22 @@ self.addEventListener('fetch', evento => {
   try { url = new URL(request.url); } catch (e) { return; }
 
   /* Datos en vivo: siempre a la red, nunca desde caché */
-  if (url.hostname.endsWith('supabase.co') || url.hostname.endsWith('workers.dev')) return;
+  if (url.hostname.endsWith('supabase.co')) return;
 
   /* Navegación: red primero, caché como respaldo */
   if (request.mode === 'navigate') {
     evento.respondWith(
       fetch(request)
         .then(respuesta => { guardar(request, respuesta.clone()); return respuesta; })
-        .catch(() => caches.match(request).then(copia => copia || caches.match('./index.html')))
+        .catch(() => {
+          /* La caché guarda las URL sin "?min=…": se busca por ruta para no
+             servir index.html cuando se abrió grafica.html sin conexión. */
+          const sinQuery = new URL(request.url);
+          sinQuery.search = '';
+          return caches.match(sinQuery.href)
+            .then(copia => copia || caches.match(request))
+            .then(copia => copia || caches.match('./index.html'));
+        })
     );
     return;
   }
