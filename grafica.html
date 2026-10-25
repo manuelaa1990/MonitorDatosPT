@@ -1426,7 +1426,19 @@
       if (document.fullscreenElement) await document.exitFullscreen();
       if (screen.orientation && screen.orientation.unlock) { try { screen.orientation.unlock(); } catch (_) {} }
     } catch (_) {}
-    location.replace('./index.html');
+    /* Si la gráfica quedó abierta en una ventana aparte (por la versión
+       anterior), se cierra para volver al monitor que sigue abierto detrás. */
+    if (window.opener && !window.opener.closed) {
+      try { window.close(); } catch (_) {}
+      setTimeout(function () {
+        if (!window.closed) location.replace('./index.html');
+      }, 200);
+      return;
+    }
+    /* Dentro de la misma ventana se vuelve al monitor con el historial,
+       igual que el botón «← Monitor» de extremos.html, sin recargarlo. */
+    if (history.length > 1) history.back();
+    else location.replace('./index.html');
   }
 
   let ultimoToque = 0;
@@ -1439,9 +1451,6 @@
     }
     ultimoToque = ahora;
   }, { passive: false });
-
-  history.pushState({ page: 'grafica' }, '', location.href);
-  window.addEventListener('popstate', () => exitAndGoBack());
 
   function updatePortraitHint() {
     const hint = document.getElementById('portrait-hint');

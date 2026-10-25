@@ -961,7 +961,7 @@
     <!-- ============================ ACCIONES ================================ -->
     <div class="action-bar" id="accionesMonitor">
       <button class="btn btn-reporte" onclick="descargarPDFReporte()" title="Abre el diálogo de impresión: elija «Guardar como PDF»">🖨 Imprimir / PDF</button>
-      <button class="btn btn-toggle" onclick="abrirGraficaAmpliada()" title="Abrir la gráfica extendida en otra pestaña">📊 Gráfica extendida</button>
+      <button class="btn btn-toggle" onclick="abrirGraficaAmpliada()" title="Abrir la gráfica extendida">📊 Gráfica extendida</button>
       <a class="btn btn-toggle" href="extremos.html" target="_blank" rel="noopener" title="Abrir el registro de máximos y mínimos por intervalo">📋 Extremos</a>
       <button class="btn btn-toggle" id="btnInstalar" style="display:none" onclick="instalarApp()" title="Instalar como aplicación en el teléfono">⬇ Instalar app</button>
     </div>
@@ -3012,11 +3012,14 @@
   };
 
   /* La gráfica extendida vive en su propia página (grafica.html).
+     Se abre en la MISMA ventana (navegación dentro del ámbito de la PWA):
+     así «Salir» vuelve al monitor sin crear otra pestaña ni exponer la
+     dirección, igual que el enlace «← Monitor» de extremos.html.
      Se le pasa la asignación de sondas para que use exactamente las mismas
      etiquetas que el monitor (si no, cada página lee su propia caché). */
   window.abrirGraficaAmpliada = function () {
     const mapa = encodeURIComponent(JSON.stringify(asignacion));
-    window.open('grafica.html?min=' + rangoMin + '&map=' + mapa, '_blank');
+    location.href = 'grafica.html?min=' + rangoMin + '&map=' + mapa;
   };
   /* ==================== CASILLEROS: SELECTORES Y VALORES ================== */
   let ventanaProcesada = [];      /* filas de la ventana visible, ya procesadas */

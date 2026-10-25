@@ -353,6 +353,48 @@
       .tabla-extremos { min-width: 1500px; }
     }
 
+    /* --------------------------- AVISO DE ORIENTACIÓN ----------------------- */
+    /* En móvil en vertical se tapa la página con este aviso: al tocar el botón
+       se pide pantalla completa y se bloquea la orientación en horizontal,
+       igual que en grafica.html y mollier.html. */
+    #avisoGirar {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      text-align: center;
+      padding: 2rem;
+    }
+    @media (orientation: portrait) {
+      #avisoGirar.force-hint { display: flex; }
+    }
+    #avisoGirar.oculto { display: none !important; }
+
+    .icono-girar {
+      font-size: 3.5rem;
+      display: inline-block;
+      animation: girar 2s ease-in-out infinite;
+    }
+    @keyframes girar {
+      0%, 100% { transform: rotate(0deg); }
+      50%      { transform: rotate(90deg); }
+    }
+    .titulo-girar { font-size: 1.15rem; font-weight: 700; margin: .9rem 0 .4rem; }
+    .texto-girar { font-size: .8rem; color: var(--sutil); margin-bottom: 1.4rem; }
+    .btn-horizontal {
+      padding: .7rem 1.4rem;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: var(--acento);
+      color: var(--bg);
+      font-weight: 700;
+      font-size: .8rem;
+      cursor: pointer;
+    }
+
     /* --------------------------------- IMPRESIÓN ---------------------------- */
     @media print {
       :root {
@@ -360,7 +402,7 @@
         --texto: #000; --sutil: #333; --tenue: #555;
         --line: #ccc; --line-fuerte: #999;
       }
-      .topbar, .filtros, .leyenda, .btn, .btn-icono, .toast { display: none !important; }
+      .topbar, .filtros, .leyenda, .btn, .btn-icono, .toast, #avisoGirar { display: none !important; }
       body { background: #fff; color: #000; }
       main { padding: 0; }
       .panel { border: none; }
@@ -379,6 +421,15 @@
   </style>
 </head>
 <body>
+
+  <div id="avisoGirar" role="dialog" aria-label="Usar en horizontal">
+    <div>
+      <div class="icono-girar">📱</div>
+      <div class="titulo-girar">Gira el teléfono</div>
+      <div class="texto-girar">Para ver el registro de extremos a pantalla completa</div>
+      <button type="button" id="btnHorizontal" class="btn-horizontal">Intentar pantalla completa</button>
+    </div>
+  </div>
 
   <header class="topbar">
     <div class="marca">
@@ -1499,6 +1550,67 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+</script>
+
+<!-- Orientación: en el móvil se fuerza el horizontal igual que en grafica.html -->
+<script>
+  window.quiereVertical = false;
+
+  async function enterFullscreen() {
+    const aviso = document.getElementById('avisoGirar');
+    const el = document.documentElement;
+    const pedir = el.requestFullscreen || el.webkitRequestFullscreen;
+    /* Se oculta el aviso de inmediato: si el navegador no permite pantalla
+       completa, la página queda usable en vertical en vez de bloquearse. */
+    if (aviso) aviso.classList.add('oculto');
+    if (!pedir) { window.quiereVertical = true; return; }
+    try {
+      await pedir.call(el);
+      try {
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+      } catch (_) {}
+    } catch (_) {
+      /* Sin permiso o sin soporte: se sigue en vertical y no se insiste. */
+      window.quiereVertical = true;
+      try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
+    }
+  }
+
+  function actualizarAvisoGirar() {
+    const aviso = document.getElementById('avisoGirar');
+    if (!aviso) return;
+    const vertical = window.matchMedia('(orientation: portrait)').matches;
+    if (vertical && !window.quiereVertical) {
+      aviso.classList.add('force-hint');
+      aviso.classList.remove('oculto');
+    } else {
+      aviso.classList.remove('force-hint');
+    }
+  }
+
+  let intentoHorizontalHecho = false;
+  function intentarHorizontal(ev) {
+    if (intentoHorizontalHecho || window.quiereVertical) return;
+    if (!window.matchMedia('(orientation: portrait)').matches) return;
+    if (ev && ev.target && ev.target.closest && ev.target.closest('#btnHorizontal')) return;
+    intentoHorizontalHecho = true;
+    try { enterFullscreen(); } catch (_) {}
+    setTimeout(function () { intentoHorizontalHecho = false; }, 4000);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const boton = document.getElementById('btnHorizontal');
+    if (boton) boton.addEventListener('click', enterFullscreen);
+    actualizarAvisoGirar();
+    window.addEventListener('resize', actualizarAvisoGirar);
+    window.addEventListener('orientationchange', function () {
+      setTimeout(actualizarAvisoGirar, 300);
+    });
+  });
+
+  ['touchstart', 'pointerdown', 'click'].forEach(function (ev) {
+    document.addEventListener(ev, intentarHorizontal, { passive: true });
+  });
 </script>
 </body>
 </html>
