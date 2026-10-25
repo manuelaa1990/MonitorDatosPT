@@ -168,6 +168,72 @@
       color: var(--acento);
     }
 
+    /* --------------------------- VARIABLES VISIBLES ------------------------- */
+    .variables-fila {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px 0;
+    }
+    .variables {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: thin;
+    }
+    .variables-titulo {
+      flex: 0 0 auto;
+      font-size: .6rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--tenue);
+      margin-right: 2px;
+    }
+    .var-check {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 9px;
+      border: 1px solid var(--line-fuerte);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--tenue);
+      font-size: .66rem;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+    .var-check input {
+      width: 13px;
+      height: 13px;
+      margin: 0;
+      accent-color: var(--acento);
+      cursor: pointer;
+    }
+    .var-check.marcada {
+      color: var(--texto);
+      border-color: color-mix(in srgb, var(--acento) 55%, var(--line-fuerte));
+      background: color-mix(in srgb, var(--acento) 12%, transparent);
+    }
+    .btn-todas {
+      flex: 0 0 auto;
+      padding: 5px 10px;
+      border: 1px solid var(--line-fuerte);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--sutil);
+      font-family: inherit;
+      font-size: .66rem;
+      cursor: pointer;
+    }
+    .btn-todas:hover { color: var(--acento); border-color: var(--acento); }
+
     /* -------------------------------- ESTADO -------------------------------- */
     .linea-estado {
       display: flex;
@@ -225,23 +291,23 @@
 
     .tabla-extremos {
       width: 100%;
-      min-width: 1680px;
+      min-width: 1600px;
       border-collapse: separate;
       border-spacing: 0;
-      font-size: .72rem;
+      font-size: .8rem;
     }
 
     .tabla-extremos thead th {
       position: sticky;
       top: 0;
       z-index: 3;
-      padding: 9px 14px;
+      padding: 8px 10px;
       background: var(--panel2);
       border-bottom: 1px solid var(--line-fuerte);
       color: var(--sutil);
-      font-size: .58rem;
+      font-size: .68rem;
       font-weight: 780;
-      letter-spacing: .07em;
+      letter-spacing: .05em;
       text-transform: uppercase;
       text-align: right;
       white-space: nowrap;
@@ -251,21 +317,21 @@
       left: 0;
       z-index: 5;
       text-align: left;
-      min-width: 148px;
+      min-width: 132px;
     }
 
     .tabla-extremos thead th small {
       display: block;
       margin-top: 2px;
-      font-size: .55rem;
+      font-size: .6rem;
       font-weight: 600;
-      letter-spacing: .02em;
+      letter-spacing: .01em;
       text-transform: none;
       color: var(--tenue);
     }
 
     .tabla-extremos tbody td {
-      padding: 9px 14px;
+      padding: 8px 10px;
       border-bottom: 1px solid var(--line);
       text-align: right;
       white-space: nowrap;
@@ -402,13 +468,13 @@
         --texto: #000; --sutil: #333; --tenue: #555;
         --line: #ccc; --line-fuerte: #999;
       }
-      .topbar, .filtros, .leyenda, .btn, .btn-icono, .toast, #avisoGirar { display: none !important; }
+      .topbar, .filtros, .leyenda, .variables-fila, .btn, .btn-icono, .toast, #avisoGirar { display: none !important; }
       body { background: #fff; color: #000; }
       main { padding: 0; }
       .panel { border: none; }
       .linea-estado, .nota { color: #333; }
       .tabla-caja { max-height: none; overflow: visible; }
-      .tabla-extremos { min-width: 0; font-size: 8.5px; }
+      .tabla-extremos { min-width: 0 !important; font-size: 8.5px; }
       .tabla-extremos thead th, .tabla-extremos tbody td {
         position: static;
         padding: 4px 6px;
@@ -484,6 +550,11 @@
           <button class="btn" id="btnCSV" type="button">⬇ Exportar CSV</button>
           <button class="btn" id="btnImprimir" type="button">🖨 PDF</button>
         </div>
+      </div>
+
+      <div class="variables-fila">
+        <div class="variables" id="variables" role="group" aria-label="Variables a mostrar"></div>
+        <button type="button" class="btn-todas" id="btnTodas" title="Mostrar todas las variables">Todas</button>
       </div>
 
       <div class="linea-estado">
@@ -727,17 +798,38 @@
   let cargando = false;
 
   const COLS = [
-    { key: 'p1',      label: 'P1 Succión',          tipo: 'pres' },
-    { key: 'p2',      label: 'P2 Descarga',         tipo: 'pres' },
-    { key: 't1',      label: 'T1 Succión',          tipo: 'temp' },
-    { key: 't2',      label: 'T2 Evaporador',       tipo: 'temp' },
-    { key: 't3',      label: 'T3 Descarga',         tipo: 'temp' },
-    { key: 't4',      label: 'T4 Líquido',          tipo: 'temp' },
-    { key: 't5',      label: 'T5 Ambiente',         tipo: 'temp' },
-    { key: 'shTotal', label: 'SH Total',            tipo: 'temp', delta: true },
-    { key: 'shUtil',  label: 'SH Útil',             tipo: 'temp', delta: true },
-    { key: 'sc',      label: 'SC · Subenfriamiento', tipo: 'temp', delta: true }
+    { key: 'p1',      label: 'P1 Succión',          corto: 'P1 Succ', tipo: 'pres' },
+    { key: 'p2',      label: 'P2 Descarga',         corto: 'P2 Desc', tipo: 'pres' },
+    { key: 't1',      label: 'T1 Succión',          corto: 'T1 Succ', tipo: 'temp' },
+    { key: 't2',      label: 'T2 Evaporador',       corto: 'T2 Evap', tipo: 'temp' },
+    { key: 't3',      label: 'T3 Descarga',         corto: 'T3 Desc', tipo: 'temp' },
+    { key: 't4',      label: 'T4 Líquido',          corto: 'T4 Líq',  tipo: 'temp' },
+    { key: 't5',      label: 'T5 Ambiente',         corto: 'T5 Amb',  tipo: 'temp' },
+    { key: 'shTotal', label: 'SH Total',            corto: 'SH Total', tipo: 'temp', delta: true },
+    { key: 'shUtil',  label: 'SH Útil',             corto: 'SH Útil',  tipo: 'temp', delta: true },
+    { key: 'sc',      label: 'SC · Subenfriamiento', corto: 'SC SubEnf', tipo: 'temp', delta: true }
   ];
+
+  /* Variables visibles en la tabla y en el CSV. La selección se guarda en las
+     preferencias para conservarla entre visitas. */
+  let varsVisibles = new Set(COLS.map(c => c.key));
+
+  function columnasVisibles() {
+    return COLS.filter(c => varsVisibles.has(c.key));
+  }
+
+  function pintarVariables() {
+    const cont = $('variables');
+    if (!cont) return;
+    cont.innerHTML = '<span class="variables-titulo">Mostrar</span>' +
+      COLS.map(c => {
+        const activa = varsVisibles.has(c.key);
+        return '<label class="var-check' + (activa ? ' marcada' : '') + '" title="' + c.label + '">' +
+               '<input type="checkbox" data-var="' + c.key + '"' + (activa ? ' checked' : '') + '>' +
+               '<span>' + (c.corto || c.label) + '</span>' +
+               '</label>';
+      }).join('');
+  }
 
   /* ------------------------------ ASIGNACIÓN ------------------------------ */
   function leerAsignacion() {
@@ -1171,11 +1263,12 @@
     const uP = unidadPres();
     const uT = unidadTemp();
     const uD = unidadTempDelta();
-    let html = '<tr><th>Intervalo (inicio)<small>hora local</small></th>';
+    let html = '<tr><th>Intervalo<small>inicio · hora local</small></th>';
 
-    COLS.forEach(c => {
+    columnasVisibles().forEach(c => {
       const u = (c.tipo === 'pres') ? uP : (c.delta ? uD : uT);
-      html += '<th>' + c.label + '<small>mín / máx · ' + u + '</small></th>';
+      html += '<th title="' + c.label + '">' + (c.corto || c.label) +
+              '<small>mín/máx ' + u + '</small></th>';
     });
 
     html += '<th>Muestras<small>lecturas</small></th></tr>';
@@ -1186,12 +1279,18 @@
   function render() {
     const cuerpo = $('cuerpo');
     const lim = limitesActuales($('selRef').value, $('selApp').value);
+    const cols = columnasVisibles();
+    const tabla = document.querySelector('.tabla-extremos');
+    if (tabla) {
+      /* Con menos columnas la tabla no necesita arrastrarse tanto a lo ancho. */
+      tabla.style.minWidth = (cols.length ? 170 + cols.length * 140 : 300) + 'px';
+    }
 
     renderCabecera();
     pintarLimites(lim);
 
     if (!filasPorIntervalo.length) {
-      cuerpo.innerHTML = '<tr><td colspan="12" class="sin-datos">' +
+      cuerpo.innerHTML = '<tr><td colspan="' + (cols.length + 2) + '" class="sin-datos">' +
         'No hay lecturas en el rango solicitado.</td></tr>';
       $('resumenInfo').textContent = '';
       return;
@@ -1201,7 +1300,7 @@
     filasPorIntervalo.forEach(row => {
       let celdas = '<td>' + fechaCorta(row.inicio) + '</td>';
 
-      COLS.forEach(c => {
+      cols.forEach(c => {
         const par = row[c.key];
         const estado = evaluar(c.key, par.min, par.max, lim);
         const clase = estado === 'ok' ? '' : ' class="celda-' + estado + '"';
@@ -1371,8 +1470,9 @@
     const uT = unidadTemp();
     const uD = unidadTempDelta();
     const cabecera = ['Intervalo_inicio'];
+    const cols = columnasVisibles();
 
-    COLS.forEach(c => {
+    cols.forEach(c => {
       const u = (c.tipo === 'pres') ? uP : (c.delta ? uD : uT);
       const etiqueta = c.label.replace(/\s*·\s*/g, ' ').trim();
       cabecera.push(etiqueta + '_min (' + u + ')');
@@ -1384,7 +1484,7 @@
 
     filasPorIntervalo.forEach(row => {
       const campos = [fechaCorta(row.inicio)];
-      COLS.forEach(c => {
+      cols.forEach(c => {
         campos.push(numeroCSV(row[c.key].min, c));
         campos.push(numeroCSV(row[c.key].max, c));
       });
@@ -1428,6 +1528,7 @@
         app: $('selApp').value,
         pUnit: $('selPres').value,
         tUnit: $('selTemp').value,
+        vars: Array.from(varsVisibles),
         tema: document.documentElement.getAttribute('data-tema')
       };
       localStorage.setItem(K_PREFS, JSON.stringify(prefs));
@@ -1437,6 +1538,12 @@
   function cargarPrefs() {
     let guardado = {};
     try { guardado = JSON.parse(localStorage.getItem(K_PREFS) || '{}') || {}; } catch (e) {}
+
+    /* Variables visibles: se descartan claves que ya no existan en la tabla. */
+    const clavesValidas = new Set(COLS.map(c => c.key));
+    if (Array.isArray(guardado.vars)) {
+      varsVisibles = new Set(guardado.vars.filter(k => clavesValidas.has(k)));
+    }
 
     let reporte = {};
     try { reporte = JSON.parse(localStorage.getItem(K_REPORTE) || '{}') || {}; } catch (e) {}
@@ -1470,6 +1577,7 @@
 
     const tema = guardado.tema === 'claro' ? 'claro' : 'oscuro';
     aplicarTema(tema);
+    pintarVariables();
   }
 
   /* ---------------------------------- TEMA -------------------------------- */
@@ -1498,6 +1606,25 @@
     $('btnCSV').addEventListener('click', exportarCSV);
     $('btnImprimir').addEventListener('click', () => window.print());
     $('btnTema').addEventListener('click', alternarTema);
+
+    /* Marcar/desmarcar una variable la oculta o la vuelve a mostrar. */
+    $('variables').addEventListener('change', evento => {
+      const input = evento.target.closest('input[data-var]');
+      if (!input) return;
+      const clave = input.getAttribute('data-var');
+      if (input.checked) varsVisibles.add(clave);
+      else varsVisibles.delete(clave);
+      const etiqueta = input.closest('.var-check');
+      if (etiqueta) etiqueta.classList.toggle('marcada', input.checked);
+      render();
+      guardarPrefs();
+    });
+    $('btnTodas').addEventListener('click', () => {
+      varsVisibles = new Set(COLS.map(c => c.key));
+      pintarVariables();
+      render();
+      guardarPrefs();
+    });
 
     ['selPres', 'selTemp'].forEach(id => {
       $(id).addEventListener('change', () => {
