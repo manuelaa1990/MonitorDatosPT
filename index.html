@@ -261,6 +261,7 @@
       gap: 4px;
       min-height: 27px;
       font-family: inherit;
+      text-decoration: none;
     }
     .btn-toggle { background: var(--borde); color: var(--texto); }
     .btn-toggle.active { background: var(--acento-bg); color: #fff; box-shadow: 0 0 6px rgba(2,132,199,.45); }
@@ -420,7 +421,6 @@
     .scroll-x { width: 100%; overflow-x: auto; }
 
     /* -------------------- Ajustes para el reporte impreso -------------- */
-
     body.generating-pdf { background: #fff !important; color: #000 !important; }
     body.generating-pdf .card,
     body.generating-pdf .probe-card,
@@ -962,6 +962,7 @@
     <div class="action-bar" id="accionesMonitor">
       <button class="btn btn-reporte" onclick="descargarPDFReporte()" title="Abre el diálogo de impresión: elija «Guardar como PDF»">🖨 Imprimir / PDF</button>
       <button class="btn btn-toggle" onclick="abrirGraficaAmpliada()" title="Abrir la gráfica extendida en otra pestaña">📊 Gráfica extendida</button>
+      <a class="btn btn-toggle" href="extremos.html" target="_blank" rel="noopener" title="Abrir el registro de máximos y mínimos por intervalo">📋 Extremos</a>
       <button class="btn btn-toggle" id="btnInstalar" style="display:none" onclick="instalarApp()" title="Instalar como aplicación en el teléfono">⬇ Instalar app</button>
     </div>
   </div>

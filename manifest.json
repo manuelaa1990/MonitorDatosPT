@@ -41,6 +41,12 @@
       "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
+      "name": "Registro de extremos",
+      "short_name": "Extremos",
+      "url": "./extremos.html",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
       "name": "Diagrama de Mollier",
       "short_name": "Mollier",
       "url": "./mollier.html",

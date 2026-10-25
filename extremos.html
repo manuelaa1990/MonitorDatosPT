@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="es" data-tema="oscuro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <title>Registro de extremos — Monitor HVAC</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #0f1a2a;
+      --panel2: #121c27;
+      --line: rgba(148, 163, 184, .16);
+      --line-fuerte: rgba(148, 163, 184, .30);
+      --texto: #e8eef7;
+      --sutil: #94a3b8;
+      --tenue: #64748b;
+      --acento: #38bdf8;
+      --ok: #34d399;
+      --warn: #a78bfa;
+      --crit: #f87171;
+      --radio: 14px;
+    }
+
+    html[data-tema="claro"] {
+      --bg: #eef2f7;
+      --panel: #ffffff;
+      --panel2: #f8fafc;
+      --line: rgba(15, 23, 42, .10);
+      --line-fuerte: rgba(15, 23, 42, .22);
+      --texto: #0f172a;
+      --sutil: #475569;
+      --tenue: #64748b;
+      --acento: #0284c7;
+      --ok: #059669;
+      --warn: #7c3aed;
+      --crit: #dc2626;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--texto);
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ------------------------------- BARRA SUPERIOR ------------------------- */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 18px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+
+    .marca { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .marca h1 { margin: 0; font-size: 1rem; letter-spacing: .01em; }
+    .marca p { margin: 2px 0 0; font-size: .68rem; color: var(--sutil); }
+
+    .volver {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 11px;
+      border: 1px solid var(--line-fuerte);
+      border-radius: 10px;
+      color: var(--texto);
+      text-decoration: none;
+      font-size: .72rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .volver:hover { border-color: var(--acento); color: var(--acento); }
+
+    .topbar-der { display: flex; align-items: center; gap: 10px; }
+    .reloj { font-size: .7rem; color: var(--sutil); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    .btn-icono {
+      width: 34px; height: 34px;
+      display: grid; place-items: center;
+      border: 1px solid var(--line-fuerte);
+      border-radius: 10px;
+      background: transparent;
+      color: var(--texto);
+      font-size: .95rem;
+      cursor: pointer;
+    }
+    .btn-icono:hover { border-color: var(--acento); }
+
+    /* ---------------------------------- LAYOUT ------------------------------ */
+    main { padding: 16px 18px 40px; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radio);
+      overflow: hidden;
+    }
+
+    .filtros {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(96px, 1fr)) auto;
+      align-items: end;
+      gap: 10px 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .campo > span {
+      font-size: .58rem;
+      font-weight: 750;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--sutil);
+    }
+
+    .campo input, .campo select {
+      width: 100%;
+      height: 34px;
+      padding: 0 9px;
+      border: 1px solid var(--line-fuerte);
+      border-radius: 9px;
+      background: var(--panel2);
+      color: var(--texto);
+      font-size: .76rem;
+      font-family: inherit;
+    }
+    .campo input:focus, .campo select:focus {
+      outline: none;
+      border-color: var(--acento);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 22%, transparent);
+    }
+
+    .acciones { display: flex; gap: 8px; align-items: end; }
+
+    .btn {
+      height: 34px;
+      padding: 0 14px;
+      border: 1px solid var(--line-fuerte);
+      border-radius: 9px;
+      background: var(--panel2);
+      color: var(--texto);
+      font-size: .74rem;
+      font-weight: 650;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { border-color: var(--acento); color: var(--acento); }
+    .btn:disabled { opacity: .5; cursor: progress; }
+
+    .btn-primario {
+      background: color-mix(in srgb, var(--acento) 18%, var(--panel2));
+      border-color: color-mix(in srgb, var(--acento) 55%, transparent);
+      color: var(--acento);
+    }
+
+    /* -------------------------------- ESTADO -------------------------------- */
+    .linea-estado {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 18px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--line);
+      font-size: .7rem;
+      color: var(--sutil);
+    }
+
+    #estado { font-weight: 650; color: var(--texto); }
+    #estado.error { color: var(--crit); }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line-fuerte);
+      font-size: .64rem;
+      font-weight: 650;
+      letter-spacing: .02em;
+    }
+    .chip::before {
+      content: "";
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .chip-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+    .chip-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+    .chip-crit { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 40%, transparent); background: color-mix(in srgb, var(--crit) 12%, transparent); }
+
+    .leyenda {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 14px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--line);
+      font-size: .64rem;
+      color: var(--tenue);
+    }
+
+    /* --------------------------------- TABLA -------------------------------- */
+    .tabla-caja {
+      max-height: calc(100vh - 290px);
+      min-height: 180px;
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+
+    .tabla-extremos {
+      width: 100%;
+      min-width: 1680px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: .72rem;
+    }
+
+    .tabla-extremos thead th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      padding: 9px 14px;
+      background: var(--panel2);
+      border-bottom: 1px solid var(--line-fuerte);
+      color: var(--sutil);
+      font-size: .58rem;
+      font-weight: 780;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .tabla-extremos thead th:first-child {
+      left: 0;
+      z-index: 5;
+      text-align: left;
+      min-width: 148px;
+    }
+
+    .tabla-extremos thead th small {
+      display: block;
+      margin-top: 2px;
+      font-size: .55rem;
+      font-weight: 600;
+      letter-spacing: .02em;
+      text-transform: none;
+      color: var(--tenue);
+    }
+
+    .tabla-extremos tbody td,
+    .tabla-extremos tfoot td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      color: var(--sutil);
+    }
+
+    .tabla-extremos tbody td:first-child,
+    .tabla-extremos tfoot td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      text-align: left;
+      background: var(--panel2);
+      color: var(--texto);
+      font-weight: 600;
+    }
+
+    .tabla-extremos tbody tr:hover td:not(.celda-warn):not(.celda-crit) {
+      background: color-mix(in srgb, var(--acento) 6%, transparent);
+    }
+
+    .tabla-extremos tbody tr:hover td:first-child { background: var(--panel2); }
+
+    .tabla-extremos tbody td.vacio { color: var(--tenue); }
+
+    .tabla-extremos tfoot td {
+      position: sticky;
+      bottom: 0;
+      z-index: 3;
+      background: var(--panel2);
+      border-top: 1px solid var(--line-fuerte);
+      border-bottom: none;
+      font-weight: 700;
+      color: var(--texto);
+    }
+    .tabla-extremos tfoot td:first-child { z-index: 4; }
+
+    .celda-warn {
+      background: color-mix(in srgb, var(--warn) 16%, transparent) !important;
+      box-shadow: inset 3px 0 0 var(--warn);
+      color: color-mix(in srgb, var(--warn) 75%, var(--texto)) !important;
+    }
+    .celda-crit {
+      background: color-mix(in srgb, var(--crit) 16%, transparent) !important;
+      box-shadow: inset 3px 0 0 var(--crit);
+      color: color-mix(in srgb, var(--crit) 70%, var(--texto)) !important;
+    }
+
+    .sin-datos {
+      padding: 44px 20px;
+      text-align: center;
+      color: var(--tenue);
+      font-size: .78rem;
+    }
+
+    .nota {
+      margin: 0;
+      padding: 9px 16px;
+      border-top: 1px solid var(--line);
+      font-size: .66rem;
+      color: var(--tenue);
+      min-height: 30px;
+    }
+
+    /* --------------------------------- TOAST -------------------------------- */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 22px;
+      transform: translate(-50%, 16px);
+      z-index: 40;
+      padding: 9px 16px;
+      border-radius: 10px;
+      background: var(--panel2);
+      border: 1px solid var(--line-fuerte);
+      color: var(--texto);
+      font-size: .74rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+    }
+    .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+
+    /* ------------------------------- RESPONSIVE ----------------------------- */
+    @media (max-width: 1180px) {
+      .filtros { grid-template-columns: repeat(3, minmax(96px, 1fr)); }
+      .acciones { grid-column: 1 / -1; justify-content: flex-end; }
+    }
+
+    @media (max-width: 720px) {
+      main { padding: 10px; }
+      .topbar { padding: 8px 12px; }
+      .marca p { display: none; }
+      .filtros { grid-template-columns: repeat(2, minmax(90px, 1fr)); padding: 12px; }
+      .tabla-caja { max-height: calc(100vh - 330px); }
+      .tabla-extremos { min-width: 1500px; }
+    }
+
+    /* --------------------------------- IMPRESIÓN ---------------------------- */
+    @media print {
+      :root {
+        --bg: #fff; --panel: #fff; --panel2: #fff;
+        --texto: #000; --sutil: #333; --tenue: #555;
+        --line: #ccc; --line-fuerte: #999;
+      }
+      .topbar, .filtros, .leyenda, .btn, .btn-icono, .toast { display: none !important; }
+      body { background: #fff; color: #000; }
+      main { padding: 0; }
+      .panel { border: none; }
+      .linea-estado, .nota { color: #333; }
+      .tabla-caja { max-height: none; overflow: visible; }
+      .tabla-extremos { min-width: 0; font-size: 8.5px; }
+      .tabla-extremos thead th, .tabla-extremos tbody td, .tabla-extremos tfoot td {
+        position: static;
+        padding: 4px 6px;
+        white-space: normal;
+      }
+      .celda-warn { background: #ede9fe !important; color: #4c1d95 !important; box-shadow: none; }
+      .celda-crit { background: #fee2e2 !important; color: #7f1d1d !important; box-shadow: none; }
+      @page { size: A4 landscape; margin: 8mm; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="marca">
+      <a class="volver" href="./index.html">← Monitor</a>
+      <div>
+        <h1>Registro de extremos</h1>
+        <p>Máximos y mínimos por intervalo · <span id="subLimites">—</span></p>
+      </div>
+    </div>
+    <div class="topbar-der">
+      <span class="reloj" id="reloj">--:--:--</span>
+      <button class="btn-icono" id="btnTema" type="button" title="Cambiar tema" aria-label="Cambiar tema">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="filtros">
+        <label class="campo">
+          <span>Intervalo (min)</span>
+          <input id="inIntervalo" type="number" min="1" max="120" step="1" value="5" inputmode="numeric">
+        </label>
+        <label class="campo">
+          <span>Rango (horas)</span>
+          <input id="inRango" type="number" min="0.5" max="72" step="0.5" value="4" inputmode="decimal">
+        </label>
+        <label class="campo">
+          <span>Refrigerante</span>
+          <select id="selRef"></select>
+        </label>
+        <label class="campo">
+          <span>Aplicación</span>
+          <select id="selApp"></select>
+        </label>
+        <label class="campo">
+          <span>Presión</span>
+          <select id="selPres">
+            <option value="psi">PSI (manométrica)</option>
+            <option value="bar">Bar (manométrica)</option>
+            <option value="kpa">kPa (manométrica)</option>
+          </select>
+        </label>
+        <label class="campo">
+          <span>Temperatura</span>
+          <select id="selTemp">
+            <option value="C">°C</option>
+            <option value="F">°F</option>
+          </select>
+        </label>
+        <div class="acciones">
+          <button class="btn btn-primario" id="btnCargar" type="button">↻ Cargar</button>
+          <button class="btn" id="btnCSV" type="button">⬇ Exportar CSV</button>
+          <button class="btn" id="btnImprimir" type="button">🖨 PDF</button>
+        </div>
+      </div>
+
+      <div class="linea-estado">
+        <span id="estado">Listo</span>
+        <span id="resumenInfo"></span>
+      </div>
+
+      <div class="leyenda">
+        <span class="chip chip-ok">Dentro del rango</span>
+        <span class="chip chip-warn">Cerca del límite</span>
+        <span class="chip chip-crit">Fuera de rango</span>
+        <span>SH/SC bajo el mínimo se marca en rojo; sobre el máximo, en púrpura.</span>
+      </div>
+
+      <div class="tabla-caja">
+        <table class="tabla-extremos">
+          <thead id="cabecera"></thead>
+          <tbody id="cuerpo">
+            <tr><td colspan="12" class="sin-datos">Pulsa «Cargar» para leer el histórico.</td></tr>
+          </tbody>
+          <tfoot id="pie"></tfoot>
+        </table>
+      </div>
+
+      <p class="nota" id="nota"></p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ==========================================================================
+     REGISTRO DE EXTREMOS · MÁX/MÍN POR INTERVALO
+     --------------------------------------------------------------------------
+     Página independiente del monitor. Lee la misma tabla `lecturas_hvac` de
+     Supabase (o el Worker de respaldo si Supabase falla) y agrupa las lecturas
+     en intervalos configurables para mostrar el mínimo y el máximo de cada
+     canal, incluidos los indicadores derivados SH Total, SH Útil y SC.
+
+     No usa CoolProp: la temperatura de saturación se interpola con la tabla
+     `dome` del refrigerante, que ya viene incluida. Así funciona sin red de
+     librerías y sin el motor WASM.
+     ========================================================================== */
+
+  /* ------------------------------- ORIGEN DE DATOS ------------------------ */
+  const SB_URL   = 'https://qiidodrtxchurazrghyr.supabase.co';
+  const SB_TABLA = 'lecturas_hvac';
+  const SB_CLAVE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaWRvZHJ0eGNodXJhenJnaHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDkwMDQsImV4cCI6MjEwODAyNTAwNH0.12wbnPavwGr4tEH1kz9ZtgSxHUYvL9gyrbMqFOBX2hg';
+  const API_URL  = 'https://api-termometro.manuelaa1990.workers.dev';
+
+  const PAGINA          = 1000;
+  const MAX_FILAS       = 20000;
+  const MAX_HORAS_WORKER = 72;
+  const ATM_PSI          = 14.696;
+  const PSI_POR_BAR      = 14.5038;
+
+  const K_PREFS  = 'refrig_extremos_prefs';
+  const K_ASIGN  = 'refrig_asignacion_sondas_v3';
+  const K_ASIGN2 = 'refrig_asignacion_sondas_v2';
+  const K_REPORTE = 'mollier_app_report_data';
+
+  /* ------------------------------- CANALES -------------------------------- */
+  const ALIAS_TEMP = [
+    ['temp1', 'sonda1', 't1', 'temperatura1'],
+    ['temp2', 'sonda2', 't2', 'temperatura2'],
+    ['temp3', 'sonda3', 't3', 'temperatura3'],
+    ['temp4', 'sonda4', 't4', 'temperatura4'],
+    ['temp5', 'sonda5', 't5', 'temperatura5'],
+    ['temp6', 'sonda6', 't6', 'temperatura6']
+  ];
+  const ALIAS_PRES = [
+    ['presion_succion', 'presionSuccion', 'presion1', 'pres1', 'p_succion', 'pSuccion', 'p1', 'presion_baja'],
+    ['presion_descarga', 'presionDescarga', 'presion2', 'pres2', 'p_descarga', 'pDescarga', 'p2', 'presion_alta'],
+    ['presion3', 'pres3', 'p3']
+  ];
+
+  /* Igual que el monitor: el firmware publica T1 succión, T2 evaporador,
+     T3 descarga, T4 líquido y T5 ambiente. */
+  const ASIGNACION_INICIAL = {
+    psuct: 'pres1', pdesc: 'pres2',
+    tsuct: 'temp1', tevap: 'temp2', tdesc: 'temp3', tliq: 'temp4', tamb: 'temp5'
+  };
+
+  const SLOTS = ['psuct', 'tsuct', 'pdesc', 'tdesc', 'tevap', 'tliq', 'tamb'];
+
+  /* ------------------------------ REFRIGERANTES --------------------------- */
+  /* Solo lo que necesita esta página: nombre, dome, óptimos de SH/SC y techo
+     de descarga. El resto del catálogo vive en index.html. */
+  const REFRIGERANTES = {
+    R134a: {
+      nombre: 'R-134a', tDescMax: 100, shOptimo: [5, 9], scOptimo: [3, 7],
+      dome: [
+        {p: 0.5, tSat: -40}, {p: 1.0, tSat: -26.4}, {p: 2.0, tSat: -10.1}, {p: 4.0, tSat: 8.9},
+        {p: 8.0, tSat: 31.3}, {p: 15.0, tSat: 55.2}, {p: 25.0, tSat: 77.6}, {p: 40.59, tSat: 101.1}
+      ]
+    },
+    R22: {
+      nombre: 'R-22', tDescMax: 115, shOptimo: [5, 10], scOptimo: [3, 6],
+      dome: [
+        {p: 1.0, tSat: -40.8}, {p: 2.5, tSat: -20.5}, {p: 5.0, tSat: -2.3}, {p: 10.0, tSat: 23.3},
+        {p: 20.0, tSat: 52.2}, {p: 35.0, tSat: 78.4}, {p: 49.9, tSat: 96.2}
+      ]
+    },
+    R404A: {
+      nombre: 'R-404A', tDescMax: 90, shOptimo: [4, 8], scOptimo: [4, 8],
+      dome: [
+        {p: 1.0, tSat: -45.5}, {p: 2.5, tSat: -26.0}, {p: 6.0, tSat: 1.0}, {p: 12.0, tSat: 24.3},
+        {p: 22.0, tSat: 49.7}, {p: 36.8, tSat: 72.1}
+      ]
+    },
+    R410A: {
+      nombre: 'R-410A', tDescMax: 105, shOptimo: [4, 8], scOptimo: [4, 8],
+      dome: [
+        {p: 1.5, tSat: -42.0}, {p: 4.0, tSat: -22.5}, {p: 10.0, tSat: 4.2}, {p: 20.0, tSat: 32.1},
+        {p: 35.0, tSat: 57.8}, {p: 49.0, tSat: 72.1}
+      ]
+    },
+    R32: {
+      nombre: 'R-32', tDescMax: 110, shOptimo: [4, 8], scOptimo: [3, 7],
+      dome: [
+        {p: 1.5, tSat: -43.0}, {p: 5.0, tSat: -16.0}, {p: 12.0, tSat: 11.5}, {p: 25.0, tSat: 41.2},
+        {p: 45.0, tSat: 66.8}, {p: 57.8, tSat: 78.1}
+      ]
+    },
+    R717: {
+      nombre: 'R-717 (Amoníaco)', tDescMax: 125, shOptimo: [5, 12], scOptimo: [3, 8],
+      dome: [
+        {p: 0.8, tSat: -33.3}, {p: 2, tSat: -17}, {p: 5, tSat: 2}, {p: 10, tSat: 25},
+        {p: 25, tSat: 58}, {p: 60, tSat: 95}, {p: 113.5, tSat: 132.4}
+      ]
+    },
+    R744: {
+      nombre: 'R-744 (CO₂)', tDescMax: 140, shOptimo: [4, 10], scOptimo: [2, 8],
+      dome: [
+        {p: 5.2, tSat: -56.6}, {p: 8, tSat: -46}, {p: 12, tSat: -30}, {p: 20, tSat: -11},
+        {p: 35, tSat: 5}, {p: 55, tSat: 22}, {p: 73.8, tSat: 31.0}
+      ]
+    },
+    R290: {
+      nombre: 'R-290', tDescMax: 85, shOptimo: [3, 7], scOptimo: [2, 5],
+      dome: [
+        {p: 1.0, tSat: -42.1}, {p: 3.0, tSat: -21.3}, {p: 7.0, tSat: 12.8}, {p: 15.0, tSat: 42.1},
+        {p: 30.0, tSat: 76.5}, {p: 42.5, tSat: 96.7}
+      ]
+    },
+    R600a: {
+      nombre: 'R-600a', tDescMax: 85, shOptimo: [3, 7], scOptimo: [2, 5],
+      dome: [
+        {p: 0.8, tSat: -19.5}, {p: 2.0, tSat: 8.2}, {p: 5.0, tSat: 38.0}, {p: 12.0, tSat: 71.3},
+        {p: 25.0, tSat: 110.1}, {p: 36.5, tSat: 134.7}
+      ]
+    },
+    R507A: {
+      nombre: 'R-507A', tDescMax: 90, shOptimo: [4, 8], scOptimo: [4, 8],
+      dome: [
+        {p: 1.0, tSat: -46.1}, {p: 3.0, tSat: -20.2}, {p: 7.0, tSat: 4.8}, {p: 15.0, tSat: 31.2},
+        {p: 26.0, tSat: 55.4}, {p: 37.1, tSat: 70.6}
+      ]
+    },
+    R407C: {
+      nombre: 'R-407C', tDescMax: 105, shOptimo: [5, 9], scOptimo: [3, 7],
+      dome: [
+        {p: 1.0, tSat: -41.2}, {p: 3.0, tSat: -18.1}, {p: 7.0, tSat: 8.5}, {p: 15.0, tSat: 38.2},
+        {p: 30.0, tSat: 67.4}, {p: 46.3, tSat: 86.0}
+      ]
+    },
+    R407F: {
+      nombre: 'R-407F', tDescMax: 105, shOptimo: [5, 9], scOptimo: [3, 7],
+      dome: [
+        {p: 1, tSat: -44}, {p: 3, tSat: -20}, {p: 7, tSat: 7}, {p: 15, tSat: 36},
+        {p: 30, tSat: 65}, {p: 44.9, tSat: 82}
+      ]
+    },
+    R448A: {
+      nombre: 'R-448A', tDescMax: 105, shOptimo: [5, 9], scOptimo: [3, 7],
+      dome: [
+        {p: 1, tSat: -45}, {p: 3, tSat: -23}, {p: 7, tSat: 2}, {p: 15, tSat: 29},
+        {p: 30, tSat: 59}, {p: 44.7, tSat: 82}
+      ]
+    },
+    R449A: {
+      nombre: 'R-449A', tDescMax: 105, shOptimo: [5, 9], scOptimo: [3, 7],
+      dome: [
+        {p: 1, tSat: -45}, {p: 3, tSat: -23}, {p: 7, tSat: 2}, {p: 15, tSat: 29},
+        {p: 30, tSat: 59}, {p: 44.5, tSat: 82}
+      ]
+    },
+    R422D: {
+      nombre: 'R-422D (reemplazo R-22)', tDescMax: 100, shOptimo: [5, 10], scOptimo: [3, 7],
+      dome: [
+        {p: 1, tSat: -43.5}, {p: 3, tSat: -23}, {p: 7, tSat: 1}, {p: 15, tSat: 28},
+        {p: 26, tSat: 54}, {p: 37.95, tSat: 79.6}
+      ]
+    },
+    R427A: {
+      nombre: 'R-427A (reemplazo R-22)', tDescMax: 105, shOptimo: [5, 10], scOptimo: [3, 7],
+      dome: [
+        {p: 1, tSat: -42.7}, {p: 3, tSat: -22}, {p: 7, tSat: 3}, {p: 15, tSat: 30},
+        {p: 30, tSat: 58}, {p: 43.9, tSat: 85.3}
+      ]
+    },
+    R438A: {
+      nombre: 'R-438A (reemplazo R-22)', tDescMax: 105, shOptimo: [5, 10], scOptimo: [3, 7],
+      dome: [
+        {p: 1, tSat: -42.3}, {p: 3, tSat: -22}, {p: 7, tSat: 3}, {p: 15, tSat: 30},
+        {p: 28, tSat: 57}, {p: 42.16, tSat: 83.7}
+      ]
+    },
+    R513A: {
+      nombre: 'R-513A', tDescMax: 100, shOptimo: [5, 9], scOptimo: [3, 7],
+      dome: [
+        {p: 0.7, tSat: -45}, {p: 1, tSat: -39}, {p: 3, tSat: -10}, {p: 7, tSat: 16},
+        {p: 15, tSat: 43}, {p: 28, tSat: 72}, {p: 36.48, tSat: 94.9}
+      ]
+    }
+  };
+
+  const MODOS_EVAP = {
+    LBP: { label: 'LBP — Baja', tMin: -35, tMax: -10 },
+    MBP: { label: 'MBP — Media', tMin: -20, tMax: 0 },
+    HBP: { label: 'HBP — Alta', tMin: -5, tMax: 15 },
+    CBP: { label: 'CBP — Comercial', tMin: -18, tMax: 10 }
+  };
+
+  /* Aceite más restrictivo por refrigerante: solo importa el techo de descarga. */
+  const ACEITE_DESC_MAX = {
+    R134a: 120, R22: 130, R404A: 120, R507A: 120, R410A: 120, R32: 120,
+    R290: 130, R600a: 130, R717: 130, R744: 120, R407C: 120, R407F: 120,
+    R448A: 120, R449A: 120, R422D: 130, R427A: 120, R438A: 130, R513A: 120
+  };
+
+  /* --------------------------------- ESTADO ------------------------------- */
+  const $ = id => document.getElementById(id);
+
+  let pUnit = 'psi';
+  let tUnit = 'C';
+  let prefs = {};
+  let filasPorIntervalo = [];
+  let ultimaCarga = null;
+  let cargando = false;
+
+  const COLS = [
+    { key: 'p1',      label: 'P1 Succión',          tipo: 'pres' },
+    { key: 'p2',      label: 'P2 Descarga',         tipo: 'pres' },
+    { key: 't1',      label: 'T1 Succión',          tipo: 'temp' },
+    { key: 't2',      label: 'T2 Evaporador',       tipo: 'temp' },
+    { key: 't3',      label: 'T3 Descarga',         tipo: 'temp' },
+    { key: 't4',      label: 'T4 Líquido',          tipo: 'temp' },
+    { key: 't5',      label: 'T5 Ambiente',         tipo: 'temp' },
+    { key: 'shTotal', label: 'SH Total',            tipo: 'temp' },
+    { key: 'shUtil',  label: 'SH Útil',             tipo: 'temp' },
+    { key: 'sc',      label: 'SC · Subenfriamiento', tipo: 'temp' }
+  ];
+
+  /* ------------------------------ ASIGNACIÓN ------------------------------ */
+  function leerAsignacion() {
+    const base = Object.assign({}, ASIGNACION_INICIAL);
+    let guardada = null;
+    try {
+      guardada = JSON.parse(localStorage.getItem(K_ASIGN) || 'null');
+      if (!guardada) guardada = JSON.parse(localStorage.getItem(K_ASIGN2) || 'null');
+    } catch (e) { /* sin localStorage la asignación de fábrica es válida */ }
+    if (guardada && typeof guardada === 'object') {
+      SLOTS.forEach(id => {
+        if (typeof guardada[id] === 'string' && guardada[id]) base[id] = guardada[id];
+      });
+    }
+    return base;
+  }
+
+  let asignacion = leerAsignacion();
+
+  /* ------------------------------- UTILIDADES ----------------------------- */
+  function aNumero(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function limpiarTemp(v) {
+    const n = aNumero(v);
+    return (n !== null && n > -60 && n <= 200) ? n : null;
+  }
+  function limpiarPresion(v) {
+    const n = aNumero(v);
+    return (n !== null && n > -15 && n < 1500) ? n : null;
+  }
+  function p2(n) { return String(n).padStart(2, '0'); }
+
+  /* Fecha local sin segundos: YYYY-MM-DD HH:MM (24 h). */
+  function fechaCorta(ms) {
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return '—';
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) +
+           ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+
+  /* Supabase devuelve fracciones de más de 3 dígitos y Safari las rechaza. */
+  function fechaIso(valor) {
+    if (valor === null || valor === undefined || valor === '') return null;
+    let s = String(valor).trim().replace(' ', 'T');
+    s = s.replace(/\.(\d{3})\d+/, '.$1');
+    if (!/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  function normalizarFilas(filas) {
+    if (!Array.isArray(filas)) return [];
+    return filas
+      .map(f => {
+        const iso = fechaIso(f && f.created_at);
+        if (!iso) return null;
+        return Object.assign({}, f, { created_at: iso });
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  }
+
+  /* ------------------------------ CANALES FILA ---------------------------- */
+  function canalTemp(fila, n) {
+    if (!fila) return null;
+    const lista = Array.isArray(fila.temps) ? fila.temps
+                : (Array.isArray(fila.temperaturas) ? fila.temperaturas : null);
+    if (lista && lista.length >= n) return limpiarTemp(lista[n - 1]);
+    const alias = ALIAS_TEMP[n - 1] || [];
+    for (let i = 0; i < alias.length; i++) {
+      const v = fila[alias[i]];
+      if (v !== undefined && v !== null && v !== '') return limpiarTemp(v);
+    }
+    return null;
+  }
+
+  function canalPres(fila, n) {
+    if (!fila) return null;
+    let bruto = null;
+    const lista = Array.isArray(fila.presiones) ? fila.presiones
+                : (Array.isArray(fila.pres) ? fila.pres : null);
+    if (lista && lista.length >= n) {
+      bruto = limpiarPresion(lista[n - 1]);
+    } else {
+      const alias = ALIAS_PRES[n - 1] || [];
+      for (let i = 0; i < alias.length; i++) {
+        const v = fila[alias[i]];
+        if (v !== undefined && v !== null && v !== '') { bruto = limpiarPresion(v); break; }
+      }
+    }
+    return bruto;
+  }
+
+  function valorDeCanal(fila, canal) {
+    if (!fila || !canal) return null;
+    const m = /^(temp|pres)(\d+)$/.exec(canal);
+    if (!m) return null;
+    const n = parseInt(m[2], 10);
+    return (m[1] === 'temp') ? canalTemp(fila, n) : canalPres(fila, n);
+  }
+
+  function valorSlot(fila, slotId) {
+    return valorDeCanal(fila, asignacion[slotId]);
+  }
+
+  /* ------------------------------- CONVERSIONES --------------------------- */
+  function convTemp(v) {
+    if (v === null || v === undefined) return null;
+    return tUnit === 'F' ? (v * 9 / 5) + 32 : v;
+  }
+  function convPres(v) {
+    if (v === null || v === undefined) return null;
+    if (pUnit === 'bar') return v / PSI_POR_BAR;
+    if (pUnit === 'kpa') return (v / PSI_POR_BAR) * 100;
+    return v;
+  }
+  function unidadPres() {
+    return pUnit === 'bar' ? 'Bar' : (pUnit === 'kpa' ? 'kPa' : 'PSI');
+  }
+  function unidadTemp() {
+    return '°' + tUnit;
+  }
+
+  /* -------------------------------- LÍMITES ------------------------------- */
+  function limitesActuales(refKey, appKey) {
+    const ref = REFRIGERANTES[refKey] || REFRIGERANTES.R404A;
+    const app = MODOS_EVAP[appKey] || MODOS_EVAP.MBP;
+    const tCrit = ref.dome.length ? ref.dome[ref.dome.length - 1].tSat : null;
+    const tDescMax = Math.min(ref.tDescMax, ACEITE_DESC_MAX[refKey] || 120);
+    const tCondMax = (refKey === 'R744') ? 40
+      : (Number.isFinite(tCrit) ? Math.min(65, tCrit - 5) : 65);
+    return {
+      refKey: refKey,
+      ref: ref,
+      app: app,
+      appKey: appKey,
+      tCondMax: tCondMax,
+      tDescMax: tDescMax,
+      shMin: ref.shOptimo[0],
+      shMax: ref.shOptimo[1],
+      scMin: ref.scOptimo[0],
+      scMax: ref.scOptimo[1]
+    };
+  }
+
+  /* Interpolación lineal en la tabla dome. */
+  function interpolarTsat(dome, pBarAbs) {
+    if (!dome || !dome.length) return null;
+    for (let i = 0; i < dome.length - 1; i++) {
+      if (pBarAbs >= dome[i].p && pBarAbs <= dome[i + 1].p) {
+        const f = (pBarAbs - dome[i].p) / (dome[i + 1].p - dome[i].p);
+        return dome[i].tSat + f * (dome[i + 1].tSat - dome[i].tSat);
+      }
+    }
+    if (pBarAbs < dome[0].p) return dome[0].tSat;
+    if (pBarAbs > dome[dome.length - 1].p) return dome[dome.length - 1].tSat;
+    return null;
+  }
+
+  function presionSaturacion(dome, tSatC) {
+    if (!dome || !dome.length) return null;
+    for (let i = 0; i < dome.length - 1; i++) {
+      if (tSatC >= dome[i].tSat && tSatC <= dome[i + 1].tSat) {
+        const f = (tSatC - dome[i].tSat) / (dome[i + 1].tSat - dome[i].tSat);
+        return dome[i].p + f * (dome[i + 1].p - dome[i].p);
+      }
+    }
+    if (tSatC <= dome[0].tSat) return dome[0].p;
+    if (tSatC >= dome[dome.length - 1].tSat) return dome[dome.length - 1].p;
+    return null;
+  }
+
+  /* Mismas reglas de color que el monitor:
+     · SH/SC por debajo del mínimo = crítico; por encima del máximo = aviso.
+     · Temperaturas y presiones fuera del rango = crítico; en el 30 % del borde = aviso. */
+  function evaluar(variable, minVal, maxVal, lim) {
+    if (minVal === null && maxVal === null) return 'ok';
+    if (!lim) return 'ok';
+
+    let optMin, optMax;
+    const dome = lim.ref.dome;
+    const margen = 0.3;
+
+    switch (variable) {
+      case 'p1': {
+        const pMin = presionSaturacion(dome, lim.app.tMin);
+        const pMax = presionSaturacion(dome, lim.app.tMax);
+        if (pMin !== null && pMax !== null) {
+          optMin = pMin * PSI_POR_BAR - ATM_PSI;
+          optMax = pMax * PSI_POR_BAR - ATM_PSI;
+        }
+        break;
+      }
+      case 'p2': {
+        const pMax = presionSaturacion(dome, lim.tCondMax);
+        if (pMax !== null) {
+          optMin = 0;
+          optMax = pMax * PSI_POR_BAR - ATM_PSI;
+        }
+        break;
+      }
+      case 't1':
+      case 't2':
+        optMin = lim.app.tMin;
+        optMax = lim.app.tMax;
+        break;
+      case 't3':
+        optMin = -50;
+        optMax = lim.tDescMax;
+        break;
+      case 't4':
+        optMin = -20;
+        optMax = lim.tCondMax;
+        break;
+      case 't5':
+        optMin = -10;
+        optMax = 50;
+        break;
+      case 'shTotal':
+      case 'shUtil':
+        optMin = lim.shMin;
+        optMax = lim.shMax;
+        break;
+      case 'sc':
+        optMin = lim.scMin;
+        optMax = lim.scMax;
+        break;
+      default:
+        return 'ok';
+    }
+
+    if (optMin === undefined || optMax === undefined) return 'ok';
+
+    const valores = [minVal, maxVal].filter(v => v !== null);
+    let peor = 'ok';
+
+    for (let i = 0; i < valores.length; i++) {
+      const v = valores[i];
+      let estado = 'ok';
+
+      if (variable === 'shTotal' || variable === 'shUtil' || variable === 'sc') {
+        if (v < optMin) estado = 'crit';
+        else if (v > optMax) estado = 'warn';
+      } else {
+        if (v < optMin || v > optMax) estado = 'crit';
+        else if (v < optMin + (optMax - optMin) * margen ||
+                 v > optMax - (optMax - optMin) * margen) estado = 'warn';
+      }
+
+      if (estado === 'crit') return 'crit';
+      if (estado === 'warn') peor = 'warn';
+    }
+    return peor;
+  }
+
+  /* --------------------------------- RED ---------------------------------- */
+  function conTimeout(promesa, ms) {
+    let timer;
+    const corte = new Promise((_, rechazar) => {
+      timer = setTimeout(() => rechazar(new Error('TIMEOUT')), ms);
+    });
+    return Promise.race([promesa, corte]).finally(() => clearTimeout(timer));
+  }
+
+  async function sbPedir(consulta) {
+    const url = SB_URL + '/rest/v1/' + SB_TABLA + '?' + consulta;
+    const res = await conTimeout(fetch(url, {
+      headers: {
+        'apikey': SB_CLAVE,
+        'Authorization': 'Bearer ' + SB_CLAVE,
+        'Accept': 'application/json'
+      },
+      cache: 'no-store'
+    }), 20000);
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error('Supabase HTTP ' + res.status + (txt ? ': ' + txt.substring(0, 120) : ''));
+    }
+    return res.json();
+  }
+
+  async function traerJSON(ruta) {
+    const res = await conTimeout(fetch(API_URL + ruta, {
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store'
+    }), 15000);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error('HTTP ' + res.status + (txt ? ': ' + txt.substring(0, 100) : ''));
+    }
+    return res.json();
+  }
+
+  function interpretarError(err) {
+    const msg = String((err && err.message) || err || 'Error desconocido');
+    if (msg.indexOf('TIMEOUT') >= 0) return 'el servidor no respondió a tiempo.';
+    if (msg.indexOf('Supabase HTTP 401') >= 0) return 'la clave pública de Supabase fue rechazada.';
+    if (msg.indexOf('Supabase HTTP 403') >= 0) return 'Supabase no permite leer la tabla con la clave pública (RLS).';
+    if (msg.indexOf('Supabase HTTP 404') >= 0) return 'la tabla lecturas_hvac no existe o no está expuesta.';
+    if (msg.indexOf('Failed to fetch') >= 0) return 'sin conexión o bloqueo de red/DNS.';
+    return msg;
+  }
+
+  async function traerVentana(inicioMs, finMs) {
+    /* 1) Supabase, paginando de 1000 en 1000. */
+    try {
+      const desde = encodeURIComponent(new Date(inicioMs).toISOString());
+      const hasta = encodeURIComponent(new Date(finMs).toISOString());
+      const base = 'select=*&created_at=gte.' + desde + '&created_at=lte.' + hasta +
+                   '&order=created_at.asc,id.asc';
+      const filas = [];
+      let offset = 0;
+      let truncado = false;
+
+      while (offset < MAX_FILAS) {
+        const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
+        if (!Array.isArray(lote) || !lote.length) break;
+        filas.push.apply(filas, lote);
+        if (lote.length < PAGINA) break;
+        offset += lote.length;
+        if (offset >= MAX_FILAS) truncado = true;
+      }
+      return { filas: filas, origen: 'Supabase', truncado: truncado };
+    } catch (err) {
+      /* 2) Worker de respaldo: entrega hasta 72 h hacia atrás. */
+      const horasPedidas = Math.ceil((Date.now() - inicioMs) / 3600000) + 1;
+      const horas = Math.min(horasPedidas, MAX_HORAS_WORKER);
+      const datos = await traerJSON('/range?hours=' + horas);
+      const filas = Array.isArray(datos) ? datos
+                  : (datos && (datos.datos || datos.data || datos.filas)) || [];
+      return {
+        filas: filas,
+        origen: 'Worker',
+        truncado: horasPedidas > MAX_HORAS_WORKER,
+        motivo: interpretarError(err)
+      };
+    }
+  }
+
+  /* ------------------------------- AGRUPACIÓN ----------------------------- */
+  function minMax(arr) {
+    let min = null, max = null;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (v === null || v === undefined) continue;
+      if (min === null || v < min) min = v;
+      if (max === null || v > max) max = v;
+    }
+    return { min: min, max: max };
+  }
+
+  function agruparEnIntervalos(filas, intervaloMin, lim) {
+    if (!filas.length) return [];
+    const intervaloMs = intervaloMin * 60000;
+    const buckets = new Map();
+
+    filas.forEach(fila => {
+      const t = new Date(fila.created_at).getTime();
+      if (!Number.isFinite(t)) return;
+
+      const inicio = Math.floor(t / intervaloMs) * intervaloMs;
+      let b = buckets.get(inicio);
+      if (!b) {
+        b = {
+          inicio: inicio,
+          p1: [], p2: [],
+          t1: [], t2: [], t3: [], t4: [], t5: [],
+          shTotal: [], shUtil: [], sc: [],
+          muestras: 0
+        };
+        buckets.set(inicio, b);
+      }
+      b.muestras++;
+
+      const p1 = valorSlot(fila, 'psuct');
+      const p2v = valorSlot(fila, 'pdesc');
+      const t1 = valorSlot(fila, 'tsuct');
+      const t2 = valorSlot(fila, 'tevap');
+      const t3 = valorSlot(fila, 'tdesc');
+      const t4 = valorSlot(fila, 'tliq');
+      const t5 = valorSlot(fila, 'tamb');
+
+      if (p1 !== null) b.p1.push(p1);
+      if (p2v !== null) b.p2.push(p2v);
+      if (t1 !== null) b.t1.push(t1);
+      if (t2 !== null) b.t2.push(t2);
+      if (t3 !== null) b.t3.push(t3);
+      if (t4 !== null) b.t4.push(t4);
+      if (t5 !== null) b.t5.push(t5);
+
+      /* Indicadores derivados con la tabla P–T del refrigerante elegido. */
+      if (lim && lim.ref && lim.ref.dome) {
+        const tsatSuct = (p1 !== null)
+          ? interpolarTsat(lim.ref.dome, Math.max((p1 + ATM_PSI) / PSI_POR_BAR, 0.005))
+          : null;
+        const tsatDesc = (p2v !== null)
+          ? interpolarTsat(lim.ref.dome, Math.max((p2v + ATM_PSI) / PSI_POR_BAR, 0.005))
+          : null;
+
+        if (t1 !== null && tsatSuct !== null) b.shTotal.push(t1 - tsatSuct);
+        if (t2 !== null && tsatSuct !== null) b.shUtil.push(t2 - tsatSuct);
+        if (t4 !== null && tsatDesc !== null) b.sc.push(tsatDesc - t4);
+      }
+    });
+
+    return Array.from(buckets.values())
+      .map(b => ({
+        inicio: b.inicio,
+        p1: minMax(b.p1),
+        p2: minMax(b.p2),
+        t1: minMax(b.t1),
+        t2: minMax(b.t2),
+        t3: minMax(b.t3),
+        t4: minMax(b.t4),
+        t5: minMax(b.t5),
+        shTotal: minMax(b.shTotal),
+        shUtil: minMax(b.shUtil),
+        sc: minMax(b.sc),
+        muestras: b.muestras
+      }))
+      .sort((a, b) => b.inicio - a.inicio);
+  }
+
+  /* -------------------------------- FORMATO ------------------------------- */
+  function fmtValor(v, tipo) {
+    if (v === null || v === undefined) return '—';
+    const x = (tipo === 'pres') ? convPres(v) : convTemp(v);
+    if (x === null || !Number.isFinite(x)) return '—';
+    return x.toFixed(1);
+  }
+
+  function fmtMinMax(par, tipo) {
+    const a = fmtValor(par.min, tipo);
+    const b = fmtValor(par.max, tipo);
+    if (a === '—' && b === '—') return '—';
+    return a + ' / ' + b;
+  }
+
+  /* -------------------------------- CABECERA ------------------------------ */
+  function renderCabecera() {
+    const uP = unidadPres();
+    const uT = unidadTemp();
+    let html = '<tr><th>Intervalo (inicio)<small>hora local</small></th>';
+
+    COLS.forEach(c => {
+      const u = (c.tipo === 'pres') ? uP : uT;
+      html += '<th>' + c.label + '<small>mín / máx · ' + u + '</small></th>';
+    });
+
+    html += '<th>Muestras<small>lecturas</small></th></tr>';
+    $('cabecera').innerHTML = html;
+  }
+
+  /* --------------------------------- RENDER ------------------------------- */
+  function render() {
+    const cuerpo = $('cuerpo');
+    const pie = $('pie');
+    const lim = limitesActuales($('selRef').value, $('selApp').value);
+
+    renderCabecera();
+    pintarLimites(lim);
+
+    if (!filasPorIntervalo.length) {
+      cuerpo.innerHTML = '<tr><td colspan="12" class="sin-datos">' +
+        'No hay lecturas en el rango solicitado.</td></tr>';
+      pie.innerHTML = '';
+      $('resumenInfo').textContent = '';
+      return;
+    }
+
+    const filas = [];
+    filasPorIntervalo.forEach(row => {
+      let celdas = '<td>' + fechaCorta(row.inicio) + '</td>';
+
+      COLS.forEach(c => {
+        const par = row[c.key];
+        const estado = evaluar(c.key, par.min, par.max, lim);
+        const clase = estado === 'ok' ? '' : ' class="celda-' + estado + '"';
+        celdas += '<td' + clase + '>' + fmtMinMax(par, c.tipo) + '</td>';
+      });
+
+      celdas += '<td>' + row.muestras + '</td>';
+      filas.push('<tr>' + celdas + '</tr>');
+    });
+    cuerpo.innerHTML = filas.join('');
+
+    /* Pie: extremo global del rango (mín de mínimos, máx de máximos). */
+    let celdasPie = '<td>Total del rango</td>';
+    let muestras = 0;
+    const totales = {};
+
+    COLS.forEach(c => {
+      let min = null, max = null;
+      filasPorIntervalo.forEach(row => {
+        const par = row[c.key];
+        if (par.min !== null && (min === null || par.min < min)) min = par.min;
+        if (par.max !== null && (max === null || par.max > max)) max = par.max;
+      });
+      totales[c.key] = { min: min, max: max };
+      const estado = evaluar(c.key, min, max, lim);
+      const clase = estado === 'ok' ? '' : ' class="celda-' + estado + '"';
+      celdasPie += '<td' + clase + '>' + fmtMinMax(totales[c.key], c.tipo) + '</td>';
+    });
+
+    filasPorIntervalo.forEach(row => { muestras += row.muestras; });
+    celdasPie += '<td>' + muestras + '</td>';
+    pie.innerHTML = '<tr>' + celdasPie + '</tr>';
+  }
+
+  function pintarLimites(lim) {
+    const uT = unidadTemp();
+    const txt = lim.ref.nombre + ' · ' + lim.app.label +
+      ' · SH ' + lim.shMin + '–' + lim.shMax + ' K' +
+      ' · SC ' + lim.scMin + '–' + lim.scMax + ' K' +
+      ' · descarga ≤ ' + lim.tDescMax + uT +
+      ' · condensación ≤ ' + lim.tCondMax + uT;
+    $('subLimites').textContent = txt;
+  }
+
+  /* --------------------------------- CARGA -------------------------------- */
+  function leerIntervalo() {
+    const v = parseFloat($('inIntervalo').value);
+    if (!Number.isFinite(v) || v < 1 || v > 120) return null;
+    return Math.round(v);
+  }
+
+  function leerRangoHoras() {
+    const v = parseFloat($('inRango').value);
+    if (!Number.isFinite(v) || v < 0.5 || v > 72) return null;
+    return v;
+  }
+
+  async function cargar() {
+    if (cargando) return;
+
+    const intervaloMin = leerIntervalo();
+    const rangoHoras = leerRangoHoras();
+
+    if (intervaloMin === null) { aviso('El intervalo debe estar entre 1 y 120 minutos.', true); return; }
+    if (rangoHoras === null) { aviso('El rango debe estar entre 0,5 y 72 horas.', true); return; }
+
+    const refKey = $('selRef').value;
+    const appKey = $('selApp').value;
+    const lim = limitesActuales(refKey, appKey);
+
+    const fin = Date.now();
+    const inicio = fin - rangoHoras * 3600000;
+
+    cargando = true;
+    $('btnCargar').disabled = true;
+    $('estado').textContent = 'Cargando…';
+    $('estado').classList.remove('error');
+    $('nota').textContent = '';
+    $('resumenInfo').textContent = '';
+
+    try {
+      const resp = await traerVentana(inicio, fin);
+      const normalizadas = normalizarFilas(resp.filas);
+      filasPorIntervalo = agruparEnIntervalos(normalizadas, intervaloMin, lim);
+      ultimaCarga = {
+        intervaloMin: intervaloMin,
+        rangoHoras: rangoHoras,
+        desde: inicio,
+        hasta: fin,
+        lecturas: normalizadas.length,
+        intervalos: filasPorIntervalo.length,
+        origen: resp.origen,
+        lim: lim
+      };
+
+      render();
+      $('estado').textContent = 'Listo · ' + resp.origen;
+      $('resumenInfo').textContent =
+        normalizadas.length + ' lecturas · ' +
+        filasPorIntervalo.length + ' intervalos de ' + intervaloMin + ' min · ' +
+        fechaCorta(inicio) + ' → ' + fechaCorta(fin);
+
+      const notas = [];
+      if (resp.truncado) {
+        notas.push('Se alcanzó el tope de ' + MAX_FILAS + ' lecturas: reduzca el rango o aumente el intervalo.');
+      }
+      if (resp.origen === 'Worker' && resp.motivo) {
+        notas.push('Supabase no respondió (' + resp.motivo + '); se usó el Worker de respaldo.');
+      }
+      if (resp.origen === 'Worker' && resp.truncado) {
+        notas.push('El Worker solo entrega hasta ' + MAX_HORAS_WORKER + ' h hacia atrás.');
+      }
+      $('nota').textContent = notas.join(' ');
+      guardarPrefs();
+    } catch (err) {
+      $('estado').textContent = 'Error';
+      $('estado').classList.add('error');
+      $('nota').textContent = 'No se pudo cargar: ' + interpretarError(err);
+      filasPorIntervalo = [];
+      render();
+    } finally {
+      cargando = false;
+      $('btnCargar').disabled = false;
+    }
+  }
+
+  /* ---------------------------------- CSV --------------------------------- */
+  /* Separador ";" y decimal con coma: es lo que Excel en español abre bien.
+     Fechas sin segundos y unidades dentro del encabezado. */
+  function celdaCSV(valor) {
+    const txt = String(valor === null || valor === undefined ? '' : valor);
+    if (txt.indexOf(';') >= 0 || txt.indexOf('"') >= 0 || txt.indexOf('\n') >= 0) {
+      return '"' + txt.replace(/"/g, '""') + '"';
+    }
+    return txt;
+  }
+
+  function numeroCSV(v, tipo) {
+    if (v === null || v === undefined) return '';
+    const x = (tipo === 'pres') ? convPres(v) : convTemp(v);
+    if (x === null || !Number.isFinite(x)) return '';
+    return x.toFixed(2).replace('.', ',');
+  }
+
+  function exportarCSV() {
+    if (!filasPorIntervalo.length || !ultimaCarga) {
+      aviso('No hay datos para exportar. Carga primero el registro.', true);
+      return;
+    }
+
+    const uP = unidadPres();
+    const uT = unidadTemp();
+    const cabecera = ['Intervalo_inicio'];
+
+    COLS.forEach(c => {
+      const u = (c.tipo === 'pres') ? uP : uT;
+      const etiqueta = c.label.replace(/\s*·\s*/g, ' ').trim();
+      cabecera.push(etiqueta + '_min (' + u + ')');
+      cabecera.push(etiqueta + '_max (' + u + ')');
+    });
+    cabecera.push('Muestras');
+
+    const lineas = [cabecera.map(celdaCSV).join(';')];
+
+    filasPorIntervalo.forEach(row => {
+      const campos = [fechaCorta(row.inicio)];
+      COLS.forEach(c => {
+        campos.push(numeroCSV(row[c.key].min, c.tipo));
+        campos.push(numeroCSV(row[c.key].max, c.tipo));
+      });
+      campos.push(row.muestras);
+      lineas.push(campos.map(celdaCSV).join(';'));
+    });
+
+    /* Fila final con el extremo global del rango. */
+    const totales = ['TOTAL_DEL_RANGO'];
+    COLS.forEach(c => {
+      let min = null, max = null;
+      filasPorIntervalo.forEach(row => {
+        const par = row[c.key];
+        if (par.min !== null && (min === null || par.min < min)) min = par.min;
+        if (par.max !== null && (max === null || par.max > max)) max = par.max;
+      });
+      totales.push(numeroCSV(min, c.tipo));
+      totales.push(numeroCSV(max, c.tipo));
+    });
+    let muestras = 0;
+    filasPorIntervalo.forEach(row => { muestras += row.muestras; });
+    totales.push(muestras);
+    lineas.push(totales.map(celdaCSV).join(';'));
+
+    const csv = '\uFEFF' + lineas.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = 'extremos_' + ultimaCarga.intervaloMin + 'min_' +
+      String(ultimaCarga.rangoHoras).replace('.', '-') + 'h_' +
+      fechaCorta(Date.now()).slice(0, 10) + '.csv';
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    aviso('CSV exportado: ' + filasPorIntervalo.length + ' intervalos.');
+  }
+
+  /* --------------------------------- AVISOS ------------------------------- */
+  let toastTimer = null;
+  function aviso(txt, esError) {
+    const el = $('toast');
+    el.textContent = txt;
+    el.style.borderColor = esError ? 'var(--crit)' : 'var(--line-fuerte)';
+    el.classList.add('visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('visible'), 2600);
+  }
+
+  /* ------------------------------ PREFERENCIAS ---------------------------- */
+  function guardarPrefs() {
+    try {
+      prefs = {
+        intervalo: $('inIntervalo').value,
+        rango: $('inRango').value,
+        ref: $('selRef').value,
+        app: $('selApp').value,
+        pUnit: $('selPres').value,
+        tUnit: $('selTemp').value,
+        tema: document.documentElement.getAttribute('data-tema')
+      };
+      localStorage.setItem(K_PREFS, JSON.stringify(prefs));
+    } catch (e) { /* modo privado: se ignora */ }
+  }
+
+  function cargarPrefs() {
+    let guardado = {};
+    try { guardado = JSON.parse(localStorage.getItem(K_PREFS) || '{}') || {}; } catch (e) {}
+
+    let reporte = {};
+    try { reporte = JSON.parse(localStorage.getItem(K_REPORTE) || '{}') || {}; } catch (e) {}
+
+    const refInicial = REFRIGERANTES[guardado.ref] ? guardado.ref
+      : (REFRIGERANTES[reporte.refSelect] ? reporte.refSelect : 'R404A');
+    const appInicial = MODOS_EVAP[guardado.app] ? guardado.app
+      : (MODOS_EVAP[reporte.modoEvapSelect] ? reporte.modoEvapSelect : 'MBP');
+
+    $('inIntervalo').value = guardado.intervalo || '5';
+    $('inRango').value = guardado.rango || '4';
+
+    $('selRef').innerHTML = Object.keys(REFRIGERANTES).map(k =>
+      '<option value="' + k + '">' + REFRIGERANTES[k].nombre + '</option>'
+    ).join('');
+    $('selRef').value = refInicial;
+
+    $('selApp').innerHTML = Object.keys(MODOS_EVAP).map(k =>
+      '<option value="' + k + '">' + MODOS_EVAP[k].label + '</option>'
+    ).join('');
+    $('selApp').value = appInicial;
+
+    const pGuardada = guardado.pUnit || reporte.pUnitSelect;
+    if (pGuardada === 'bar' || pGuardada === 'kpa' || pGuardada === 'psi') $('selPres').value = pGuardada;
+
+    const tGuardada = guardado.tUnit || reporte.tUnitSelect;
+    if (tGuardada === 'C' || tGuardada === 'F') $('selTemp').value = tGuardada;
+
+    pUnit = $('selPres').value;
+    tUnit = $('selTemp').value;
+
+    const tema = guardado.tema === 'claro' ? 'claro' : 'oscuro';
+    aplicarTema(tema);
+  }
+
+  /* ---------------------------------- TEMA -------------------------------- */
+  function aplicarTema(tema) {
+    document.documentElement.setAttribute('data-tema', tema);
+    $('btnTema').textContent = tema === 'claro' ? '☀️' : '🌙';
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', tema === 'claro' ? '#eef2f7' : '#0f172a');
+  }
+
+  function alternarTema() {
+    const actual = document.documentElement.getAttribute('data-tema');
+    aplicarTema(actual === 'claro' ? 'oscuro' : 'claro');
+    guardarPrefs();
+  }
+
+  /* --------------------------------- RELOJ -------------------------------- */
+  function pintarReloj() {
+    const d = new Date();
+    $('reloj').textContent = fechaCorta(d.getTime()) + ':' + p2(d.getSeconds());
+  }
+
+  /* -------------------------------- EVENTOS ------------------------------- */
+  function enlazar() {
+    $('btnCargar').addEventListener('click', cargar);
+    $('btnCSV').addEventListener('click', exportarCSV);
+    $('btnImprimir').addEventListener('click', () => window.print());
+    $('btnTema').addEventListener('click', alternarTema);
+
+    ['selPres', 'selTemp'].forEach(id => {
+      $(id).addEventListener('change', () => {
+        pUnit = $('selPres').value;
+        tUnit = $('selTemp').value;
+        render();
+        guardarPrefs();
+      });
+    });
+
+    ['selRef', 'selApp'].forEach(id => {
+      $(id).addEventListener('change', () => {
+        /* Cambiar de refrigerante cambia SH/SC y los límites: se recalcula
+           el agrupado con la tabla P–T nueva sin volver a pedir los datos. */
+        if (ultimaCarga) {
+          $('estado').textContent = 'Recalculando…';
+          cargar();
+        } else {
+          render();
+          guardarPrefs();
+        }
+      });
+    });
+
+    $('inIntervalo').addEventListener('change', () => { if (ultimaCarga) cargar(); });
+    $('inRango').addEventListener('change', () => { if (ultimaCarga) cargar(); });
+
+    document.addEventListener('keydown', evento => {
+      if (evento.key === 'Enter' && (evento.target === $('inIntervalo') || evento.target === $('inRango'))) {
+        cargar();
+      }
+    });
+  }
+
+  /* --------------------------------- INICIO ------------------------------- */
+  function init() {
+    cargarPrefs();
+    enlazar();
+    pintarReloj();
+    setInterval(pintarReloj, 1000);
+    render();
+    cargar();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+</body>
+</html>
