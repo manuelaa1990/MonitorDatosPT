@@ -204,7 +204,7 @@
       border-radius: 8px;
       background: transparent;
       color: var(--tenue);
-      font-size: .66rem;
+      font-size: .7rem;
       white-space: nowrap;
       cursor: pointer;
       user-select: none;
@@ -229,7 +229,7 @@
       background: transparent;
       color: var(--sutil);
       font-family: inherit;
-      font-size: .66rem;
+      font-size: .7rem;
       cursor: pointer;
     }
     .btn-todas:hover { color: var(--acento); border-color: var(--acento); }
@@ -291,10 +291,9 @@
 
     .tabla-extremos {
       width: 100%;
-      min-width: 1600px;
       border-collapse: separate;
       border-spacing: 0;
-      font-size: .8rem;
+      font-size: .88rem;
     }
 
     .tabla-extremos thead th {
@@ -305,7 +304,7 @@
       background: var(--panel2);
       border-bottom: 1px solid var(--line-fuerte);
       color: var(--sutil);
-      font-size: .68rem;
+      font-size: .72rem;
       font-weight: 780;
       letter-spacing: .05em;
       text-transform: uppercase;
@@ -316,14 +315,16 @@
     .tabla-extremos thead th:first-child {
       left: 0;
       z-index: 5;
+      width: 1%;
+      padding-left: 8px;
+      padding-right: 8px;
       text-align: left;
-      min-width: 132px;
     }
 
     .tabla-extremos thead th small {
       display: block;
       margin-top: 2px;
-      font-size: .6rem;
+      font-size: .64rem;
       font-weight: 600;
       letter-spacing: .01em;
       text-transform: none;
@@ -343,6 +344,9 @@
       position: sticky;
       left: 0;
       z-index: 2;
+      width: 1%;
+      padding-left: 8px;
+      padding-right: 8px;
       text-align: left;
       background: var(--panel2);
       color: var(--texto);
@@ -416,7 +420,6 @@
       .marca p { display: none; }
       .filtros { grid-template-columns: repeat(2, minmax(90px, 1fr)); padding: 12px; }
       .tabla-caja { max-height: calc(100vh - 330px); }
-      .tabla-extremos { min-width: 1500px; }
     }
 
     /* --------------------------- AVISO DE ORIENTACIÓN ----------------------- */
@@ -1263,7 +1266,7 @@
     const uP = unidadPres();
     const uT = unidadTemp();
     const uD = unidadTempDelta();
-    let html = '<tr><th>Intervalo<small>inicio · hora local</small></th>';
+    let html = '<tr><th>Intervalo</th>';
 
     columnasVisibles().forEach(c => {
       const u = (c.tipo === 'pres') ? uP : (c.delta ? uD : uT);
@@ -1280,11 +1283,6 @@
     const cuerpo = $('cuerpo');
     const lim = limitesActuales($('selRef').value, $('selApp').value);
     const cols = columnasVisibles();
-    const tabla = document.querySelector('.tabla-extremos');
-    if (tabla) {
-      /* Con menos columnas la tabla no necesita arrastrarse tanto a lo ancho. */
-      tabla.style.minWidth = (cols.length ? 170 + cols.length * 140 : 300) + 'px';
-    }
 
     renderCabecera();
     pintarLimites(lim);

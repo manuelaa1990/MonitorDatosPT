@@ -14,7 +14,7 @@
  * Al cambiar archivos de la app, subí el número de VERSION para forzar la
  * limpieza de la caché anterior.
  */
-const VERSION = 'v29';
+const VERSION = 'v30';
 const CACHE = 'monitor-hvac-' + VERSION;
 
 const SHELL = [
