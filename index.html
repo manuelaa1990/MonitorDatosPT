@@ -4523,7 +4523,7 @@
     const INTERVALO_ULTIMA_MS = 10000;
     const INTERVALO_ANALISIS_MS = 60000;
     const VENTANA_HISTORICO_MS = 60 * 60 * 1000;
-    let ultimaLectura = null;
+    let ultimaElectrica = null;
     let lecturasUltimas = [];
     let lecturasHistoricas = [];
     let lecturasTermicas = [];
@@ -4602,16 +4602,34 @@
       return valor === null || !Number.isFinite(valor) ? '---' : valor.toFixed(decimales);
     }
 
+    function datosElectricaAtrasados() {
+      if (!ultimaElectrica) return false;
+      const instante = new Date(ultimaElectrica.created_at).getTime();
+      return !Number.isFinite(instante) || Date.now() - instante > 35000;
+    }
+
+    function estadoLecturaElectrica() {
+      if (!ultimaElectrica) return consultandoUltima ? 'conectando...' : 'sin datos';
+      return datosElectricaAtrasados() ? 'atrasada' : 'en vivo';
+    }
+
     function actualizarInterfaz() {
       const voltaje = promedioUltimosDiez(lecturasUltimas, fila => numero(fila.voltaje));
       const corriente = promedioUltimosDiez(lecturasUltimas, fila => numero(fila.corriente));
       const factor = promedioUltimosDiez(lecturasUltimas, fila => leerFactor(fila));
+      const estadoLectura = estadoLecturaElectrica();
+      const atrasada = estadoLectura === 'atrasada';
       const ambosEnCero = voltaje === 0 && corriente === 0;
       const vNominal = numero(document.getElementById('V_nom')?.value);
       const iNominal = numero(document.getElementById('I_nom')?.value);
       const capacidadBTU = numero(document.getElementById('capacidadBTU')?.value);
       const watts = promedioUltimosDiez(lecturasUltimas, fila => potencia(fila));
-      const energia = calcularEnergiaKWh(lecturasHistoricas);
+      const inicioVentanaEnergia = Date.now() - 10 * 60 * 1000;
+      const lecturasVentanaEnergia = lecturasHistoricas.filter(fila => {
+        const instante = new Date(fila.created_at).getTime();
+        return Number.isFinite(instante) && instante >= inicioVentanaEnergia;
+      });
+      const energia = atrasada ? null : calcularEnergiaKWh(lecturasVentanaEnergia);
       const desviacion = voltaje !== null && vNominal > 0
         ? (voltaje - vNominal) / vNominal * 100 : null;
       const consumoEspecifico = watts !== null && capacidadBTU > 0
@@ -4625,21 +4643,24 @@
       poner('valEnergia', formatear(guion === null ? energia : null, 4));
       poner('valConsumoEsp', formatear(guion === null ? consumoEspecifico : null, 2));
 
-      poner('estadoVoltaje', guion !== null ? 'Sin lectura' :
-        desviacion !== null ? 'Desviación: ' + (desviacion > 0 ? '+' : '') + desviacion.toFixed(1) + '%' : 'Sin referencia nominal');
-      poner('estadoCorriente', guion !== null ? 'Sin lectura' :
-        iNominal > 0 && corriente !== null ? (corriente / iNominal * 100).toFixed(0) + '% de nominal' : 'Lectura recibida');
+      const textoEstadoLectura = estadoLectura === 'atrasada' && ultimaElectrica
+        ? 'última lectura: ' + new Date(ultimaElectrica.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : estadoLectura;
+      poner('estadoVoltaje', textoEstadoLectura);
+      poner('estadoCorriente', textoEstadoLectura);
       poner('estadoPotencia', guion !== null ? 'Sin lectura' : 'Media móvil: ' + Math.min(lecturasUltimas.length, 10) + ' registros');
       poner('estadoFactorPotencia', guion !== null ? 'Sin lectura' : factor !== null ? 'Media móvil de lecturas' : 'Configure FP_est');
-      poner('estadoEnergia', guion !== null ? 'Sin lectura' : 'Ventana de 60 min');
+      poner('estadoEnergia', atrasada ? 'No disponible: datos atrasados' : guion !== null ? 'Sin lectura' : 'Ventana de 10 min');
       poner('estadoConsumoEspecifico', guion !== null ? 'Sin lectura' : capacidadBTU > 0 ? 'Por capacidad ingresada' : 'Ingrese capacidad BTU');
 
       const badge = document.getElementById('estadoCajaElectrica');
       if (badge) {
-        badge.textContent = errorLectura ? 'sin conexión' : ultimaLectura ? 'en línea' : 'esperando';
-        badge.className = 'badge ' + (errorLectura ? 'badge-off' : ultimaLectura ? 'badge-ok' : 'badge-warn');
-        badge.title = errorLectura || (ultimaLectura && ultimaLectura.created_at
-          ? 'Última lectura: ' + new Date(ultimaLectura.created_at).toLocaleString('es') : '');
+        badge.textContent = estadoLectura;
+        badge.className = 'badge ' + (estadoLectura === 'sin datos' ? 'badge-off'
+          : estadoLectura === 'atrasada' ? 'badge-warn'
+          : estadoLectura === 'conectando...' ? 'badge-acento' : 'badge-ok');
+        badge.title = errorLectura || (ultimaElectrica && ultimaElectrica.created_at
+          ? 'Última lectura: ' + new Date(ultimaElectrica.created_at).toLocaleString('es') : '');
       }
       const cajaVoltaje = document.getElementById('slotVoltaje');
       const cajaCorriente = document.getElementById('slotCorriente');
@@ -4689,11 +4710,14 @@
     async function sondearUltima() {
       if (consultandoUltima) return;
       consultandoUltima = true;
+      if (!ultimaElectrica) actualizarInterfaz();
       try {
         const parametros = new URLSearchParams({ select: '*', order: 'created_at.desc', limit: '10' });
         const filas = await consultar(parametros);
-        lecturasUltimas = filas.reverse();
-        ultimaLectura = lecturasUltimas[lecturasUltimas.length - 1] || null;
+        if (filas.length) {
+          lecturasUltimas = filas.reverse();
+          ultimaElectrica = lecturasUltimas[lecturasUltimas.length - 1];
+        }
         errorLectura = '';
       } catch (error) {
         errorLectura = error.message || 'No se pudo consultar lecturas_energia';
@@ -4886,10 +4910,10 @@
       alertasPatron.forEach(alerta => {
         filas.push('<tr class="diag-electrico diag-monitor-alarma"><td class="diag-status">🔴</td><td class="diag-title">Patrón eléctrico</td><td class="diag-text">' + escaparHtml(alerta) + '</td></tr>');
       });
-      if (!ultimaLectura) return filas;
+      if (!ultimaElectrica) return filas;
 
-      const voltaje = numero(ultimaLectura.voltaje);
-      const corriente = numero(ultimaLectura.corriente);
+      const voltaje = numero(ultimaElectrica.voltaje);
+      const corriente = numero(ultimaElectrica.corriente);
       const vNominal = numero(document.getElementById('V_nom')?.value);
       const iNominal = numero(document.getElementById('I_nom')?.value);
       if (voltaje !== null && vNominal > 0 && Math.abs(voltaje - vNominal) > vNominal * 0.1) {
