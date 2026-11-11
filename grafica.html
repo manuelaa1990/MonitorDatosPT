@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gráfica Live · Mediciones del ciclo</title>
+
+  <meta name="theme-color" content="#0f172a">
+  <!-- Aplicación web instalable (PWA) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Monitor HVAC">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; background: #0f172a; color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+    #chart-container { position: absolute; inset: 0; touch-action: none; }
+    #topbar, #bottombar {
+      position: absolute; left: 0; right: 0; z-index: 20;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    #topbar { top: 0; } #bottombar { bottom: 0; }
+    #topbar.hidden-ui { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+    #bottombar.hidden-ui { opacity: 0; transform: translateY(100%); pointer-events: none; }
+
+    #portrait-hint {
+      position: absolute; inset: 0; display: none; align-items: center;
+      justify-content: center; background: #0f172a; z-index: 100;
+      text-align: center; padding: 2rem;
+    }
+    @media (orientation: portrait) {
+      #portrait-hint.force-hint { display: flex; }
+    }
+    #portrait-hint.hidden { display: none !important; }
+    .rotate-icon { animation: rotate 2s ease-in-out infinite; display: inline-block; }
+    @keyframes rotate { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } }
+
+    .range-btn {
+      padding: 4px 9px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      color: #94a3b8; background: transparent; border: 1px solid #334155;
+      transition: all 0.15s; cursor: pointer; white-space: nowrap;
+    }
+    .range-btn.active { background: #0284c7; color: white; border-color: #0284c7; }
+
+    .ui-bar {
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-color: rgba(51, 65, 85, 0.6);
+    }
+    .series-toggle {
+      border-color: #334155; background: #1e293b; color: #94a3b8; opacity: 0.45;
+    }
+    .series-toggle.active { opacity: 1; color: #e2e8f0; background: #334155; border-color: #475569; }
+    #btn-ejes.on { background: #0284c7; border-color: #0ea5e9; color: #ffffff; }
+    #btn-pcomun.on { background: #a21caf; border-color: #d946ef; color: #ffffff; }
+    .history-badge { background: #7c3aed; color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+    #toggles-series { max-height: 34vh; overflow-y: auto; }
+
+    /* Valor de un máximo/mínimo al tocarlo */
+    .valor-extremo-oculto { display: none !important; }
+    #valor-extremo {
+      position: fixed; z-index: 60; pointer-events: none;
+      background: rgba(15, 23, 42, 0.97); color: #e2e8f0;
+      border: 1px solid #475569; border-radius: 8px;
+      padding: 7px 10px; font-size: 11px; line-height: 1.35;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+      max-width: 240px;
+    }
+    #valor-extremo .fecha { margin-top: 2px; color: #94a3b8; font-size: 10px; }
+    #valor-extremo b { color: #ffffff; }
+  </style>
+</head>
+
+<body>
+
+<div id="portrait-hint">
+  <div>
+    <div class="rotate-icon text-6xl mb-4">📱</div>
+    <div class="text-xl font-bold mb-2">Gira el teléfono</div>
+    <div class="text-sm text-slate-400 mb-6">Para ver la gráfica a pantalla completa</div>
+    <button onclick="enterFullscreen()" class="px-6 py-3 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold">
+      Intentar pantalla completa
+    </button>
+  </div>
+</div>
+
+<div id="topbar" class="ui-bar border-b">
+  <div class="flex items-center gap-2 px-3 py-2">
+    <button onclick="exitAndGoBack()"
+      class="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold border border-rose-500 shadow-lg flex items-center gap-1.5 active:scale-95 transition shrink-0">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+      <span>Salir</span>
+    </button>
+
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-bold text-sky-400 truncate">Gráfica Live</span>
+        <div id="status-badge" class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 truncate">
+          Verificando...
+        </div>
+        <div id="history-indicator" class="history-badge hidden">Historial</div>
+      </div>
+      <div id="time-range-label" class="text-[10px] text-slate-400 font-mono truncate">--</div>
+    </div>
+
+    <div class="flex items-center gap-1 shrink-0 overflow-x-auto">
+      <button class="range-btn flex items-center justify-center w-8 h-7" onclick="navigateHistory(1)" title="Más antiguo">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </button>
+      <button id="btn-actual" class="range-btn bg-sky-600 text-white border-sky-600 hidden h-7" onclick="navigateHistory(0, true)">Live</button>
+      <button id="btn-forward" class="range-btn flex items-center justify-center w-8 h-7 hidden" onclick="navigateHistory(-1)" title="Más reciente">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      </button>
+      <div class="w-px h-4 bg-slate-700 mx-1"></div>
+      <button class="range-btn" data-min="10" onclick="setVentana(10)">10m</button>
+      <button class="range-btn" data-min="30" onclick="setVentana(30)">30m</button>
+      <button class="range-btn" data-min="60" onclick="setVentana(60)">1h</button>
+      <button class="range-btn" data-min="120" onclick="setVentana(120)">2h</button>
+      <button class="range-btn" data-min="240" onclick="setVentana(240)">4h</button>
+      <button class="range-btn" data-min="480" onclick="setVentana(480)">8h</button>
+      <button class="range-btn" data-min="1440" onclick="setVentana(1440)">24h</button>
+    </div>
+  </div>
+</div>
+
+<div id="chart-container">
+  <canvas id="tempChart"></canvas>
+</div>
+
+<div id="valor-extremo" class="valor-extremo-oculto"></div>
+
+<div id="bottombar" class="ui-bar border-t">
+  <div class="flex items-center justify-between px-3 py-2 text-[11px] gap-2 flex-wrap">
+    <div id="bat-box" class="flex items-center gap-1.5 shrink-0">
+      <svg id="bat-icon" class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+      <span id="bat-val" class="font-mono text-slate-300">--% · --.--V</span>
+    </div>
+
+    <div id="toggles-series" class="flex items-center gap-1 flex-wrap justify-center flex-1"></div>
+
+    <div class="flex items-center gap-1 text-slate-300 min-w-0">
+      <svg class="w-4 h-4 text-sky-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10 10 0 0114.142 0M1.42 9.428a16 16 0 01121.16 0"/>
+      </svg>
+      <span id="wifi-val" class="truncate max-w-[150px]">--</span>
+    </div>
+
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button id="btn-ejes" onclick="toggleEjes()" title="Ocultar ejes laterales" aria-pressed="true"
+        class="on px-2 py-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700">
+        Ejes
+      </button>
+      <button id="btn-pcomun" onclick="togglePresionComun()" title="Usar un solo eje para P1 y P2" aria-pressed="false"
+        class="px-2 py-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700">
+        P común
+      </button>
+      <button onclick="descargarGrafica()" title="Descargar gráfica en alta resolución" aria-label="Descargar gráfica en alta resolución"
+        class="p-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 border border-slate-700">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+      </button>
+      <button onclick="resetZoom()" title="Reset zoom"
+        class="p-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 border border-slate-700">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+      <button onclick="toggleFullscreen()" title="Pantalla completa"
+        class="p-1.5 rounded bg-slate-800/70 hover:bg-slate-700 text-slate-200 border border-slate-700">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ============================================================
+     CONFIGURACIÓN
+     ============================================================ */
+  const POLL_MS   = 10000;
+  const MAX_AGE_MS = 35000;
+  const GAP_MS    = 2 * 60 * 1000;
+  const ATM_PSI   = 14.696;
+  const PA_POR_PSI = 6894.757293168;
+
+  const VENTANAS_MIN = [10, 30, 60, 120, 240, 480, 1440];
+  const PASO_TICK_MIN = { 10: 2, 30: 5, 60: 15, 120: 30, 240: 60, 480: 120, 1440: 180 };
+  const SUAVIZADO_PRESION_MS = 5 * 60 * 1000;   // promedio móvil de 5 min
+
+  /* Mismos canales y mismos alias que la página principal */
+  const ALIAS_TEMP = [
+    ['temp1','sonda1','t1'], ['temp2','sonda2','t2'], ['temp3','sonda3','t3'],
+    ['temp4','sonda4','t4'], ['temp5','sonda5','t5'], ['temp6','sonda6','t6']
+  ];
+  const ALIAS_PRES = [
+    ['presion_succion','presionSuccion','presion1','pres1','p_succion','pSuccion','p1','presion_baja'],
+    ['presion_descarga','presionDescarga','presion2','pres2','p_descarga','pDescarga','p2','presion_alta']
+  ];
+  const ASIGNACION_INICIAL = { psuct:'pres1', pdesc:'pres2', tsuct:'temp1', tevap:'temp2', tdesc:'temp3', tliq:'temp4', tamb:'temp5' };
+  const K_ASIGNACION        = 'refrig_asignacion_sondas_v3';
+  const K_ASIGNACION_LEGACY = 'refrig_asignacion_sondas_v2';
+
+  /* Orden pedido: P1 · T1 · P2 · T4 · T2 · T3 · T5. Los nombres T1..T5 son
+     los del firmware del ESP32; "Salida Evap" se conserva como referencia. */
+  const SERIES = [
+    { id:'psuct', etiqueta:'P1 Succión',     color:'#818cf8', eje:'y2', varSlot:'psuct', presion:true, suavizar:true },
+    { id:'tsuct', etiqueta:'T1 Succión',     color:'#f87171', eje:'y',  varSlot:'tsuct' },
+    { id:'pdesc', etiqueta:'P2 Descarga',    color:'#f472b6', eje:'y3', varSlot:'pdesc', presion:true, suavizar:true },
+    { id:'tliq',  etiqueta:'T4 Líquido',     color:'#34d399', eje:'y6', varSlot:'tliq'  },
+    { id:'tevap', etiqueta:'T2 Salida Evap', color:'#38bdf8', eje:'y4', varSlot:'tevap' },
+    { id:'tdesc', etiqueta:'T3 Descarga',    color:'#fb923c', eje:'y5', varSlot:'tdesc' },
+    { id:'tamb',  etiqueta:'T5 Ambiente',    color:'#a78bfa', eje:'y7', varSlot:'tamb'  },
+    { id:'phe',   etiqueta:'P.H. esperada',  color:'#22d3ee', eje:'y3', presion:true },
+    { id:'phm',   etiqueta:'P.H. medida',    color:'#a7f3d0', eje:'y3', presion:true, soloPuntos:true }
+  ];
+
+  /* Cada temperatura tiene su propia escala. El eje "y" queda para T1 y los
+     demás usan y4..y7. */
+  const EJES_TEMP = [
+    { id:'tsuct', eje:'y',  minSpan:2   },
+    { id:'tliq',  eje:'y6', minSpan:1.5 },
+    { id:'tevap', eje:'y4', minSpan:1.5 },
+    { id:'tdesc', eje:'y5', minSpan:5   },
+    { id:'tamb',  eje:'y7', minSpan:2   }
+  ].map(d => ({
+    ...d,
+    color: (SERIES.find(s => s.id === d.id) || {}).color || '#64748b'
+  }));
+
+  /* ============================================================
+     ESTADO
+     ============================================================ */
+  let rangoMin = 10;
+  let offsetMin = 0;
+  let allData = [];
+  let latestRow = null;
+  let lastSeenAt = null;
+  let isRefreshing = false;
+  let ventanaSeq = 0;
+  let userZoomed = false;
+  let asignacion = Object.assign({}, ASIGNACION_INICIAL);
+  let seriesVisibles = {};
+  SERIES.forEach(s => { seriesVisibles[s.id] = ['tsuct','tdesc','tevap'].indexOf(s.id) >= 0; });
+
+  let ejesVisibles = true;
+  let presionComun = false;
+  let extremosGrafica = [];
+  let temporizadorTooltip = null;
+  /* Tiempo que el cuadro de valores permanece visible después de salir de la
+     gráfica, para poder mover el cursor al botón de descarga. */
+  const TOOLTIP_HOLD_MS = 8000;
+  try {
+    ejesVisibles = localStorage.getItem('refrig_ejes_visibles') !== '0';
+    presionComun = localStorage.getItem('refrig_presion_comun') === '1';
+  } catch (e) {}
+
+  /* La v2 guardó intercambiados temp4 (evaporador) y temp2 (líquido). */
+  function esAsignacionCruzadaVieja(a) {
+    return !!a && a.tsuct === 'temp1' && a.tevap === 'temp4' &&
+           a.tdesc === 'temp3' && a.tliq === 'temp2' && a.tamb === 'temp5';
+  }
+  try {
+    let a = JSON.parse(localStorage.getItem(K_ASIGNACION) || 'null');
+    if (!a) a = JSON.parse(localStorage.getItem(K_ASIGNACION_LEGACY) || 'null');
+    if (esAsignacionCruzadaVieja(a)) a = Object.assign({}, ASIGNACION_INICIAL);
+    if (a && typeof a === 'object') Object.keys(ASIGNACION_INICIAL).forEach(k => { if (typeof a[k] === 'string') asignacion[k] = a[k]; });
+  } catch (e) {}
+  /* El monitor pasa su asignación en la URL: así el líquido/descarga no se
+     cruzan aunque cada página tenga su propia caché. */
+  try {
+    const mapaUrl = new URLSearchParams(location.search).get('map');
+    if (mapaUrl) {
+      const m = JSON.parse(mapaUrl);
+      if (m && typeof m === 'object') {
+        Object.keys(ASIGNACION_INICIAL).forEach(k => { if (typeof m[k] === 'string') asignacion[k] = m[k]; });
+      }
+    }
+  } catch (e) {}
+  if (esAsignacionCruzadaVieja(asignacion)) asignacion = Object.assign({}, ASIGNACION_INICIAL);
+  try { localStorage.setItem(K_ASIGNACION, JSON.stringify(asignacion)); } catch (e) {}
+  try {
+    const sv = JSON.parse(localStorage.getItem('refrig_series_grafica') || 'null');
+    if (sv && typeof sv === 'object') SERIES.forEach(s => { if (typeof sv[s.id] === 'boolean') seriesVisibles[s.id] = sv[s.id]; });
+  } catch (e) {}
+  const minParam = parseInt(new URLSearchParams(location.search).get('min'), 10);
+  if (VENTANAS_MIN.includes(minParam)) rangoMin = minParam;
+
+  /* ============================================================
+     UTILIDADES
+     ============================================================ */
+  function aNumero(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v); return Number.isFinite(n) ? n : null;
+  }
+  function limpiarTemp(v) { const n = aNumero(v); return (n !== null && n > -60 && n <= 200) ? n : null; }
+  function limpiarPres(v) { const n = aNumero(v); return (n !== null && n > -15 && n < 1500) ? n : null; }
+  function parseTs(s) {
+    if (!s) return null;
+    let str = String(s).trim();
+    if (str.includes(' ') && !str.includes('T')) str = str.replace(' ', 'T');
+    str = str.replace(/\.(\d{3})\d+/, '.$1');   // Safari no acepta más de 3 decimales
+    if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(str)) str += 'Z';
+    const t = new Date(str).getTime();
+    return isNaN(t) ? null : t;
+  }
+  function canalTemp(row, n) {
+    const lista = Array.isArray(row.temps) ? row.temps : (Array.isArray(row.temperaturas) ? row.temperaturas : null);
+    if (lista && lista.length >= n) return limpiarTemp(lista[n - 1]);
+    const alias = ALIAS_TEMP[n - 1] || [];
+    for (const k of alias) { if (row[k] !== undefined && row[k] !== null && row[k] !== '') return limpiarTemp(row[k]); }
+    return null;
+  }
+  function canalPres(row, n) {
+    const lista = Array.isArray(row.presiones) ? row.presiones : (Array.isArray(row.pres) ? row.pres : null);
+    if (lista && lista.length >= n) return limpiarPres(lista[n - 1]);
+    const alias = ALIAS_PRES[n - 1] || [];
+    for (const k of alias) { if (row[k] !== undefined && row[k] !== null && row[k] !== '') return limpiarPres(row[k]); }
+    return null;
+  }
+  function valorCanal(row, canal) {
+    const m = /^(temp|pres)(\d+)$/.exec(canal || '');
+    if (!m) return null;
+    return (m[1] === 'temp') ? canalTemp(row, parseInt(m[2], 10)) : canalPres(row, parseInt(m[2], 10));
+  }
+  function valorSlot(row, slot) { return valorCanal(row, asignacion[slot]); }
+
+  /* Etiqueta con la sonda real: si una serie se reasigna a otro canal, se
+     añade el canal oficial para que se vea el cruce (p. ej.
+     «T4 Líquido · T2»). Con la asignación de fábrica queda limpia. */
+  const CANAL_INICIAL_SERIE = {
+    psuct:'pres1', pdesc:'pres2',
+    tsuct:'temp1', tevap:'temp2', tdesc:'temp3', tliq:'temp4', tamb:'temp5'
+  };
+  function etiquetaSerie(s) {
+    if (!s.varSlot) return s.etiqueta;
+    const canal = asignacion[s.varSlot];
+    if (!canal || canal === CANAL_INICIAL_SERIE[s.varSlot]) return s.etiqueta;
+    const m = /^(temp|pres)(\d+)$/.exec(canal);
+    const nombre = m ? ((m[1] === 'temp' ? 'T' : 'P') + m[2]) : canal;
+    return s.etiqueta + ' · ' + nombre;
+  }
+
+  /* Promedio móvil causal para las presiones. Se calcula solamente para
+     dibujar: los valores crudos siguen intactos en Supabase, en el monitor y
+     en el motor de alarmas. Si hay un hueco de datos se reinicia la ventana. */
+  function promedioMovilPresion(puntos, ventanaMs) {
+    const salida = [];
+    let ventana = [];
+    let ultimaX = null;
+    (puntos || []).forEach(p => {
+      const y = (p && p.y !== null && p.y !== undefined && Number.isFinite(p.y)) ? p.y : null;
+      if (!p || !Number.isFinite(p.x) || y === null) {
+        ventana = [];
+        ultimaX = null;
+        salida.push({ x: p ? p.x : null, y: null });
+        return;
+      }
+      if (ultimaX !== null && (p.x - ultimaX) > GAP_MS) ventana = [];
+      ultimaX = p.x;
+      ventana.push({ x: p.x, y: y });
+      const desde = p.x - ventanaMs;
+      while (ventana.length && ventana[0].x < desde) ventana.shift();
+      let suma = 0;
+      for (let i = 0; i < ventana.length; i++) suma += ventana[i].y;
+      salida.push({ x: p.x, y: suma / ventana.length });
+    });
+    return salida;
+  }
+
+  function procesarFila(row) {
+    if (!row) return null;
+    const vals = {};
+    SERIES.forEach(s => {
+      vals[s.id] = s.varSlot ? valorSlot(row, s.varSlot) : null;
+    });
+    vals.created_at = row.created_at;
+    vals.bateriaVolt = aNumero(row.bateriaVolt);
+    vals.wifi = row.wifi || row.ssid || null;
+    vals.ip = row.ip_local || row.ip || null;
+    vals.rssi = aNumero(row.rssi);
+    vals.bateria = (vals.bateriaVolt !== null) ? Math.max(0, Math.min(100, Math.round(((vals.bateriaVolt - 3.10) / (4.20 - 3.10)) * 100))) : null;
+    return vals;
+  }
+  function withTimeout(p, ms) {
+    let timer;
+    const t = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('TIMEOUT')), ms); });
+    return Promise.race([p, t]).finally(() => clearTimeout(timer));
+  }
+  /* ---------------------------- ORIGEN DE DATOS ---------------------------
+     Supabase: tabla lecturas_hvac
+       created_at, presion_baja, presion_alta, temp1..temp5
+     Es la única fuente de datos de la página. */
+  const SB_URL   = 'https://qiidodrtxchurazrghyr.supabase.co';
+  const SB_TABLA = 'lecturas_hvac';
+  const SB_CLAVE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaWRvZHJ0eGNodXJhenJnaHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDkwMDQsImV4cCI6MjEwODAyNTAwNH0.12wbnPavwGr4tEH1kz9ZtgSxHUYvL9gyrbMqFOBX2hg';
+
+  async function sbPedir(consulta) {
+    const url = SB_URL + '/rest/v1/' + SB_TABLA + '?' + consulta;
+    const res = await withTimeout(fetch(url, {
+      headers: { apikey: SB_CLAVE, Authorization: 'Bearer ' + SB_CLAVE, Accept: 'application/json' },
+      cache: 'no-store'
+    }), 15000);
+    if (!res.ok) throw new Error('Supabase HTTP ' + res.status);
+    return res.json();
+  }
+
+  /* Última lectura y ventana exacta, por rango de fechas */
+  async function fetchUltima() {
+    const filas = await sbPedir('select=*&order=created_at.desc&limit=1');
+    return (Array.isArray(filas) && filas.length) ? filas[0] : null;
+  }
+  async function fetchVentana(desdeMs, hastaMs) {
+    const d = encodeURIComponent(new Date(desdeMs).toISOString());
+    const h = encodeURIComponent(new Date(hastaMs).toISOString());
+    /* Supabase/PostgREST entrega como máximo 1000 filas por consulta.
+       Se pagina con offset para no dejar vacíos en 4 h, 8 h y 24 h. */
+    const base = 'select=*&created_at=gte.' + d + '&created_at=lte.' + h +
+                 '&order=created_at.asc,id.asc';
+    const filas = [];
+    const PAGINA = 1000;
+    const MAX_FILAS = 20000;
+    let offset = 0;
+    while (offset < MAX_FILAS) {
+      const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
+      if (!Array.isArray(lote) || !lote.length) break;
+      filas.push(...lote);
+      if (lote.length < PAGINA) break;
+      offset += lote.length;
+    }
+    return filas;
+  }
+
+  /* ============================================================
+     CARGA DE HISTORIAL
+     ============================================================ */
+  async function loadAllHistory() {
+    await recargarVentana();
+    if (!allData.length) {
+      const badge = document.getElementById('status-badge');
+      badge.textContent = '⚠️ Sin datos del equipo';
+      badge.className = 'px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 truncate';
+    }
+  }
+
+  function getSlice() {
+    if (!allData.length) return [];
+    const now = Date.now();
+    const endTime = now - offsetMin * 60000;
+    const startTime = endTime - rangoMin * 60000;
+    return allData.filter(r => {
+      const t = parseTs(r.created_at);
+      return t && t >= startTime && t <= endTime;
+    });
+  }
+
+  /* ============================================================
+     SERIES DE LA PRUEBA DE HERMETICIDAD
+     ============================================================ */
+  function leerPH() {
+    try {
+      const ref = JSON.parse(localStorage.getItem('pressure-reference') || 'null');
+      const med = JSON.parse(localStorage.getItem('pressure-measurements') || '[]');
+      const peso = parseInt(localStorage.getItem('ph-s1-weight'), 10);
+      if (!ref || !Number.isFinite(Number(ref.pressureGauge))) return null;
+      const wEvap = Number.isFinite(peso) ? peso : 60;
+      const tRef = aNumero(ref.rawEvap) !== null ? aNumero(ref.rawEvap) : aNumero(ref.raw1);
+      const tRefD = aNumero(ref.rawDesc) !== null ? aNumero(ref.rawDesc) : aNumero(ref.raw2);
+      let tRefEf = null;
+      if (tRef !== null && tRefD !== null) tRefEf = (wEvap / 100) * tRef + ((100 - wEvap) / 100) * tRefD;
+      if (tRefEf === null) tRefEf = aNumero(ref.tempRefC);
+      return {
+        ref: ref, medidas: Array.isArray(med) ? med : [],
+        peso: wEvap, tRef: tRefEf,
+        canalTemp: ref.canalTemp || null,      // sonda elegida en la prueba
+        tRefMs: parseTs(ref.timestamp)
+      };
+    } catch (e) { return null; }
+  }
+  /* Presión esperada a volumen constante. Se usa el modelo de gas ideal, que en
+     nitrógeno y este rango de presiones difiere menos del 1 % del cálculo con
+     ecuación de estado que hace la página principal. */
+  function presionEsperada(pGaugeRef, tRefC, tActualC) {
+    const p = aNumero(pGaugeRef), a = aNumero(tRefC), b = aNumero(tActualC);
+    if (p === null || a === null || b === null) return null;
+    const refK = a + 273.15, actK = b + 273.15;
+    if (!(refK > 0) || !(actK > 0)) return null;
+    return (p + ATM_PSI) * (actK / refK) - ATM_PSI;
+  }
+
+  /* ============================================================
+     GRÁFICA
+     ============================================================ */
+  const ctx = document.getElementById('tempChart').getContext('2d');
+  function degradado(color, intensidad) {
+    return c => {
+      const area = c.chart.chartArea;
+      if (!area) return 'transparent';
+      const g = c.chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
+      g.addColorStop(0, color + '00');
+      g.addColorStop(1, color + (intensidad || '4d'));
+      return g;
+    };
+  }
+  /* Cinta de degradado bajo cada línea. Se dibuja antes de las líneas, con un
+     degradado que va del color de la serie (arriba) a transparente (abajo), y
+     recortada al área de dibujo. Así el estilo se mantiene sin que el relleno
+     tape el resto de la gráfica. */
+  const ALTURA_CINTA = 24;
+  const pluginCinta = {
+    id: 'cintaDegradado',
+    beforeDatasetsDraw(chart) {
+      const area = chart.chartArea;
+      if (!area) return;
+      const ctx = chart.ctx;
+      chart.data.datasets.forEach((ds, i) => {
+        if (!ds.cinta) return;
+        /* Ojo: meta.hidden NO refleja dataset.hidden; la forma correcta es esta */
+        if (!chart.isDatasetVisible(i)) return;
+        const meta = chart.getDatasetMeta(i);
+        if (!meta) return;
+        const pts = (meta.data || []).filter(p => p && Number.isFinite(p.x) && Number.isFinite(p.y));
+        if (pts.length < 2) return;
+
+        /* Se corta la cinta donde hay un hueco grande de tiempo (dato faltante) */
+        const saltos = [];
+        const paso = (pts[pts.length - 1].x - pts[0].x) / Math.max(1, pts.length - 1);
+        for (let k = 1; k < pts.length; k++) {
+          if (pts[k].x - pts[k - 1].x > paso * 3.5) saltos.push(k);
+        }
+        const tramos = [];
+        let inicio = 0;
+        saltos.forEach(corte => { tramos.push(pts.slice(inicio, corte)); inicio = corte; });
+        tramos.push(pts.slice(inicio));
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(area.left, area.top, area.width, area.height);
+        ctx.clip();
+
+        tramos.forEach(tramo => {
+          if (tramo.length < 2) return;
+          let minY = Infinity, maxY = -Infinity;
+          tramo.forEach(p => { minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
+          const grad = ctx.createLinearGradient(0, minY, 0, maxY + ALTURA_CINTA);
+          grad.addColorStop(0, ds.borderColor + '5c');
+          grad.addColorStop(1, ds.borderColor + '00');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(tramo[0].x, tramo[0].y - 1);
+          for (let k = 1; k < tramo.length; k++) ctx.lineTo(tramo[k].x, tramo[k].y - 1);
+          for (let k = tramo.length - 1; k >= 0; k--) ctx.lineTo(tramo[k].x, tramo[k].y + ALTURA_CINTA);
+          ctx.closePath();
+          ctx.fill();
+        });
+        ctx.restore();
+      });
+    }
+  };
+
+  const datasets = SERIES.map(s => {
+    const ds = {
+      label: etiquetaSerie(s),
+      borderColor: s.color,
+      backgroundColor: 'transparent',
+      data: [],
+      borderWidth: 2.5,
+      tension: 0.35,
+      pointRadius: s.soloPuntos ? 4 : 0,
+      pointHoverRadius: 6,
+      pointBackgroundColor: '#ffffff',
+      pointBorderColor: s.color,
+      pointBorderWidth: 2,
+      fill: false,
+      cinta: !s.soloPuntos,
+      spanGaps: false,
+      yAxisID: s.eje
+    };
+    if (s.soloPuntos) { ds.showLine = false; ds.borderWidth = 0; }
+    if (s.id === 'phe') ds.borderDash = [6, 4];
+    return ds;
+  });
+
+  const tempChart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      /* Sin 'mouseout': al salir del canvas el tooltip no se cierra de golpe.
+         Lo oculta el temporizador propio después de TOOLTIP_HOLD_MS. */
+      events: ['mousemove', 'click', 'touchstart', 'touchmove'],
+      layout: { padding: { top: 34, right: 42, bottom: 8, left: 12 } },
+      scales: {
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'dd/MM/yyyy, HH:mm:ss',
+                  displayFormats: { second: 'HH:mm:ss', minute: 'HH:mm', hour: 'HH:mm', day: 'dd/MM' } },
+          ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false }
+        },
+        y: {
+          position: 'left',
+          grace: '10%',
+          ticks: { color: '#f87171', font: { size: 9 }, padding: 3 },
+          grid: { color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false }
+        },
+        y2: {
+          position: 'right', display: false,
+          grace: '10%',
+          ticks: { color: '#818cf8', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y3: {
+          position: 'right', display: false,
+          grace: '10%',
+          ticks: { color: '#f472b6', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y4: {
+          position: 'left', display: false,
+          grace: '10%',
+          ticks: { color: '#38bdf8', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y5: {
+          position: 'left', display: false,
+          grace: '10%',
+          ticks: { color: '#fb923c', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y6: {
+          position: 'left', display: false,
+          grace: '10%',
+          ticks: { color: '#34d399', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y7: {
+          position: 'left', display: false,
+          grace: '10%',
+          ticks: { color: '#a78bfa', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(15,23,42,0.95)', borderColor: '#334155', borderWidth: 1,
+          titleColor: '#e2e8f0', bodyColor: '#cbd5e1', padding: 10,
+          callbacks: {
+            label: c => {
+              const v = c.parsed.y;
+              const serie = SERIES[c.datasetIndex];
+              if (v === null || v === undefined || isNaN(v)) return c.dataset.label + ': --';
+              return c.dataset.label + ': ' + v.toFixed(2) + (serie && serie.presion ? ' PSI' : ' °C');
+            }
+          }
+        },
+        annotation: { annotations: {} },
+        zoom: {
+          limits: { x: { min: 'original', max: 'original' } },
+          pan: { enabled: true, mode: 'x', threshold: 5, onPan: () => { userZoomed = true; } },
+          zoom: { wheel: { enabled: true, speed: 0.05 }, pinch: { enabled: true }, drag: { enabled: false }, mode: 'x', onZoom: () => { userZoomed = true; } }
+        }
+      }
+    },
+    plugins: [pluginCinta]
+  });
+
+  /* Cierra solo los tooltips después de TOOLTIP_HOLD_MS sin mover el cursor o
+     tocar la gráfica. No afecta los datos ni la selección de series. */
+  function ocultarTooltipChart() {
+    if (!tempChart || !tempChart.tooltip) return;
+    tempChart.setActiveElements([]);
+    tempChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+    tempChart.update('none');
+  }
+
+  function ocultarTooltips() {
+    ocultarTooltipChart();
+    ocultarValorExtremo();
+    if (temporizadorTooltip) {
+      clearTimeout(temporizadorTooltip);
+      temporizadorTooltip = null;
+    }
+  }
+
+  function programarOcultarTooltip() {
+    if (temporizadorTooltip) clearTimeout(temporizadorTooltip);
+    temporizadorTooltip = setTimeout(ocultarTooltips, TOOLTIP_HOLD_MS);
+  }
+
+  /* pointerleave reinicia el plazo al salir: así quedan visibles unos segundos
+     completos aunque el cursor se haya detenido antes de abandonar la línea. */
+  ['pointermove', 'pointerdown', 'touchstart', 'pointerleave'].forEach(ev => {
+    tempChart.canvas.addEventListener(ev, programarOcultarTooltip, { passive: true });
+  });
+
+  /* Reserva el alto real de las barras para que los números del eje X no queden
+     debajo de la barra inferior. */
+  function ajustarPadding() {
+    const barraArriba = document.getElementById('topbar');
+    const barraAbajo = document.getElementById('bottombar');
+    if (!barraArriba || !barraAbajo) return;
+    tempChart.options.layout.padding.top = barraArriba.offsetHeight + 6;
+    tempChart.options.layout.padding.bottom = barraAbajo.offsetHeight + 6;
+    tempChart.update('none');
+  }
+
+  function getExtrema(datos) {
+    let max = { y: -Infinity, x: null }, min = { y: Infinity, x: null };
+    datos.forEach(p => {
+      if (p.y !== null && Number.isFinite(p.y)) {
+        if (p.y > max.y) max = { x: p.x, y: p.y };
+        if (p.y < min.y) min = { x: p.x, y: p.y };
+      }
+    });
+    return { max: max.y === -Infinity ? null : max, min: min.y === Infinity ? null : min };
+  }
+
+  /* Escala independiente para cada serie. El ancho mínimo evita que un
+     ruido de 0,1 PSI/°C se vea como una montaña rusa. */
+  function escalaSerie(valores, minSpan) {
+    const v = (valores || []).filter(Number.isFinite);
+    if (!v.length) return null;
+    const min = Math.min.apply(null, v);
+    const max = Math.max.apply(null, v);
+    const centro = (min + max) / 2;
+    const ancho = Math.max(max - min, minSpan || 0, Math.abs(centro) * 0.05);
+    const margen = ancho * 0.10;
+    const mitad = Math.max(ancho / 2, (max - min) / 2 + margen);
+    const decimales = Math.abs(centro) >= 50 ? 0 : 1;
+    const factor = Math.pow(10, decimales);
+    return {
+      min: Math.floor((centro - mitad) * factor) / factor,
+      max: Math.ceil((centro + mitad) * factor) / factor
+    };
+  }
+
+  function renderChart() {
+    extremosGrafica = [];
+    ocultarValorExtremo();
+    const slice = getSlice();
+    const filas = slice.map(procesarFila).filter(Boolean);
+    const ph = leerPH();
+
+    const conjuntos = {};
+    SERIES.forEach(s => { conjuntos[s.id] = []; });
+    let lastTs = null;
+    filas.forEach(f => {
+      const t = parseTs(f.created_at);
+      if (!t) return;
+      if (lastTs !== null && (t - lastTs) > GAP_MS) {
+        const hueco = lastTs + 1000;
+        SERIES.forEach(s => conjuntos[s.id].push({ x: hueco, y: null }));
+      }
+      SERIES.forEach(s => {
+        let y = f[s.id];
+        if (s.id === 'phe') {
+          y = null;
+          if (ph && ph.tRef !== null && t >= (ph.tRefMs || 0) - 60000) {
+            let tEf = null;
+            if (ph.canalTemp) {
+              /* La prueba eligió una sonda concreta: se usa esa y nada más */
+              tEf = valorSlotDeFilaPH(f, ph.canalTemp);
+            } else {
+              const tEvap = valorSlotDeFilaPH(f, 'tevap'), tDesc = valorSlotDeFilaPH(f, 'tdesc');
+              if (tEvap !== null && tDesc !== null) {
+                tEf = (ph.peso / 100) * tEvap + ((100 - ph.peso) / 100) * tDesc;
+              }
+            }
+            if (tEf !== null) {
+              const p = presionEsperada(ph.ref.pressureGauge, ph.tRef, tEf);
+              y = (p === null) ? null : Number(p.toFixed(1));
+            }
+          }
+        } else if (s.id === 'phm') {
+          y = null;
+        }
+        conjuntos[s.id].push({ x: t, y: (y === undefined || y === null) ? null : y });
+      });
+      lastTs = t;
+    });
+
+    /* Mediciones manuales de la prueba de hermeticidad */
+    if (ph) {
+      const base = conjuntos.phm;
+      ph.medidas.forEach(m => {
+        const tm = parseTs(m.timestamp);
+        if (!tm || !base.length) return;
+        let mejor = null, mejorDif = Infinity;
+        base.forEach((p, i) => {
+          if (typeof p.x !== 'number') return;
+          const d = Math.abs(p.x - tm);
+          if (d < mejorDif) { mejorDif = d; mejor = i; }
+        });
+        if (mejor !== null && mejorDif <= GAP_MS) base[mejor] = { x: base[mejor].x, y: Number(m.pressureGauge) };
+      });
+    }
+
+    /* Suavizado solo visual de P1/P2: promedio móvil de los últimos 5 min.
+       No se aplica a P.H. esperada/medida ni a las temperaturas. */
+    SERIES.forEach(s => {
+      if (s.suavizar) conjuntos[s.id] = promedioMovilPresion(conjuntos[s.id], SUAVIZADO_PRESION_MS);
+    });
+
+    SERIES.forEach((s, i) => {
+      const ds = tempChart.data.datasets[i];
+      ds.data = conjuntos[s.id];
+      ds.hidden = !seriesVisibles[s.id];        // sin esto, la línea no se apagaba
+      ds.yAxisID = (presionComun && s.presion) ? 'y3' : s.eje;
+      ds.borderWidth = s.soloPuntos ? 0 : (seriesVisibles[s.id] ? 2.5 : 0);
+    });
+
+    /* Puntos de máximo y mínimo de las temperaturas y de P1/P2.
+       Sin etiquetas ni líneas de llamada: el valor se muestra al tocar el punto. */
+    try {
+      const anotaciones = {};
+      const seriesConExtremos = SERIES.filter(s =>
+        seriesVisibles[s.id] && s.id !== 'phe' && s.id !== 'phm'
+      );
+      if (!filas.length) {
+        const now = Date.now();
+        anotaciones.vacio = {
+          type: 'label', xValue: now - (rangoMin * 60000) / 2, yValue: 20,
+          content: ['Sin datos en este rango'], font: { size: 14, weight: 'bold' }, color: '#64748b'
+        };
+      } else {
+        seriesConExtremos.forEach(s => {
+          const ext = getExtrema(conjuntos[s.id]);
+          const unidad = s.presion ? ' PSI' : ' °C';
+          const ejePunto = (presionComun && s.presion) ? 'y3' : s.eje;
+          const registrar = (tipo, punto) => {
+            if (!punto) return;
+            extremosGrafica.push({
+              id: s.id, etiqueta: etiquetaSerie(s), color: s.color, tipo,
+              x: punto.x, y: punto.y, eje: ejePunto, valor: punto.y, unidad
+            });
+            anotaciones['ext_' + s.id + '_' + tipo] = {
+              type: 'point',
+              xValue: punto.x,
+              yValue: punto.y,
+              yScaleID: ejePunto,
+              radius: s.presion ? 3 : 3.5,
+              backgroundColor: s.color,
+              borderColor: '#ffffff',
+              borderWidth: 1.5,
+              drawTime: 'afterDatasetsDraw'
+            };
+          };
+          registrar('max', ext.max);
+          if (ext.min && (!ext.max || ext.min.x !== ext.max.x || ext.min.y !== ext.max.y)) {
+            registrar('min', ext.min);
+          }
+        });
+
+        /* Bandas suaves sobre los huecos reales de datos: solo se marcan los
+           que ocupan un ancho visible, para no llenar la gráfica de etiquetas. */
+        try {
+          const yEscala = tempChart.scales.y;
+          if (yEscala && filas.length > 1) {
+            const finVentana = Date.now() - offsetMin * 60000;
+            const inicioVentana = finVentana - rangoMin * 60000;
+            const anchoPx = (tempChart.chartArea && tempChart.chartArea.width) ||
+                            tempChart.width || 800;
+            const minGapMs = Math.max(2 * 60000, rangoMin * 60000 * 0.015);
+            const tiempos = filas
+              .map(f => new Date(f.created_at).getTime())
+              .filter(Number.isFinite)
+              .sort((a, b) => a - b);
+            const huecos = [];
+            const agregarHueco = (ini, fin) => {
+              const ms = fin - ini;
+              if (ms < minGapMs) return;
+              const px = (ms / (finVentana - inicioVentana)) * anchoPx;
+              if (px < 45) return;
+              huecos.push({ ini, fin, ms, px });
+            };
+
+            for (let i = 1; i < tiempos.length; i++) {
+              const t0 = tiempos[i - 1];
+              const t1 = tiempos[i];
+              if (t1 < inicioVentana || t0 > finVentana) continue;
+              agregarHueco(Math.max(t0, inicioVentana), Math.min(t1, finVentana));
+            }
+
+            /* También los bordes: por ejemplo, en 24 h puede haber muchas
+               horas sin datos antes de la primera lectura disponible. */
+            if (tiempos.length) {
+              const primero = Math.max(tiempos[0], inicioVentana);
+              const ultimo = Math.min(tiempos[tiempos.length - 1], finVentana);
+              if (primero > inicioVentana) agregarHueco(inicioVentana, primero);
+              if (ultimo < finVentana) agregarHueco(ultimo, finVentana);
+            }
+
+            huecos.sort((a, b) => b.px - a.px);
+            huecos.slice(0, 3).sort((a, b) => a.ini - b.ini).forEach((h, i) => {
+              const duracion = fmtAge(h.ms);
+              const texto = h.px >= 120
+                ? ['Sin datos · ' + duracion]
+                : ['Sin datos', duracion];
+              anotaciones['hueco_' + i] = {
+                type: 'box',
+                xMin: h.ini,
+                xMax: h.fin,
+                yMin: yEscala.min,
+                yMax: yEscala.max,
+                yScaleID: 'y',
+                backgroundColor: 'rgba(148, 163, 184, 0.08)',
+                borderColor: 'rgba(148, 163, 184, 0.28)',
+                borderWidth: 1,
+                borderDash: [4, 4],
+                drawTime: 'beforeDatasetsDraw',
+                label: {
+                  display: true,
+                  content: texto,
+                  position: 'center',
+                  color: '#dbe4ee',
+                  backgroundColor: 'rgba(15, 23, 42, 0.82)',
+                  borderColor: 'rgba(148, 163, 184, 0.38)',
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  padding: { top: 4, bottom: 4, left: 7, right: 7 },
+                  font: { size: 10, weight: 'bold' }
+                }
+              };
+            });
+          }
+        } catch (err) {
+          console.warn('No se pudieron marcar los huecos:', err);
+        }
+      }
+      tempChart.options.plugins.annotation.annotations = anotaciones;
+    } catch (err) { console.error('Error en anotaciones:', err); }
+
+    if (!userZoomed) {
+      const now = Date.now();
+      const fin = now - offsetMin * 60000;
+      tempChart.options.scales.x.min = fin - rangoMin * 60000;
+      tempChart.options.scales.x.max = fin;
+    }
+
+    const valoresEje = eje => {
+      const vals = [];
+      SERIES.forEach(s => {
+        if (!seriesVisibles[s.id] || s.eje !== eje) return;
+        (conjuntos[s.id] || []).forEach(p => {
+          if (p && p.y !== null && Number.isFinite(p.y)) vals.push(p.y);
+        });
+      });
+      return vals;
+    };
+
+    /* Temperaturas: cada una tiene su propia escala. Para no comerse el ancho
+       en pantallas angostas se muestran como máximo 2–5 ejes izquierdos; las
+       series sin eje visible conservan igual su escala y sus puntos de
+       máximo/mínimo. En pantallas anchas se muestran los cinco. */
+    const anchoGrafica = tempChart.width || window.innerWidth || 800;
+    const maxEjesTemp = anchoGrafica >= 760 ? 5 : (anchoGrafica >= 560 ? 3 : 2);
+    const tempVisibles = EJES_TEMP.filter(d => seriesVisibles[d.id]);
+    const tempConDatos = tempVisibles.filter(d => valoresEje(d.eje).length);
+    /* Si todavía no hay datos, se muestra un solo eje de referencia. */
+    const candidatos = tempConDatos.length ? tempConDatos : tempVisibles.slice(0, 1);
+    const ejesTempVisibles = new Set(candidatos.slice(0, maxEjesTemp).map(d => d.eje));
+    const ejeTempPrimario = candidatos.length ? candidatos[0].eje : null;
+
+    EJES_TEMP.forEach(d => {
+      const sc = tempChart.options.scales[d.eje];
+      const escala = escalaSerie(valoresEje(d.eje), d.minSpan);
+      sc.display = ejesVisibles && ejesTempVisibles.has(d.eje);
+      sc.grid.display = ejesVisibles && (d.eje === ejeTempPrimario);
+      sc.min = escala ? escala.min : (d.eje === ejeTempPrimario ? 0 : undefined);
+      sc.max = escala ? escala.max : (d.eje === ejeTempPrimario ? 50 : undefined);
+    });
+    if (!candidatos.length || !ejesVisibles) {
+      tempChart.options.scales.y.display = false;
+      tempChart.options.scales.y.grid.display = false;
+    }
+
+    /* Presiones: por defecto P1 en y2 y P2/P.H. en y3. Con "P común"
+       comparten y3 para que la igualación se vea en el mismo nivel. */
+    const hayP1 = SERIES.some(s => seriesVisibles[s.id] && s.eje === 'y2');
+    const hayP2 = SERIES.some(s => seriesVisibles[s.id] && s.eje === 'y3');
+    const hayPresion = hayP1 || hayP2;
+    const escalaP1 = escalaSerie(valoresEje('y2'), 1);
+    const escalaP2 = escalaSerie(valoresEje('y3'), 5);
+    let escalaComun = null;
+    if (presionComun) {
+      const vals = [];
+      SERIES.forEach(s => {
+        if (!seriesVisibles[s.id] || !s.presion) return;
+        (conjuntos[s.id] || []).forEach(p => {
+          if (p && p.y !== null && Number.isFinite(p.y)) vals.push(p.y);
+        });
+      });
+      escalaComun = escalaSerie(vals, 1);
+    }
+    tempChart.options.scales.y2.display = ejesVisibles && !presionComun && hayP1;
+    tempChart.options.scales.y3.display = ejesVisibles && (presionComun ? hayPresion : hayP2);
+    tempChart.options.scales.y2.min = escalaP1 ? escalaP1.min : undefined;
+    tempChart.options.scales.y2.max = escalaP1 ? escalaP1.max : undefined;
+    const escalaY3 = presionComun ? escalaComun : escalaP2;
+    tempChart.options.scales.y3.min = escalaY3 ? escalaY3.min : undefined;
+    tempChart.options.scales.y3.max = escalaY3 ? escalaY3.max : undefined;
+    tempChart.options.scales.y3.ticks.color = presionComun ? '#cbd5e1' : '#f472b6';
+    tempChart.options.layout.padding.left = ejesVisibles ? 12 : 4;
+    tempChart.options.layout.padding.right = ejesVisibles ? (hayPresion ? 14 : 4) : 4;
+
+    const paso = PASO_TICK_MIN[rangoMin] || 5;
+    tempChart.options.scales.x.time.unit = (rangoMin <= 30) ? 'minute' : 'hour';
+    tempChart.options.scales.x.ticks.stepSize = paso;
+
+    tempChart.update('none');
+    updateTimeLabel(filas.length);
+  }
+
+  function valorSlotDeFilaPH(f, slot) { return f[slot]; }
+
+  function updateTimeLabel(cantidad) {
+    const el = document.getElementById('time-range-label');
+    const ind = document.getElementById('history-indicator');
+    if (offsetMin > 0) ind.classList.remove('hidden'); else ind.classList.add('hidden');
+    const now = Date.now();
+    const fin = now - offsetMin * 60000;
+    const inicio = fin - rangoMin * 60000;
+    const opts = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
+    let txt = new Date(inicio).toLocaleString([], opts) + ' → ' + new Date(fin).toLocaleString([], opts);
+    txt += ' · ' + (rangoMin < 60 ? (rangoMin + ' min') : ((rangoMin / 60) + ' h'));
+    txt += ' · ' + (function () {
+      const min = -new Date().getTimezoneOffset();
+      const abs = Math.abs(min);
+      return 'UTC' + (min >= 0 ? '+' : '-') + String(Math.floor(abs / 60)).padStart(2, '0') +
+             (abs % 60 ? ':' + String(abs % 60).padStart(2, '0') : '');
+    })();
+    if (offsetMin > 0) txt += ' · hace ' + (offsetMin < 60 ? (offsetMin + ' min') : ((offsetMin / 60) + ' h'));
+    if (!cantidad) txt += ' (sin datos)';
+    el.textContent = txt;
+  }
+
+  function pintarToggles() {
+    const cont = document.getElementById('toggles-series');
+    cont.innerHTML = SERIES.map(s =>
+      '<button onclick="toggleSeries(\'' + s.id + '\')" class="series-toggle ' + (seriesVisibles[s.id] ? 'active' : '') +
+      ' flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold transition active:scale-95 border">' +
+      '<span class="w-2 h-2 rounded-full" style="background:' + s.color + '"></span><span>' + etiquetaSerie(s) + '</span></button>'
+    ).join('');
+  }
+  function toggleSeries(id) {
+    const visibles = SERIES.filter(s => seriesVisibles[s.id]).length;
+    if (seriesVisibles[id] && visibles <= 1) return;
+    seriesVisibles[id] = !seriesVisibles[id];
+    localStorage.setItem('refrig_series_grafica', JSON.stringify(seriesVisibles));
+    if ('vibrate' in navigator) navigator.vibrate(15);
+    pintarToggles();
+    renderChart();
+    ajustarPadding();
+  }
+
+  function pintarBotonesEjes() {
+    const b = document.getElementById('btn-ejes');
+    if (b) {
+      b.classList.toggle('on', ejesVisibles);
+      b.setAttribute('aria-pressed', ejesVisibles ? 'true' : 'false');
+      b.title = ejesVisibles ? 'Ocultar ejes laterales' : 'Mostrar ejes laterales';
+    }
+    const p = document.getElementById('btn-pcomun');
+    if (p) {
+      p.classList.toggle('on', presionComun);
+      p.setAttribute('aria-pressed', presionComun ? 'true' : 'false');
+      p.title = presionComun
+        ? 'Separar P1 y P2 en ejes independientes'
+        : 'Compartir un solo eje para P1 y P2';
+    }
+  }
+
+  function toggleEjes() {
+    ejesVisibles = !ejesVisibles;
+    try { localStorage.setItem('refrig_ejes_visibles', ejesVisibles ? '1' : '0'); } catch (e) {}
+    pintarBotonesEjes();
+    ocultarValorExtremo();
+    renderChart();
+    ajustarPadding();
+  }
+
+  function togglePresionComun() {
+    presionComun = !presionComun;
+    try { localStorage.setItem('refrig_presion_comun', presionComun ? '1' : '0'); } catch (e) {}
+    pintarBotonesEjes();
+    ocultarValorExtremo();
+    renderChart();
+    ajustarPadding();
+  }
+
+  function ocultarValorExtremo() {
+    const el = document.getElementById('valor-extremo');
+    if (el) el.classList.add('valor-extremo-oculto');
+  }
+
+  function mostrarValorExtremo(p, clientX, clientY) {
+    const el = document.getElementById('valor-extremo');
+    if (!el) return;
+    const tipo = p.tipo === 'max' ? 'Máximo' : 'Mínimo';
+    const fecha = new Date(p.x).toLocaleString([], {
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    el.innerHTML =
+      '<div><span style="color:' + p.color + '">●</span> <b>' + p.etiqueta + '</b> · ' + tipo + '</div>' +
+      '<div><b>' + p.valor.toFixed(2) + p.unidad + '</b></div>' +
+      '<div class="fecha">' + fecha + '</div>';
+    el.classList.remove('valor-extremo-oculto');
+    const pad = 8;
+    const r = el.getBoundingClientRect();
+    let left = clientX + 12;
+    let top = clientY - r.height - 12;
+    if (left + r.width > window.innerWidth - pad) left = clientX - r.width - 12;
+    if (top < pad) top = clientY + 16;
+    if (top + r.height > window.innerHeight - pad) top = window.innerHeight - r.height - pad;
+    el.style.left = Math.max(pad, left) + 'px';
+    el.style.top = Math.max(pad, top) + 'px';
+    programarOcultarTooltip();
+  }
+
+  function extremoEnPunto(clientX, clientY) {
+    const rect = tempChart.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    let mejor = null;
+    let mejorDist = 24;
+    extremosGrafica.forEach(p => {
+      const escala = tempChart.scales[p.eje];
+      if (!escala) return;
+      const px = tempChart.scales.x.getPixelForValue(p.x);
+      const py = escala.getPixelForValue(p.y);
+      const dist = Math.hypot(px - x, py - y);
+      if (dist < mejorDist) { mejorDist = dist; mejor = p; }
+    });
+    return mejor;
+  }
+
+  tempChart.canvas.addEventListener('click', ev => {
+    const p = extremoEnPunto(ev.clientX, ev.clientY);
+    if (p) {
+      ev.stopPropagation();
+      mostrarValorExtremo(p, ev.clientX, ev.clientY);
+    } else {
+      ocultarValorExtremo();
+    }
+    programarOcultarTooltip();
+  });
+
+  document.addEventListener('pointerdown', ev => {
+    const t = ev.target;
+    if (t && t.closest && !t.closest('#tempChart')) ocultarValorExtremo();
+  });
+
+  async function descargarGrafica() {
+    let dataUrl = null;
+    /* Si hay un tooltip activo, se congela su cierre durante la exportación
+       para que la imagen se capture con el cuadro de valores visible. */
+    const conservarTooltip = !!(tempChart.tooltip &&
+      tempChart.tooltip.getActiveElements().length);
+    if (conservarTooltip && temporizadorTooltip) {
+      clearTimeout(temporizadorTooltip);
+      temporizadorTooltip = null;
+    }
+    const dprOriginal = tempChart.options.devicePixelRatio;
+    const anchoCss = tempChart.width || tempChart.canvas.clientWidth || 1200;
+    const dpr = Math.min(3, Math.max(2, 3200 / Math.max(1, anchoCss)));
+    try {
+      tempChart.options.devicePixelRatio = dpr;
+      tempChart.resize();
+      tempChart.update('none');
+      /* No usar requestAnimationFrame: en una pestaña en segundo plano no se
+         ejecuta y la exportación quedaría colgada. */
+      await new Promise(resolve => setTimeout(resolve, 60));
+      dataUrl = tempChart.toBase64Image('image/png', 1);
+    } catch (err) {
+      console.error('No se pudo preparar la exportación:', err);
+    } finally {
+      tempChart.options.devicePixelRatio = dprOriginal;
+      tempChart.resize();
+      renderChart();
+      ajustarPadding();
+      if (conservarTooltip) programarOcultarTooltip();
+    }
+    if (!dataUrl) return;
+
+    const img = new Image();
+    /* img.decode() puede quedarse esperando en una pestaña en segundo plano.
+       Con onload + timeout la exportación siempre termina. */
+    const imagenLista = await new Promise(resolve => {
+      let listo = false;
+      const terminar = ok => { if (!listo) { listo = true; resolve(ok); } };
+      const timer = setTimeout(() => terminar(false), 8000);
+      img.onload = () => { clearTimeout(timer); terminar(true); };
+      img.onerror = () => { clearTimeout(timer); terminar(false); };
+      img.src = dataUrl;
+    });
+    if (!imagenLista) { console.error('No se pudo cargar la imagen para exportar.'); return; }
+
+    const s = img.width / Math.max(1, anchoCss);
+    const margen = Math.round(24 * s);
+    const headerH = Math.round(88 * s);
+    const visibles = SERIES.filter(serie => seriesVisibles[serie.id]);
+    const columnas = Math.min(4, Math.max(1, Math.floor((img.width - margen * 2) / Math.max(1, 250 * s))));
+    const filas = Math.ceil(visibles.length / columnas);
+    const legendH = Math.round((48 + filas * 24) * s);
+
+    const out = document.createElement('canvas');
+    out.width = img.width + margen * 2;
+    out.height = headerH + img.height + legendH + margen;
+    const c = out.getContext('2d');
+    c.fillStyle = '#0f172a';
+    c.fillRect(0, 0, out.width, out.height);
+    c.textBaseline = 'top';
+
+    const rango = (document.getElementById('time-range-label') || {}).textContent || '';
+    c.fillStyle = '#38bdf8';
+    c.fillRect(margen, Math.round(14 * s), Math.round(46 * s), Math.round(3 * s));
+    c.fillStyle = '#e2e8f0';
+    c.font = 'bold ' + Math.round(21 * s) + 'px system-ui, -apple-system, Segoe UI, sans-serif';
+    c.fillText('Gráfica Live · Mediciones del ciclo', margen, Math.round(26 * s));
+    c.fillStyle = '#94a3b8';
+    c.font = Math.round(11 * s) + 'px system-ui, -apple-system, Segoe UI, sans-serif';
+    c.fillText(rango, margen, Math.round(56 * s));
+    c.fillText('Generado: ' + new Date().toLocaleString(), margen, Math.round(70 * s));
+
+    c.drawImage(img, margen, headerH);
+
+    const legendY = headerH + img.height + Math.round(16 * s);
+    c.fillStyle = '#e2e8f0';
+    c.font = 'bold ' + Math.round(12 * s) + 'px system-ui, -apple-system, Segoe UI, sans-serif';
+    c.fillText('Leyenda', margen, legendY);
+    c.font = Math.round(11 * s) + 'px system-ui, -apple-system, Segoe UI, sans-serif';
+    const colW = (out.width - margen * 2) / columnas;
+    visibles.forEach((serie, i) => {
+      const col = i % columnas;
+      const fila = Math.floor(i / columnas);
+      const x = margen + col * colW;
+      const y = legendY + Math.round(24 * s) + fila * Math.round(24 * s);
+      c.strokeStyle = serie.color;
+      c.lineWidth = Math.round(3 * s);
+      c.beginPath();
+      c.moveTo(x, y + Math.round(5 * s));
+      c.lineTo(x + Math.round(18 * s), y + Math.round(5 * s));
+      c.stroke();
+      c.fillStyle = '#cbd5e1';
+      c.fillText(etiquetaSerie(serie), x + Math.round(25 * s), y);
+    });
+
+    const nombre = (() => {
+      const d = new Date();
+      const p2 = n => String(n).padStart(2, '0');
+      return 'grafica_hvac_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' +
+        p2(d.getHours()) + p2(d.getMinutes()) + '.png';
+    })();
+
+    const a = document.createElement('a');
+    a.href = out.toDataURL('image/png');
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function updateStatusBar() {
+    if (!latestRow) return;
+    /* Fuente directa: si no llega el dato de batería, no se muestra el indicador */
+    const cajaBat = document.getElementById('bat-box');
+    if (cajaBat) cajaBat.style.display = (latestRow.bateriaVolt !== null) ? '' : 'none';
+    if (latestRow.bateriaVolt !== null) {
+      document.getElementById('bat-val').textContent = latestRow.bateria + '% · ' + latestRow.bateriaVolt.toFixed(2) + 'V';
+      const icon = document.getElementById('bat-icon');
+      icon.className = 'w-4 h-4 ' + (latestRow.bateria <= 20 ? 'text-rose-500' : (latestRow.bateria <= 50 ? 'text-amber-400' : 'text-emerald-400'));
+    }
+    document.getElementById('wifi-val').textContent =
+      (latestRow.wifi || '?') + (latestRow.ip ? ' · ' + latestRow.ip : '');
+  }
+
+  function updateBadge() {
+    const b = document.getElementById('status-badge');
+    let text, style;
+    if (offsetMin > 0) {
+      text = 'Modo Historial'; style = 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+    } else {
+      const age = lastSeenAt ? Date.now() - lastSeenAt.getTime() : null;
+      if (age !== null && age <= MAX_AGE_MS) { text = 'En vivo · ' + fmtAge(age); style = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'; }
+      else if (age !== null) { text = 'Desconectado · ' + fmtAge(age); style = 'bg-rose-500/20 text-rose-400 border-rose-500/30'; }
+      else { text = 'Sin datos'; style = 'bg-amber-500/20 text-amber-400 border-amber-500/30'; }
+    }
+    b.textContent = text;
+    b.className = 'px-2 py-0.5 text-[10px] font-semibold rounded-full border truncate ' + style;
+  }
+  function fmtAge(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return s + ' s';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + ' min';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + ' h ' + (m % 60) + ' min';
+    return Math.floor(h / 24) + ' d';
+  }
+
+  async function refreshLatest() {
+    try {
+      const row = await fetchUltima();
+      if (row && row.created_at) {
+        const t = parseTs(row.created_at);
+        if (t && (!lastSeenAt || t > lastSeenAt.getTime())) lastSeenAt = new Date(t);
+        latestRow = procesarFila(row);
+        if (!allData.some(r => r.created_at === row.created_at)) {
+          allData.push(row);
+          allData.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
+        }
+        updateStatusBar();
+        if (offsetMin === 0) renderChart();
+      }
+      updateBadge();
+    } catch (e) { updateBadge(); }
+  }
+  /* Con Supabase se vuelve a pedir exactamente la ventana visible */
+  async function recargarVentana() {
+    const seq = ++ventanaSeq;
+    try {
+      const ahora = Date.now();
+      const fin = ahora - offsetMin * 60000;
+      const filas = await fetchVentana(fin - rangoMin * 60000, fin);
+      /* Si el usuario cambió de rango mientras llegaban las páginas,
+         no dejar que una respuesta vieja pise la ventana nueva. */
+      if (seq !== ventanaSeq) return;
+      allData = Array.isArray(filas) ? filas : [];
+      renderChart();
+    } catch (e) {
+      if (seq === ventanaSeq) console.warn('No se pudo leer la ventana:', e);
+    }
+  }
+
+  async function refreshRecentHistory() {
+    if (isRefreshing) return;
+    isRefreshing = true;
+    try {
+      await recargarVentana();
+    } catch (e) {} finally { isRefreshing = false; }
+  }
+
+  function navigateHistory(dir, reset) {
+    if (reset) offsetMin = 0;
+    else { offsetMin += dir * rangoMin; if (offsetMin < 0) offsetMin = 0; }
+    userZoomed = false;
+    if (tempChart.resetZoom) tempChart.resetZoom();
+    const hist = offsetMin > 0;
+    document.getElementById('btn-actual').classList.toggle('hidden', !hist);
+    document.getElementById('btn-forward').classList.toggle('hidden', !hist);
+    recargarVentana();
+    updateBadge();
+  }
+  function setVentana(min) {
+    rangoMin = min;
+    localStorage.setItem('refrig_ventana_min', String(min));
+    document.querySelectorAll('.range-btn[data-min]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.min, 10) === min));
+    offsetMin = 0; userZoomed = false;
+    if (tempChart.resetZoom) tempChart.resetZoom();
+    document.getElementById('btn-actual').classList.add('hidden');
+    document.getElementById('btn-forward').classList.add('hidden');
+    recargarVentana();
+    updateBadge();
+  }
+  function resetZoom() {
+    userZoomed = false;
+    if (tempChart.resetZoom) tempChart.resetZoom();
+    renderChart();
+  }
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) enterFullscreen(); else document.exitFullscreen();
+  }
+  async function enterFullscreen() {
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (_) {}
+      document.getElementById('portrait-hint').classList.add('hidden');
+      setTimeout(() => { tempChart.resize(); }, 300);
+    } catch (e) {}
+  }
+  async function exitAndGoBack() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      if (screen.orientation && screen.orientation.unlock) { try { screen.orientation.unlock(); } catch (_) {} }
+    } catch (_) {}
+    /* Si la gráfica quedó abierta en una ventana aparte (por la versión
+       anterior), se cierra para volver al monitor que sigue abierto detrás. */
+    if (window.opener && !window.opener.closed) {
+      try { window.close(); } catch (_) {}
+      setTimeout(function () {
+        if (!window.closed) location.replace('./index.html');
+      }, 200);
+      return;
+    }
+    /* Dentro de la misma ventana se vuelve al monitor con el historial,
+       igual que el botón «← Monitor» de extremos.html, sin recargarlo. */
+    if (history.length > 1) history.back();
+    else location.replace('./index.html');
+  }
+
+  let ultimoToque = 0;
+  document.getElementById('chart-container').addEventListener('touchend', e => {
+    const ahora = Date.now();
+    if (ahora - ultimoToque < 300) {
+      e.preventDefault();
+      document.getElementById('topbar').classList.toggle('hidden-ui');
+      document.getElementById('bottombar').classList.toggle('hidden-ui');
+    }
+    ultimoToque = ahora;
+  }, { passive: false });
+
+  function updatePortraitHint() {
+    const hint = document.getElementById('portrait-hint');
+    const vertical = window.matchMedia('(orientation: portrait)').matches;
+    if (vertical && !window.quiereVertical) {
+      hint.classList.add('force-hint');
+      hint.classList.remove('hidden');
+    } else {
+      hint.classList.remove('force-hint');
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
+    document.querySelectorAll('.range-btn[data-min]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.min, 10) === rangoMin));
+    pintarToggles();
+    pintarBotonesEjes();
+    ajustarPadding();
+    updatePortraitHint();
+    window.addEventListener('resize', () => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); renderChart(); });
+    window.addEventListener('orientationchange', () => setTimeout(() => { updatePortraitHint(); tempChart.resize(); ajustarPadding(); renderChart(); }, 300));
+    document.querySelector('#portrait-hint button')?.addEventListener('click', enterFullscreen);
+
+    await loadAllHistory();
+    await refreshLatest();
+    renderChart();
+    updateBadge();
+
+    setInterval(() => { if (offsetMin === 0) refreshLatest(); }, POLL_MS);
+    setInterval(() => { if (offsetMin === 0) refreshRecentHistory(); }, 60000);
+    setInterval(updateBadge, 2000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && offsetMin === 0) { refreshLatest(); refreshRecentHistory(); }
+    });
+  });
+</script>
+
+
+<!-- Orientación: intenta poner la pantalla en horizontal y ofrece seguir en vertical -->
+<script>
+  window.quiereVertical = false;
+
+  let intentado = false;
+  function intentarHorizontal() {
+    if (intentado || window.quiereVertical) return;
+    intentado = true;
+    try { enterFullscreen(); } catch (e) {}
+    setTimeout(() => { intentado = false; }, 4000);
+  }
+  ['touchstart', 'pointerdown', 'click'].forEach(function (ev) {
+    document.addEventListener(ev, intentarHorizontal, { passive: true });
+  });
+</script>
+
+</body>
+</html>
