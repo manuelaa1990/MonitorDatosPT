@@ -4530,6 +4530,7 @@
     let alertasPatron = [];
     let errorLectura = '';
     let errorHistorico = '';
+    let calculoActual = null;
     let consultandoUltima = false;
     let consultandoHistorico = false;
     let temporizadorUltima = null;
@@ -4614,16 +4615,16 @@
     }
 
     function actualizarInterfaz() {
-      const voltaje = promedioUltimosDiez(lecturasUltimas, fila => numero(fila.voltaje));
-      const corriente = promedioUltimosDiez(lecturasUltimas, fila => numero(fila.corriente));
-      const factor = promedioUltimosDiez(lecturasUltimas, fila => leerFactor(fila));
+      const voltaje = promedioUltimosDiez(lecturasUltimas, fila => numero(fila.voltaje)) ?? numero(ultimaElectrica && ultimaElectrica.voltaje);
+      const corriente = promedioUltimosDiez(lecturasUltimas, fila => numero(fila.corriente)) ?? numero(ultimaElectrica && ultimaElectrica.corriente);
+      const factor = promedioUltimosDiez(lecturasUltimas, fila => leerFactor(fila)) ?? (ultimaElectrica ? leerFactor(ultimaElectrica) : null);
       const estadoLectura = estadoLecturaElectrica();
       const atrasada = estadoLectura === 'atrasada';
       const ambosEnCero = voltaje === 0 && corriente === 0;
       const vNominal = numero(document.getElementById('V_nom')?.value);
       const iNominal = numero(document.getElementById('I_nom')?.value);
       const capacidadBTU = numero(document.getElementById('capacidadBTU')?.value);
-      const watts = promedioUltimosDiez(lecturasUltimas, fila => potencia(fila));
+      const watts = promedioUltimosDiez(lecturasUltimas, fila => potencia(fila)) ?? (ultimaElectrica ? potencia(ultimaElectrica) : null);
       const inicioVentanaEnergia = Date.now() - 10 * 60 * 1000;
       const lecturasVentanaEnergia = lecturasHistoricas.filter(fila => {
         const instante = new Date(fila.created_at).getTime();
@@ -4635,6 +4636,14 @@
       const consumoEspecifico = watts !== null && capacidadBTU > 0
         ? watts / (capacidadBTU / 1000) : null;
       const guion = ambosEnCero ? '---' : null;
+      calculoActual = {
+        voltaje: guion === null ? voltaje : null,
+        corriente: guion === null ? corriente : null,
+        potencia: guion === null ? watts : null,
+        FP: guion === null ? factor : null,
+        energia: guion === null ? energia : null,
+        consumoEspecifico: guion === null ? consumoEspecifico : null
+      };
 
       poner('valVoltaje', formatear(guion === null ? voltaje : null, 1));
       poner('valCorriente', formatear(guion === null ? corriente : null, 2));
@@ -4958,6 +4967,19 @@
     ['V_nom', 'I_nom', 'FP_est', 'capacidadBTU'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', actualizarInterfaz);
     });
+
+    window.__electricoEstado = function () {
+      const instante = ultimaElectrica ? new Date(ultimaElectrica.created_at).getTime() : NaN;
+      const edadMs = Number.isFinite(instante) ? Math.max(0, Date.now() - instante) : null;
+      return {
+        ok: Boolean(ultimaElectrica) && !errorLectura && edadMs !== null && edadMs <= 35000,
+        ultima: ultimaElectrica && ultimaElectrica.created_at ? ultimaElectrica.created_at : null,
+        edadMs,
+        ultimaElectrica,
+        calculo: calculoActual
+      };
+    };
+
     sondearUltima();
     cargarHistorico();
     temporizadorUltima = setInterval(sondearUltima, INTERVALO_ULTIMA_MS);
