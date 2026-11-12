@@ -4511,6 +4511,17 @@
     let temporizadorUltima = null;
     let temporizadorHistorico = null;
 
+    function fechaIso(valor) {
+      if (typeof valor !== 'string') return valor;
+      return valor.replace(/(\.\d{3})\d+(?=(?:Z|[+-]\d{2}:?\d{2})?$)/i, '$1');
+    }
+
+    function tiempoFila(fila) {
+      if (Number.isFinite(fila && fila._t)) return fila._t;
+      const normalizada = fechaIso(fila && fila.created_at);
+      return Date.parse(normalizada);
+    }
+
     function numero(valor) {
       if (valor === null || valor === undefined || valor === '') return null;
       const resultado = Number(valor);
@@ -4534,18 +4545,28 @@
     }
 
     async function consultar(parametros, urlTabla = URL_TABLA) {
-      const respuesta = await fetch(urlTabla + '?' + parametros.toString(), {
-        headers: {
-          apikey: SB_CLAVE,
-          Authorization: 'Bearer ' + SB_CLAVE,
-          Accept: 'application/json'
-        },
-        cache: 'no-store'
-      });
-      if (!respuesta.ok) throw new Error('Supabase HTTP ' + respuesta.status);
-      const filas = await respuesta.json();
-      if (!Array.isArray(filas)) throw new Error('Respuesta inválida de lecturas_energia');
-      return filas;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const respuesta = await fetch(urlTabla + '?' + parametros.toString(), {
+          headers: {
+            apikey: SB_CLAVE,
+            Authorization: 'Bearer ' + SB_CLAVE,
+            Accept: 'application/json'
+          },
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        if (!respuesta.ok) throw new Error('Supabase HTTP ' + respuesta.status);
+        const filas = await respuesta.json();
+        if (!Array.isArray(filas)) throw new Error('Respuesta inválida de Supabase');
+        return filas.map(fila => {
+          const createdAt = fechaIso(fila && fila.created_at);
+          return {...fila, created_at: createdAt, _t: Date.parse(createdAt)};
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
     }
 
     async function consultarHistorico(urlTabla, parametrosBase) {
@@ -4572,7 +4593,7 @@
 
     function datosElectricaAtrasados() {
       if (!ultimaElectrica) return false;
-      const instante = new Date(ultimaElectrica.created_at).getTime();
+      const instante = tiempoFila(ultimaElectrica);
       return !Number.isFinite(instante) || Date.now() - instante > 35000;
     }
 
@@ -4594,7 +4615,7 @@
       const watts = promedioUltimosDiez(lecturasUltimas, fila => potencia(fila)) ?? (ultimaElectrica ? potencia(ultimaElectrica) : null);
       const inicioVentanaEnergia = Date.now() - 10 * 60 * 1000;
       const lecturasVentanaEnergia = lecturasHistoricas.filter(fila => {
-        const instante = new Date(fila.created_at).getTime();
+        const instante = tiempoFila(fila);
         return Number.isFinite(instante) && instante >= inicioVentanaEnergia;
       });
       const energia = atrasada ? null : calcularEnergiaKWh(lecturasVentanaEnergia);
@@ -4619,7 +4640,7 @@
       poner('valConsumoEsp', formatear(guion === null ? consumoEspecifico : null, 2));
 
       const textoEstadoLectura = estadoLectura === 'atrasada' && ultimaElectrica
-        ? 'última lectura: ' + new Date(ultimaElectrica.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        ? 'última lectura: ' + new Date(tiempoFila(ultimaElectrica)).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
         : estadoLectura;
       poner('estadoVoltaje', textoEstadoLectura);
       poner('estadoCorriente', textoEstadoLectura);
@@ -4634,7 +4655,7 @@
           : estadoLectura === 'atrasada' ? 'badge-warn'
           : estadoLectura === 'conectando...' ? 'badge-acento' : 'badge-ok');
         badge.title = errorLectura || (ultimaElectrica && ultimaElectrica.created_at
-          ? 'Última lectura: ' + new Date(ultimaElectrica.created_at).toLocaleString('es') : '');
+          ? 'Última lectura: ' + new Date(tiempoFila(ultimaElectrica)).toLocaleString('es') : '');
       }
       const cajaVoltaje = document.getElementById('slotVoltaje');
       const cajaCorriente = document.getElementById('slotCorriente');
@@ -4668,8 +4689,8 @@
       for (let indice = 1; indice < filas.length; indice++) {
         const anterior = filas[indice - 1];
         const actual = filas[indice];
-        const inicio = new Date(anterior.created_at).getTime();
-        const fin = new Date(actual.created_at).getTime();
+        const inicio = tiempoFila(anterior);
+        const fin = tiempoFila(actual);
         const deltaHoras = (fin - inicio) / 3600000;
         const wattsAnterior = potencia(anterior);
         const wattsActual = potencia(actual);
@@ -4739,14 +4760,14 @@
       let superior = filas.length - 1;
       while (inferior < superior) {
         const medio = Math.floor((inferior + superior) / 2);
-        if (new Date(filas[medio].created_at).getTime() < marcaTiempo) inferior = medio + 1;
+        if (tiempoFila(filas[medio]) < marcaTiempo) inferior = medio + 1;
         else superior = medio;
       }
       let mejor = filas[inferior] || null;
-      let distancia = mejor ? Math.abs(new Date(mejor.created_at).getTime() - marcaTiempo) : Infinity;
+      let distancia = mejor ? Math.abs(tiempoFila(mejor) - marcaTiempo) : Infinity;
       const anterior = filas[inferior - 1];
       if (anterior) {
-        const distanciaAnterior = Math.abs(new Date(anterior.created_at).getTime() - marcaTiempo);
+        const distanciaAnterior = Math.abs(tiempoFila(anterior) - marcaTiempo);
         if (distanciaAnterior < distancia) {
           mejor = anterior;
           distancia = distanciaAnterior;
@@ -4762,13 +4783,13 @@
       const limiteSuperior = marcaTiempo + 30000;
       while (inicio < fin) {
         const medio = Math.floor((inicio + fin) / 2);
-        if (new Date(filas[medio].created_at).getTime() < limiteInferior) inicio = medio + 1;
+        if (tiempoFila(filas[medio]) < limiteInferior) inicio = medio + 1;
         else fin = medio;
       }
       let suma = 0;
       let cantidad = 0;
       for (let indice = inicio; indice < filas.length; indice++) {
-        const tiempo = new Date(filas[indice].created_at).getTime();
+        const tiempo = tiempoFila(filas[indice]);
         if (tiempo > limiteSuperior) break;
         const corriente = numero(filas[indice].corriente);
         if (corriente !== null) {
@@ -4782,18 +4803,18 @@
     function presionesIgualadas(fila) {
       const alta = numero(fila && fila.presion_alta);
       const baja = numero(fila && fila.presion_baja);
-      return alta !== null && baja !== null && Math.abs(alta - baja) / 14.5038 < 0.5;
+      return alta !== null && baja !== null && alta >= 5 && baja >= 5 && Math.abs(alta - baja) / 14.5038 < 0.5;
     }
 
     function analizarPatrones(filasElectricas, filasTermicas) {
       const ahora = Date.now();
-      const ordenElectricas = (filasElectricas || []).filter(fila => Number.isFinite(new Date(fila.created_at).getTime()))
-        .slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      const ordenTermicas = (filasTermicas || []).filter(fila => Number.isFinite(new Date(fila.created_at).getTime()))
-        .slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      const ordenElectricas = (filasElectricas || []).filter(fila => Number.isFinite(tiempoFila(fila)))
+        .slice().sort((a, b) => tiempoFila(a) - tiempoFila(b));
+      const ordenTermicas = (filasTermicas || []).filter(fila => Number.isFinite(tiempoFila(fila)))
+        .slice().sort((a, b) => tiempoFila(a) - tiempoFila(b));
       const alertas = [];
       const serieAlineada = ordenTermicas.map(fila => {
-        const tiempo = new Date(fila.created_at).getTime();
+        const tiempo = tiempoFila(fila);
         return {
           tiempo,
           igualadas: presionesIgualadas(fila),
@@ -4805,7 +4826,7 @@
       let tiempoParadaAnterior = null;
       let paradaDetectada = false;
       for (const punto of serieAlineada) {
-        const equipoParado = punto.igualadas && punto.corrientePromedio !== null && Math.abs(punto.corrientePromedio) <= 0.1;
+        const equipoParado = punto.igualadas && punto.corrientePromedio !== null && punto.corrientePromedio >= 0 && punto.corrientePromedio < 0.1;
         if (!equipoParado) {
           inicioParada = null;
           tiempoParadaAnterior = null;
@@ -4829,8 +4850,8 @@
         const actual = ordenElectricas[indice];
         const amperajeAnterior = numero(anterior.corriente);
         const amperajeActual = numero(actual.corriente);
-        const tiempoAnterior = new Date(anterior.created_at).getTime();
-        const tiempoActual = new Date(actual.created_at).getTime();
+        const tiempoAnterior = tiempoFila(anterior);
+        const tiempoActual = tiempoFila(actual);
         if (amperajeAnterior !== null && amperajeActual !== null &&
             amperajeAnterior <= 0.1 && amperajeActual > 15 && tiempoActual >= tiempoAnterior &&
             tiempoActual >= ahora - 15 * 60 * 1000) {
@@ -4846,7 +4867,7 @@
       let tiempoConsumoAnterior = null;
       for (const fila of ordenElectricas) {
         const corriente = numero(fila.corriente);
-        const tiempo = new Date(fila.created_at).getTime();
+        const tiempo = tiempoFila(fila);
         const termica = filaMasCercana(ordenTermicas, tiempo);
         if (corriente !== null && corriente >= 1 && corriente <= 8 && termica && presionesIgualadas(termica)) {
           muestrasConsumoEstable = tiempoConsumoAnterior !== null && tiempo > tiempoConsumoAnterior && tiempo - tiempoConsumoAnterior <= 90000
@@ -4911,7 +4932,7 @@
     };
 
     window.__electricoEstado = function () {
-      const instante = ultimaElectrica ? new Date(ultimaElectrica.created_at).getTime() : NaN;
+      const instante = ultimaElectrica ? tiempoFila(ultimaElectrica) : NaN;
       const edadMs = Number.isFinite(instante) ? Math.max(0, Date.now() - instante) : null;
       return {
         ok: Boolean(ultimaElectrica) && !errorLectura && edadMs !== null && edadMs <= 35000,
