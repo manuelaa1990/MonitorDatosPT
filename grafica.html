@@ -235,6 +235,8 @@
     { id:'tevap', etiqueta:'T2 Salida Evap', color:'#38bdf8', eje:'y4', varSlot:'tevap' },
     { id:'tdesc', etiqueta:'T3 Descarga',    color:'#fb923c', eje:'y5', varSlot:'tdesc' },
     { id:'tamb',  etiqueta:'T5 Ambiente',    color:'#a78bfa', eje:'y7', varSlot:'tamb'  },
+    { id:'voltaje', etiqueta:'Voltaje (V)',   color:'#38bdf8', eje:'y8', esVoltaje:true },
+    { id:'corriente', etiqueta:'Amperaje (A)', color:'#f97316', eje:'y9', esCorriente:true },
     { id:'phe',   etiqueta:'P.H. esperada',  color:'#22d3ee', eje:'y3', presion:true },
     { id:'phm',   etiqueta:'P.H. medida',    color:'#a7f3d0', eje:'y3', presion:true, soloPuntos:true }
   ];
@@ -396,7 +398,9 @@
     if (!row) return null;
     const vals = {};
     SERIES.forEach(s => {
-      vals[s.id] = s.varSlot ? valorSlot(row, s.varSlot) : null;
+      vals[s.id] = s.varSlot ? valorSlot(row, s.varSlot)
+        : s.esVoltaje ? aNumero(row.voltaje)
+        : s.esCorriente ? aNumero(row.corriente) : null;
     });
     vals.created_at = row.created_at;
     vals.bateriaVolt = aNumero(row.bateriaVolt);
@@ -419,8 +423,8 @@
   const SB_TABLA = 'lecturas_hvac';
   const SB_CLAVE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaWRvZHJ0eGNodXJhenJnaHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDkwMDQsImV4cCI6MjEwODAyNTAwNH0.12wbnPavwGr4tEH1kz9ZtgSxHUYvL9gyrbMqFOBX2hg';
 
-  async function sbPedir(consulta) {
-    const url = SB_URL + '/rest/v1/' + SB_TABLA + '?' + consulta;
+  async function sbPedirTabla(tabla, consulta) {
+    const url = SB_URL + '/rest/v1/' + tabla + '?' + consulta;
     const res = await withTimeout(fetch(url, {
       headers: { apikey: SB_CLAVE, Authorization: 'Bearer ' + SB_CLAVE, Accept: 'application/json' },
       cache: 'no-store'
@@ -428,31 +432,72 @@
     if (!res.ok) throw new Error('Supabase HTTP ' + res.status);
     return res.json();
   }
+  function sbPedir(consulta) { return sbPedirTabla(SB_TABLA, consulta); }
 
   /* Última lectura y ventana exacta, por rango de fechas */
   async function fetchUltima() {
     const filas = await sbPedir('select=*&order=created_at.desc&limit=1');
     return (Array.isArray(filas) && filas.length) ? filas[0] : null;
   }
-  async function fetchVentana(desdeMs, hastaMs) {
+  async function fetchUltimaEnergia() {
+    const filas = await sbPedirTabla('lecturas_energia',
+      'select=created_at,voltaje,corriente&order=created_at.desc,id.desc&limit=1');
+    return (Array.isArray(filas) && filas.length) ? filas[0] : null;
+  }
+  async function fetchVentanaTabla(tabla, columnas, desdeMs, hastaMs) {
     const d = encodeURIComponent(new Date(desdeMs).toISOString());
     const h = encodeURIComponent(new Date(hastaMs).toISOString());
     /* Supabase/PostgREST entrega como máximo 1000 filas por consulta.
        Se pagina con offset para no dejar vacíos en 4 h, 8 h y 24 h. */
-    const base = 'select=*&created_at=gte.' + d + '&created_at=lte.' + h +
+    const base = 'select=' + columnas + '&created_at=gte.' + d + '&created_at=lte.' + h +
                  '&order=created_at.asc,id.asc';
     const filas = [];
     const PAGINA = 1000;
     const MAX_FILAS = 20000;
     let offset = 0;
     while (offset < MAX_FILAS) {
-      const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset);
+      const lote = await sbPedirTabla(tabla, base + '&limit=' + PAGINA + '&offset=' + offset);
       if (!Array.isArray(lote) || !lote.length) break;
       filas.push(...lote);
       if (lote.length < PAGINA) break;
       offset += lote.length;
     }
     return filas;
+  }
+  function fetchVentana(desdeMs, hastaMs) {
+    return fetchVentanaTabla(SB_TABLA, '*', desdeMs, hastaMs);
+  }
+  function fetchEnergiaVentana(desdeMs, hastaMs) {
+    return fetchVentanaTabla('lecturas_energia', 'created_at,voltaje,corriente', desdeMs, hastaMs);
+  }
+
+  function cruzarEnergia(filasHvac, filasEnergia) {
+    const energia = (filasEnergia || []).slice().sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
+    return (filasHvac || []).map(fila => {
+      const tiempo = parseTs(fila.created_at);
+      let bajo = 0, alto = energia.length - 1;
+      while (bajo < alto) {
+        const medio = Math.floor((bajo + alto) / 2);
+        if ((parseTs(energia[medio].created_at) || 0) < tiempo) bajo = medio + 1;
+        else alto = medio;
+      }
+      let cercana = energia[bajo] || null;
+      let diferencia = cercana ? Math.abs((parseTs(cercana.created_at) || 0) - tiempo) : Infinity;
+      const anterior = energia[bajo - 1];
+      if (anterior) {
+        const diferenciaAnterior = Math.abs((parseTs(anterior.created_at) || 0) - tiempo);
+        if (diferenciaAnterior < diferencia) {
+          cercana = anterior;
+          diferencia = diferenciaAnterior;
+        }
+      }
+      const coincide = Number.isFinite(tiempo) && diferencia <= 30000;
+      return {
+        ...fila,
+        voltaje: coincide ? aNumero(cercana.voltaje) : null,
+        corriente: coincide ? aNumero(cercana.corriente) : null
+      };
+    });
   }
 
   /* ============================================================
@@ -678,6 +723,22 @@
           grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
           border: { display: false },
           title: { display: false }
+        },
+        y8: {
+          position: 'right', display: false,
+          grace: '10%',
+          ticks: { color: '#38bdf8', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
+        },
+        y9: {
+          position: 'right', display: false,
+          grace: '10%',
+          ticks: { color: '#f97316', font: { size: 9 }, padding: 3 },
+          grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
+          border: { display: false },
+          title: { display: false }
         }
       },
       plugins: {
@@ -690,7 +751,10 @@
               const v = c.parsed.y;
               const serie = SERIES[c.datasetIndex];
               if (v === null || v === undefined || isNaN(v)) return c.dataset.label + ': --';
-              return c.dataset.label + ': ' + v.toFixed(2) + (serie && serie.presion ? ' PSI' : ' °C');
+              const unidad = serie && serie.presion ? ' PSI'
+                : serie && serie.esVoltaje ? ' V'
+                : serie && serie.esCorriente ? ' A' : ' °C';
+              return c.dataset.label + ': ' + v.toFixed(2) + unidad;
             }
           }
         },
@@ -866,7 +930,7 @@
       } else {
         seriesConExtremos.forEach(s => {
           const ext = getExtrema(conjuntos[s.id]);
-          const unidad = s.presion ? ' PSI' : ' °C';
+          const unidad = s.presion ? ' PSI' : s.esVoltaje ? ' V' : s.esCorriente ? ' A' : ' °C';
           const ejePunto = (presionComun && s.presion) ? 'y3' : s.eje;
           const registrar = (tipo, punto) => {
             if (!punto) return;
@@ -1041,8 +1105,23 @@
     tempChart.options.scales.y3.min = escalaY3 ? escalaY3.min : undefined;
     tempChart.options.scales.y3.max = escalaY3 ? escalaY3.max : undefined;
     tempChart.options.scales.y3.ticks.color = presionComun ? '#cbd5e1' : '#f472b6';
+    const escalasElectricas = [
+      { id: 'voltaje', eje: 'y8', minSpan: 5 },
+      { id: 'corriente', eje: 'y9', minSpan: 0.5 }
+    ];
+    escalasElectricas.forEach(serie => {
+      const escala = escalaSerie(valoresEje(serie.eje), serie.minSpan);
+      const eje = tempChart.options.scales[serie.eje];
+      eje.display = ejesVisibles && seriesVisibles[serie.id] && !!escala;
+      eje.min = escala ? escala.min : undefined;
+      eje.max = escala ? escala.max : undefined;
+    });
+    const ejesElectricosVisibles = escalasElectricas.filter(serie =>
+      ejesVisibles && seriesVisibles[serie.id] && valoresEje(serie.eje).length
+    ).length;
     tempChart.options.layout.padding.left = ejesVisibles ? 12 : 4;
-    tempChart.options.layout.padding.right = ejesVisibles ? (hayPresion ? 14 : 4) : 4;
+    tempChart.options.layout.padding.right = ejesVisibles
+      ? (hayPresion ? 14 : 4) + ejesElectricosVisibles * 24 : 4;
 
     const paso = PASO_TICK_MIN[rangoMin] || 5;
     tempChart.options.scales.x.time.unit = (rangoMin <= 30) ? 'minute' : 'hour';
@@ -1341,15 +1420,16 @@
 
   async function refreshLatest() {
     try {
-      const row = await fetchUltima();
+      const [row, energia] = await Promise.all([fetchUltima(), fetchUltimaEnergia()]);
       if (row && row.created_at) {
+        const filaCruce = cruzarEnergia([row], energia ? [energia] : [])[0];
         const t = parseTs(row.created_at);
         if (t && (!lastSeenAt || t > lastSeenAt.getTime())) lastSeenAt = new Date(t);
-        latestRow = procesarFila(row);
-        if (!allData.some(r => r.created_at === row.created_at)) {
-          allData.push(row);
-          allData.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
-        }
+        latestRow = procesarFila(filaCruce);
+        const indiceExistente = allData.findIndex(r => r.created_at === row.created_at);
+        if (indiceExistente >= 0) allData[indiceExistente] = {...allData[indiceExistente], ...filaCruce};
+        else allData.push(filaCruce);
+        allData.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
         updateStatusBar();
         if (offsetMin === 0) renderChart();
       }
@@ -1362,11 +1442,16 @@
     try {
       const ahora = Date.now();
       const fin = ahora - offsetMin * 60000;
-      const filas = await fetchVentana(fin - rangoMin * 60000, fin);
+      const inicio = fin - rangoMin * 60000;
+      const [filasHvac, filasEnergia] = await Promise.all([
+        fetchVentana(inicio, fin),
+        fetchEnergiaVentana(inicio, fin)
+      ]);
       /* Si el usuario cambió de rango mientras llegaban las páginas,
          no dejar que una respuesta vieja pise la ventana nueva. */
       if (seq !== ventanaSeq) return;
-      allData = Array.isArray(filas) ? filas : [];
+      allData = cruzarEnergia(Array.isArray(filasHvac) ? filasHvac : [],
+        Array.isArray(filasEnergia) ? filasEnergia : []);
       renderChart();
     } catch (e) {
       if (seq === ventanaSeq) console.warn('No se pudo leer la ventana:', e);
