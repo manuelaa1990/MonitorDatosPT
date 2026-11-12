@@ -421,10 +421,12 @@
      Es la única fuente de datos de la página. */
   const SB_URL   = 'https://qiidodrtxchurazrghyr.supabase.co';
   const SB_TABLA = 'lecturas_hvac';
+  const SB_TABLA_ENERGIA = 'lecturas_energia';
+  const URL_TABLA_ENERGIA = SB_URL + '/rest/v1/' + SB_TABLA_ENERGIA;
   const SB_CLAVE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaWRvZHJ0eGNodXJhenJnaHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDkwMDQsImV4cCI6MjEwODAyNTAwNH0.12wbnPavwGr4tEH1kz9ZtgSxHUYvL9gyrbMqFOBX2hg';
 
-  async function sbPedirTabla(tabla, consulta) {
-    const url = SB_URL + '/rest/v1/' + tabla + '?' + consulta;
+  async function sbPedir(consulta, urlTabla = SB_URL + '/rest/v1/' + SB_TABLA) {
+    const url = urlTabla + '?' + consulta;
     const res = await withTimeout(fetch(url, {
       headers: { apikey: SB_CLAVE, Authorization: 'Bearer ' + SB_CLAVE, Accept: 'application/json' },
       cache: 'no-store'
@@ -432,7 +434,6 @@
     if (!res.ok) throw new Error('Supabase HTTP ' + res.status);
     return res.json();
   }
-  function sbPedir(consulta) { return sbPedirTabla(SB_TABLA, consulta); }
 
   /* Última lectura y ventana exacta, por rango de fechas */
   async function fetchUltima() {
@@ -440,11 +441,10 @@
     return (Array.isArray(filas) && filas.length) ? filas[0] : null;
   }
   async function fetchUltimaEnergia() {
-    const filas = await sbPedirTabla('lecturas_energia',
-      'select=created_at,voltaje,corriente&order=created_at.desc,id.desc&limit=1');
+    const filas = await sbPedir('select=created_at,voltaje,corriente&order=created_at.desc,id.desc&limit=1', URL_TABLA_ENERGIA);
     return (Array.isArray(filas) && filas.length) ? filas[0] : null;
   }
-  async function fetchVentanaTabla(tabla, columnas, desdeMs, hastaMs) {
+  async function fetchVentanaTabla(urlTabla, columnas, desdeMs, hastaMs) {
     const d = encodeURIComponent(new Date(desdeMs).toISOString());
     const h = encodeURIComponent(new Date(hastaMs).toISOString());
     /* Supabase/PostgREST entrega como máximo 1000 filas por consulta.
@@ -456,7 +456,7 @@
     const MAX_FILAS = 20000;
     let offset = 0;
     while (offset < MAX_FILAS) {
-      const lote = await sbPedirTabla(tabla, base + '&limit=' + PAGINA + '&offset=' + offset);
+      const lote = await sbPedir(base + '&limit=' + PAGINA + '&offset=' + offset, urlTabla);
       if (!Array.isArray(lote) || !lote.length) break;
       filas.push(...lote);
       if (lote.length < PAGINA) break;
@@ -465,10 +465,10 @@
     return filas;
   }
   function fetchVentana(desdeMs, hastaMs) {
-    return fetchVentanaTabla(SB_TABLA, '*', desdeMs, hastaMs);
+    return fetchVentanaTabla(SB_URL + '/rest/v1/' + SB_TABLA, '*', desdeMs, hastaMs);
   }
-  function fetchEnergiaVentana(desdeMs, hastaMs) {
-    return fetchVentanaTabla('lecturas_energia', 'created_at,voltaje,corriente', desdeMs, hastaMs);
+  function fetchVentanaEnergia(desdeMs, hastaMs) {
+    return fetchVentanaTabla(URL_TABLA_ENERGIA, 'created_at,voltaje,corriente', desdeMs, hastaMs);
   }
 
   function cruzarEnergia(filasHvac, filasEnergia) {
@@ -1443,15 +1443,24 @@
       const ahora = Date.now();
       const fin = ahora - offsetMin * 60000;
       const inicio = fin - rangoMin * 60000;
-      const [filasHvac, filasEnergia] = await Promise.all([
+      const [resultadoHvac, resultadoEnergia] = await Promise.allSettled([
         fetchVentana(inicio, fin),
-        fetchEnergiaVentana(inicio, fin)
+        fetchVentanaEnergia(inicio, fin)
       ]);
       /* Si el usuario cambió de rango mientras llegaban las páginas,
          no dejar que una respuesta vieja pise la ventana nueva. */
       if (seq !== ventanaSeq) return;
-      allData = cruzarEnergia(Array.isArray(filasHvac) ? filasHvac : [],
-        Array.isArray(filasEnergia) ? filasEnergia : []);
+      if (resultadoHvac.status === 'fulfilled' && Array.isArray(resultadoHvac.value) && resultadoHvac.value.length) {
+        const filasEnergia = resultadoEnergia.status === 'fulfilled' && Array.isArray(resultadoEnergia.value)
+          ? resultadoEnergia.value : [];
+        allData = cruzarEnergia(resultadoHvac.value, filasEnergia);
+      } else if (resultadoHvac.status === 'rejected') {
+        console.warn('No se pudieron leer las térmicas:', resultadoHvac.reason);
+      }
+      if (resultadoEnergia.status === 'rejected') {
+        console.warn('No se pudo leer la ventana de energía:', resultadoEnergia.reason);
+        allData = allData.map(fila => ({ ...fila, voltaje: null, corriente: null }));
+      }
       renderChart();
     } catch (e) {
       if (seq === ventanaSeq) console.warn('No se pudo leer la ventana:', e);
