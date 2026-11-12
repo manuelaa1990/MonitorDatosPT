@@ -868,6 +868,13 @@
               </div>
               <div class="slot-estado" id="estadoConsumoEspecifico">Esperando…</div>
             </div>
+            <div class="slot" id="slotConsumoAnual">
+              <div class="slot-fila">
+                <span class="slot-nombre">Consumo Anual</span>
+                <span class="slot-valor"><b id="valConsumoAnual">--- kWh</b></span>
+              </div>
+              <div class="slot-estado" id="estadoConsumoAnual">Proyección a 20 h/día (8.760 h/año)</div>
+            </div>
           </div>
           <div class="alertas-electricas" id="alertasPatronesElectricos" role="status" aria-live="polite"></div>
           </div>
@@ -4627,6 +4634,12 @@
       return valor === null || !Number.isFinite(valor) ? '---' : valor.toFixed(decimales);
     }
 
+    function formatearConsumoAnual(valor) {
+      return valor === null || !Number.isFinite(valor)
+        ? '--- kWh'
+        : new Intl.NumberFormat('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(valor) + ' kWh';
+    }
+
     function datosElectricaAtrasados() {
       if (!ultimaElectrica) return false;
       const instante = tiempoFila(ultimaElectrica);
@@ -4646,6 +4659,8 @@
       const estadoLectura = estadoLecturaElectrica();
       const atrasada = estadoLectura === 'atrasada';
       const ambosEnCero = voltaje === 0 && corriente === 0;
+      const consumoAnual = voltaje !== null && corriente !== null
+        ? (voltaje * corriente * factor / 1000) * 20 * 365 : null;
       const vNominal = params.vNom;
       const iNominal = params.iNom;
       const watts = promedioUltimosDiez(lecturasUltimas, fila => potencia(fila, params)) ?? (ultimaElectrica ? potencia(ultimaElectrica, params) : null);
@@ -4664,6 +4679,7 @@
         voltaje: guion === null ? voltaje : null,
         corriente: guion === null ? corriente : null,
         potencia: guion === null ? watts : null,
+        consumoAnual: guion === null ? consumoAnual : null,
         FP: guion === null ? factor : null,
         energia: guion === null ? energia : null,
         consumoEspecifico: guion === null ? consumoEspecifico : null
@@ -4674,6 +4690,7 @@
       poner('valPotencia', formatear(guion === null ? watts : null, 1));
       poner('valEnergia', formatear(guion === null ? energia : null, 4));
       poner('valConsumoEsp', formatear(guion === null ? consumoEspecifico : null, 2));
+      poner('valConsumoAnual', formatearConsumoAnual(guion === null ? consumoAnual : null));
 
       const textoEstadoLectura = estadoLectura === 'atrasada' && ultimaElectrica
         ? 'última lectura: ' + new Date(tiempoFila(ultimaElectrica)).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
