@@ -439,6 +439,7 @@
     body.generating-pdf .sutil, body.generating-pdf .probe-estado { color: #444 !important; }
     body.generating-pdf .diag-table td, body.generating-pdf .diag-table th { color: #000 !important; }
     body.generating-pdf .diag-table .diag-text span[style] { color: #000 !important; }
+    body.generating-pdf .contenido-colapsable { display: block !important; }
 
     /* En tema claro los avisos del motor (que traen color en línea pensado
        para fondo oscuro) se neutralizan para que sigan siendo legibles. */
@@ -553,6 +554,7 @@
       .sutil, .probe-estado { color: #444 !important; }
       .diag-table td, .diag-table th { color: #000 !important; }
       .diag-table .diag-text span[style] { color: #000 !important; }
+      .contenido-colapsable { display: block !important; }
       * { animation: none !important; transition: none !important; }
       /* El reporte siempre lleva las dos pantallas, aunque se imprima con Ctrl+P */
       #cardIdentificacion, #cardMonitor, #cardIndicadores, #cardHermeticidad { display: block !important; }
@@ -621,9 +623,13 @@
     <section class="card" id="cardMonitor">
       <h2>
         <span>Mediciones del ciclo</span>
-        <span class="h2-acciones"><span class="sutil" id="txtUltimaLectura">Última lectura: —</span></span>
+        <span class="h2-acciones">
+          <span class="sutil" id="txtUltimaLectura">Última lectura: —</span>
+          <button class="btn-mini" id="btnSeccionMonitor" onclick="alternarSeccion('monitor')" title="Ocultar mediciones del ciclo" aria-expanded="true">▾ Ocultar</button>
+        </span>
       </h2>
 
+      <div id="contenidoMonitor" class="contenido-colapsable">
       <div class="config-ciclo">
         <div class="sutil" style="margin:0 0 2px;">Configuración del ciclo</div>
         <div class="config-row">
@@ -820,8 +826,12 @@
         <div class="caja-doble" id="cajaElectrica">
           <div class="caja-head">
             <span class="caja-titulo">⚡ ELÉCTRICO</span>
-            <span class="badge badge-warn" id="estadoCajaElectrica">esperando</span>
+            <span class="h2-acciones">
+              <button class="btn-mini" id="btnSeccionElectrica" onclick="alternarSeccion('electrica')" title="Ocultar caja eléctrica" aria-expanded="true">▾ Ocultar</button>
+              <span class="badge badge-warn" id="estadoCajaElectrica">esperando</span>
+            </span>
           </div>
+          <div id="contenidoCajaElectrica" class="contenido-colapsable">
           <div class="caja-slots caja-3">
             <div class="slot" id="slotVoltaje">
               <div class="slot-fila">
@@ -860,14 +870,20 @@
             </div>
           </div>
           <div class="alertas-electricas" id="alertasPatronesElectricos" role="status" aria-live="polite"></div>
+          </div>
         </div>
       </div>
 
 
 
       <div class="sutil" style="margin:8px 0 2px;display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;">
-        <span>Indicadores del ciclo</span><span id="txtFuenteTermo">Motor: —</span>
+        <span>Indicadores del ciclo</span>
+        <span class="h2-acciones">
+          <span id="txtFuenteTermo">Motor: —</span>
+          <button class="btn-mini" id="btnSeccionKpis" onclick="alternarSeccion('kpis')" title="Ocultar indicadores del ciclo" aria-expanded="true">▾ Ocultar</button>
+        </span>
       </div>
+      <div id="contenidoKpisCiclo" class="contenido-colapsable">
       <div class="results-grid kpi-principal">
         <div class="kpi-box kpi-sh-util"><span class="label">SH Útil (Evap)</span><span class="value" id="kpiSHUtil">NULL</span></div>
         <div class="kpi-box kpi-sh-total"><span class="label">SH Total (Succ)</span><span class="value" id="kpiSHTotal">NULL</span></div>
@@ -890,14 +906,18 @@
         </div>
       </div>
       <div class="sutil" id="notaVentana" style="margin-top:3px;"></div>
+      </div>
+      </div>
     </section>
 
     <!-- ===================== DIAGNÓSTICO Y TRAZABILIDAD ==================== -->
     <section class="card" id="cardIndicadores">
       <h2><span>Diagnóstico y trazabilidad</span>
-        <button class="btn-mini" id="btnDiagVer" onclick="alternarDiagnostico()" title="Ocultar el motor de diagnóstico">👁 Ocultar</button>
+        <button class="btn-mini" id="btnSeccionDiagnostico" onclick="alternarSeccion('diagnostico')" title="Ocultar diagnóstico y trazabilidad" aria-expanded="true">▾ Ocultar</button>
       </h2>
-      <div class="diag-container" id="panelAlertas"></div>
+      <div id="contenidoDiagnostico" class="contenido-colapsable">
+        <div class="diag-container" id="panelAlertas"></div>
+      </div>
     </section>
 
     <!-- ====================== PRUEBA DE HERMETICIDAD ======================== -->
@@ -2612,6 +2632,7 @@
   const K_VENTANA_MIN = 'refrig_ventana_min';
   const K_PESO1       = 'ph-s1-weight';
   const K_DIAG_VISIBLE = 'refrig_diag_visible';
+  const K_SECCIONES_OCULTAS = 'refrig_secciones_ocultas_v1';
   const K_REF_PH      = 'pressure-reference';
   const K_ULT_PH      = 'pressure-last-measured';
   const K_MED_PH      = 'pressure-measurements';
@@ -4354,6 +4375,7 @@
   }
 
   function init() {
+    cargarEstadosSecciones();
     aplicarModo(modoActual);
     aplicarTema(temaActual, true);
     cargarPH();
@@ -4388,40 +4410,54 @@
       }
     });
 
-    cargarEstadoDiag();
-
     registrarServiceWorker();
   }
 
-  /* ------------------- MOTOR DE DIAGNÓSTICO: OCULTAR ---------------------- */
-  function aplicarEstadoDiag() {
-    const cont = $('panelAlertas');
-    const btn = $('btnDiagVer');
-    if (!cont) return;
-    const visible = cont.style.display !== 'none';
-    if (btn) {
-      btn.textContent = visible ? '👁 Ocultar' : '👁 Mostrar';
-      btn.title = visible ? 'Ocultar el motor de diagnóstico' : 'Mostrar el motor de diagnóstico';
-    }
-  }
-  window.alternarDiagnostico = function () {
-    const cont = $('panelAlertas');
-    if (!cont) return;
-    const ocultar = cont.style.display !== 'none';
-    cont.style.display = ocultar ? 'none' : '';
-    try { localStorage.setItem(K_DIAG_VISIBLE, ocultar ? '0' : '1'); } catch (e) {}
-    aplicarEstadoDiag();
+  /* -------------------- SECCIONES COLAPSABLES ---------------------------- */
+  const SECCIONES_COLAPSABLES = {
+    monitor: { contenido: 'contenidoMonitor', boton: 'btnSeccionMonitor', nombre: 'mediciones del ciclo' },
+    diagnostico: { contenido: 'contenidoDiagnostico', boton: 'btnSeccionDiagnostico', nombre: 'diagnóstico y trazabilidad' },
+    electrica: { contenido: 'contenidoCajaElectrica', boton: 'btnSeccionElectrica', nombre: 'caja eléctrica' },
+    kpis: { contenido: 'contenidoKpisCiclo', boton: 'btnSeccionKpis', nombre: 'indicadores del ciclo' }
   };
-  function cargarEstadoDiag() {
-    const cont = $('panelAlertas');
-    if (!cont) return;
-    let visible = true;
+  let seccionesOcultas = {};
+
+  function actualizarBotonSeccion(clave) {
+    const seccion = SECCIONES_COLAPSABLES[clave];
+    const contenido = $(seccion.contenido);
+    const boton = $(seccion.boton);
+    if (!contenido || !boton) return;
+    const oculta = contenido.classList.contains('oculto');
+    boton.textContent = oculta ? '▸ Mostrar' : '▾ Ocultar';
+    boton.title = (oculta ? 'Mostrar ' : 'Ocultar ') + seccion.nombre;
+    boton.setAttribute('aria-expanded', String(!oculta));
+    contenido.setAttribute('aria-hidden', String(oculta));
+  }
+
+  window.alternarSeccion = function (clave) {
+    const seccion = SECCIONES_COLAPSABLES[clave];
+    if (!seccion) return;
+    const contenido = $(seccion.contenido);
+    if (!contenido) return;
+    seccionesOcultas[clave] = contenido.classList.toggle('oculto');
+    try { localStorage.setItem(K_SECCIONES_OCULTAS, JSON.stringify(seccionesOcultas)); } catch (e) {}
+    actualizarBotonSeccion(clave);
+  };
+
+  function cargarEstadosSecciones() {
     try {
-      const guardado = localStorage.getItem(K_DIAG_VISIBLE);
-      if (guardado === '0') visible = false;
+      const guardado = JSON.parse(localStorage.getItem(K_SECCIONES_OCULTAS) || '{}');
+      if (guardado && typeof guardado === 'object' && !Array.isArray(guardado)) seccionesOcultas = guardado;
     } catch (e) {}
-    cont.style.display = visible ? '' : 'none';
-    aplicarEstadoDiag();
+    if (typeof seccionesOcultas.diagnostico !== 'boolean') {
+      try { seccionesOcultas.diagnostico = localStorage.getItem(K_DIAG_VISIBLE) === '0'; } catch (e) {}
+    }
+    Object.keys(SECCIONES_COLAPSABLES).forEach(clave => {
+      const contenido = $(SECCIONES_COLAPSABLES[clave].contenido);
+      if (!contenido) return;
+      contenido.classList.toggle('oculto', seccionesOcultas[clave] === true);
+      actualizarBotonSeccion(clave);
+    });
   }
 
   /* ---------------------- INSTALAR COMO APLICACIÓN ------------------------ */
