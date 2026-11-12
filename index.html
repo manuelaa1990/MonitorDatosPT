@@ -3861,15 +3861,20 @@
       });
       const badge = $('estadoCaja' + caja.id);
       if (badge) {
-        badge.textContent = criticas
-          ? ('¡' + criticas + ' en alarma!')
-          : (avisos
-            ? (avisos + ' aviso' + (avisos === 1 ? '' : 's'))
-            : (conDatos
-              ? conDatos + ' de ' + caja.slots.length + (lecturaFresca ? ' en vivo' : ' atrasados')
-              : 'esperando'));
-        badge.className = 'badge ' + (criticas ? 'badge-off'
-          : (avisos ? 'badge-warn' : (conDatos ? (lecturaFresca ? 'badge-ok' : 'badge-warn') : 'badge-off')));
+        const sinLectura = !ultimaVista;
+        const lecturaAtrasada = !!ultimaVista && !lecturaFresca;
+        badge.textContent = sinLectura
+          ? 'esperando'
+          : (lecturaAtrasada
+            ? 'atrasada'
+            : (criticas
+              ? ('¡' + criticas + ' en alarma!')
+              : (avisos
+                ? (avisos + ' aviso' + (avisos === 1 ? '' : 's'))
+                : conDatos + '/' + caja.slots.length + ' en vivo')));
+        badge.className = 'badge ' + (sinLectura ? 'badge-off'
+          : (lecturaAtrasada ? 'badge-warn'
+            : (criticas ? 'badge-off' : (avisos ? 'badge-warn' : 'badge-ok'))));
       }
       /* El borde de la caja solo se marca en rojo con alarmas críticas; los
          avisos quedan en el badge ámbar para no alarmar de más. */
