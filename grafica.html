@@ -774,7 +774,7 @@
       /* Sin 'mouseout': al salir del canvas el tooltip no se cierra de golpe.
          Lo oculta el temporizador propio después de TOOLTIP_HOLD_MS. */
       events: ['mousemove', 'click', 'touchstart', 'touchmove'],
-      layout: { padding: { top: 34, right: 42, bottom: 0, left: 12 } },
+      layout: { padding: { top: 20, right: 42, bottom: 0, left: 12 } },
       scales: {
         x: {
           type: 'time',
@@ -918,7 +918,7 @@
     const barraArriba = document.getElementById('topbar');
     const barraAbajo = document.getElementById('bottombar');
     if (!barraArriba || !barraAbajo) return;
-    tempChart.options.layout.padding.top = barraArriba.offsetHeight + 6;
+    tempChart.options.layout.padding.top = barraArriba.offsetHeight + 3;
     tempChart.options.layout.padding.bottom = Math.min(10, barraAbajo.offsetHeight + 6);
     tempChart.update('none');
   }
