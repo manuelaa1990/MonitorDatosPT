@@ -3095,7 +3095,7 @@
   function aplicarModo(nuevo) {
     modoActual = (nuevo === 'ph') ? 'ph' : 'monitor';
     document.body.setAttribute('data-modo', modoActual);
-    aplicarEstadoDiag();
+    // aplicarEstadoDiag();
     try { localStorage.setItem(K_MODO, modoActual); } catch (e) {}
     const bm = $('btnModoMonitor'), bp = $('btnModoPH');
     if (bm) bm.classList.toggle('activo', modoActual === 'monitor');
