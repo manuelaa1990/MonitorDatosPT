@@ -140,12 +140,18 @@
         <div id="status-badge" class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 truncate">
           Verificando...
         </div>
+        <div class="flex items-center gap-1 min-w-0 text-[10px] text-slate-400" title="Red y dirección IP">
+          <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10 10 0 0114.142 0M1.42 9.428a16 16 0 01121.16 0"/>
+          </svg>
+          <span id="wifi-val-top" class="truncate max-w-[72px] sm:max-w-[120px]">--</span>
+        </div>
         <div id="history-indicator" class="history-badge hidden">Historial</div>
       </div>
       <div id="time-range-label" class="text-[10px] text-slate-400 font-mono truncate">--</div>
     </div>
 
-    <div class="flex items-center gap-1 shrink-0 overflow-x-auto">
+    <div class="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
       <button class="range-btn flex items-center justify-center w-8 h-7" onclick="navigateHistory(1)" title="Más antiguo">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
       </button>
@@ -175,21 +181,7 @@
 
 <div id="bottombar" class="ui-bar border-t">
   <div class="flex items-center justify-between px-3 py-2 text-[11px] gap-2 flex-wrap">
-    <div id="bat-box" class="flex items-center gap-1.5 shrink-0">
-      <svg id="bat-icon" class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-      </svg>
-      <span id="bat-val" class="font-mono text-slate-300">--% · --.--V</span>
-    </div>
-
     <div id="toggles-series" class="flex-1 min-w-0"></div>
-
-    <div class="flex items-center gap-1 text-slate-300 min-w-0">
-      <svg class="w-4 h-4 text-sky-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10 10 0 0114.142 0M1.42 9.428a16 16 0 01121.16 0"/>
-      </svg>
-      <span id="wifi-val" class="truncate max-w-[150px]">--</span>
-    </div>
 
     <div class="flex items-center gap-1.5 shrink-0">
       <button id="btn-ejes" onclick="toggleEjes()" title="Ocultar ejes laterales" aria-pressed="true"
@@ -1472,15 +1464,7 @@
 
   function updateStatusBar() {
     if (!latestRow) return;
-    /* Fuente directa: si no llega el dato de batería, no se muestra el indicador */
-    const cajaBat = document.getElementById('bat-box');
-    if (cajaBat) cajaBat.style.display = (latestRow.bateriaVolt !== null) ? '' : 'none';
-    if (latestRow.bateriaVolt !== null) {
-      document.getElementById('bat-val').textContent = latestRow.bateria + '% · ' + latestRow.bateriaVolt.toFixed(2) + 'V';
-      const icon = document.getElementById('bat-icon');
-      icon.className = 'w-4 h-4 ' + (latestRow.bateria <= 20 ? 'text-rose-500' : (latestRow.bateria <= 50 ? 'text-amber-400' : 'text-emerald-400'));
-    }
-    document.getElementById('wifi-val').textContent =
+    document.getElementById('wifi-val-top').textContent =
       (latestRow.wifi || '?') + (latestRow.ip ? ' · ' + latestRow.ip : '');
   }
 
