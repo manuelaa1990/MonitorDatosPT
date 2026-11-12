@@ -60,6 +60,32 @@
     }
     .range-btn.active { background: #0284c7; color: white; border-color: #0284c7; }
 
+    #range-picker, #range-menu { display: contents; }
+    #range-menu-toggle { display: none; }
+
+    @media (max-width: 600px) {
+      #topbar .latest-range-btn, #topbar .range-divider, #status-badge, #wifi-val { display: none; }
+      #range-picker { display: block; position: relative; }
+      #range-menu-toggle { display: inline-flex; align-items: center; height: 28px; }
+      #range-menu {
+        display: none;
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 40;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 76px;
+        padding: 6px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #0f172a;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      }
+      #range-menu.open { display: flex; }
+      #range-menu .range-btn { width: 100%; text-align: center; }
+    }
+
     .ui-bar {
       background: rgba(15, 23, 42, 0.9);
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
@@ -153,16 +179,21 @@
       <button id="btn-forward" class="range-btn flex items-center justify-center w-8 h-7 hidden" onclick="navigateHistory(-1)" title="Más reciente">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </button>
-      <button class="range-btn h-7" onclick="irAUltima('energia')" title="Ir a la última lectura eléctrica">⚡ Últ.</button>
-      <button class="range-btn h-7" onclick="irAUltima('hvac')" title="Ir a la última lectura HVAC">🌡 Últ.</button>
-      <div class="w-px h-4 bg-slate-700 mx-1"></div>
-      <button class="range-btn" data-min="10" onclick="setVentana(10)">10m</button>
-      <button class="range-btn" data-min="30" onclick="setVentana(30)">30m</button>
-      <button class="range-btn" data-min="60" onclick="setVentana(60)">1h</button>
-      <button class="range-btn" data-min="120" onclick="setVentana(120)">2h</button>
-      <button class="range-btn" data-min="240" onclick="setVentana(240)">4h</button>
-      <button class="range-btn" data-min="480" onclick="setVentana(480)">8h</button>
-      <button class="range-btn" data-min="1440" onclick="setVentana(1440)">24h</button>
+      <button class="range-btn h-7 latest-range-btn" onclick="irAUltima('energia')" title="Ir a la última lectura eléctrica">⚡ Últ.</button>
+      <button class="range-btn h-7 latest-range-btn" onclick="irAUltima('hvac')" title="Ir a la última lectura HVAC">🌡 Últ.</button>
+      <div class="w-px h-4 bg-slate-700 mx-1 range-divider"></div>
+      <div id="range-picker">
+        <button id="range-menu-toggle" class="range-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="range-menu" onclick="toggleMenuRango()">Rango ⏱️</button>
+        <div id="range-menu" role="menu">
+          <button class="range-btn" role="menuitem" data-min="10" onclick="setVentana(10)">10m</button>
+          <button class="range-btn" role="menuitem" data-min="30" onclick="setVentana(30)">30m</button>
+          <button class="range-btn" role="menuitem" data-min="60" onclick="setVentana(60)">1h</button>
+          <button class="range-btn" role="menuitem" data-min="120" onclick="setVentana(120)">2h</button>
+          <button class="range-btn" role="menuitem" data-min="240" onclick="setVentana(240)">4h</button>
+          <button class="range-btn" role="menuitem" data-min="480" onclick="setVentana(480)">8h</button>
+          <button class="range-btn" role="menuitem" data-min="1440" onclick="setVentana(1440)">24h</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1624,10 +1655,31 @@
     recargarVentana();
     updateBadge();
   }
+  function toggleMenuRango() {
+    const menu = document.getElementById('range-menu');
+    const toggle = document.getElementById('range-menu-toggle');
+    if (!menu || !toggle) return;
+    const abierto = menu.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', String(abierto));
+  }
+  function cerrarMenuRango() {
+    const menu = document.getElementById('range-menu');
+    const toggle = document.getElementById('range-menu-toggle');
+    if (!menu || !toggle) return;
+    menu.classList.remove('open');
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+  function actualizarBotonRangoMovil() {
+    const toggle = document.getElementById('range-menu-toggle');
+    const activo = document.querySelector('#range-menu [data-min].active');
+    if (toggle) toggle.textContent = activo ? activo.textContent.trim() : 'Rango ⏱️';
+  }
   function setVentana(min) {
     rangoMin = min;
     localStorage.setItem('refrig_ventana_min', String(min));
     document.querySelectorAll('.range-btn[data-min]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.min, 10) === min));
+    actualizarBotonRangoMovil();
+    cerrarMenuRango();
     offsetMin = 0; userZoomed = false;
     if (tempChart.resetZoom) tempChart.resetZoom();
     document.getElementById('btn-actual').classList.add('hidden');
@@ -1698,6 +1750,17 @@
   window.addEventListener('DOMContentLoaded', async () => {
     if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
     document.querySelectorAll('.range-btn[data-min]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.min, 10) === rangoMin));
+    actualizarBotonRangoMovil();
+    document.addEventListener('click', event => {
+      const selectorRango = document.getElementById('range-picker');
+      if (selectorRango && !selectorRango.contains(event.target)) cerrarMenuRango();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        cerrarMenuRango();
+        document.getElementById('range-menu-toggle')?.focus();
+      }
+    });
     pintarToggles();
     pintarBotonesEjes();
     ajustarPadding();
