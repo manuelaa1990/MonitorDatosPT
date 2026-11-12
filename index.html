@@ -844,13 +844,6 @@
               </div>
               <div class="slot-estado" id="estadoPotencia">Esperando…</div>
             </div>
-            <div class="slot" id="slotFactorPotencia">
-              <div class="slot-fila">
-                <span class="slot-nombre">Factor de Potencia</span>
-                <span class="slot-valor"><b id="valFP">---.-</b></span>
-              </div>
-              <div class="slot-estado" id="estadoFactorPotencia">Esperando…</div>
-            </div>
             <div class="slot" id="slotEnergia">
               <div class="slot-fila">
                 <span class="slot-nombre">Energía</span>
@@ -866,27 +859,6 @@
               <div class="slot-estado" id="estadoConsumoEspecifico">Esperando…</div>
             </div>
           </div>
-          <details class="slot-ancho">
-            <summary>Configuración eléctrica</summary>
-            <div class="prof-grid">
-              <div class="input-group">
-                <label for="V_nom">V_nom (V)</label>
-                <input type="number" id="V_nom" value="120" step="1">
-              </div>
-              <div class="input-group">
-                <label for="I_nom">I_nom (A)</label>
-                <input type="number" id="I_nom" step="0.1">
-              </div>
-              <div class="input-group">
-                <label for="FP_est">FP_est</label>
-                <input type="number" id="FP_est" value="0.90" step="0.01">
-              </div>
-              <div class="input-group">
-                <label for="capacidadBTU">Capacidad BTU</label>
-                <input type="number" id="capacidadBTU" step="1">
-              </div>
-            </div>
-          </details>
           <div class="alertas-electricas" id="alertasPatronesElectricos" role="status" aria-live="polite"></div>
         </div>
       </div>
@@ -4550,23 +4522,15 @@
       return valores.length ? valores.reduce((total, valor) => total + valor, 0) / valores.length : null;
     }
 
-    function leerFactor(fila) {
-      const entrada = document.getElementById('FP_est');
-      const factorEntrada = entrada ? numero(entrada.value) : null;
-      if (factorEntrada !== null && factorEntrada >= 0 && factorEntrada <= 1) return factorEntrada;
-      for (const campo of ['factor_potencia', 'fp', 'fp_est']) {
-        const factorFila = numero(fila && fila[campo]);
-        if (factorFila !== null && factorFila >= 0 && factorFila <= 1) return factorFila;
-      }
-      return null;
+    function leerParams() {
+      return { vNom: 120, iNom: null, fpEst: 0.90, qNom: null };
     }
 
     function potencia(fila) {
       const voltaje = numero(fila && fila.voltaje);
       const corriente = numero(fila && fila.corriente);
-      const factor = leerFactor(fila);
-      return voltaje !== null && corriente !== null && factor !== null
-        ? voltaje * corriente * factor : null;
+      return voltaje !== null && corriente !== null
+        ? voltaje * corriente * leerParams().fpEst : null;
     }
 
     async function consultar(parametros, urlTabla = URL_TABLA) {
@@ -4620,13 +4584,13 @@
     function actualizarInterfaz() {
       const voltaje = promedioUltimosDiez(lecturasUltimas, fila => numero(fila.voltaje)) ?? numero(ultimaElectrica && ultimaElectrica.voltaje);
       const corriente = promedioUltimosDiez(lecturasUltimas, fila => numero(fila.corriente)) ?? numero(ultimaElectrica && ultimaElectrica.corriente);
-      const factor = promedioUltimosDiez(lecturasUltimas, fila => leerFactor(fila)) ?? (ultimaElectrica ? leerFactor(ultimaElectrica) : null);
+      const params = leerParams();
+      const factor = params.fpEst;
       const estadoLectura = estadoLecturaElectrica();
       const atrasada = estadoLectura === 'atrasada';
       const ambosEnCero = voltaje === 0 && corriente === 0;
-      const vNominal = numero(document.getElementById('V_nom')?.value);
-      const iNominal = numero(document.getElementById('I_nom')?.value);
-      const capacidadBTU = numero(document.getElementById('capacidadBTU')?.value);
+      const vNominal = params.vNom;
+      const iNominal = params.iNom;
       const watts = promedioUltimosDiez(lecturasUltimas, fila => potencia(fila)) ?? (ultimaElectrica ? potencia(ultimaElectrica) : null);
       const inicioVentanaEnergia = Date.now() - 10 * 60 * 1000;
       const lecturasVentanaEnergia = lecturasHistoricas.filter(fila => {
@@ -4636,8 +4600,8 @@
       const energia = atrasada ? null : calcularEnergiaKWh(lecturasVentanaEnergia);
       const desviacion = voltaje !== null && vNominal > 0
         ? (voltaje - vNominal) / vNominal * 100 : null;
-      const consumoEspecifico = watts !== null && capacidadBTU > 0
-        ? watts / (capacidadBTU / 1000) : null;
+      const consumoEspecifico = watts !== null && params.qNom > 0
+        ? watts / (params.qNom / 1000) : null;
       const guion = ambosEnCero ? '---' : null;
       calculoActual = {
         voltaje: guion === null ? voltaje : null,
@@ -4651,7 +4615,6 @@
       poner('valVoltaje', formatear(guion === null ? voltaje : null, 1));
       poner('valCorriente', formatear(guion === null ? corriente : null, 2));
       poner('valPotencia', formatear(guion === null ? watts : null, 1));
-      poner('valFP', formatear(guion === null ? factor : null, 2));
       poner('valEnergia', formatear(guion === null ? energia : null, 4));
       poner('valConsumoEsp', formatear(guion === null ? consumoEspecifico : null, 2));
 
@@ -4661,9 +4624,8 @@
       poner('estadoVoltaje', textoEstadoLectura);
       poner('estadoCorriente', textoEstadoLectura);
       poner('estadoPotencia', guion !== null ? 'Sin lectura' : 'Media móvil: ' + Math.min(lecturasUltimas.length, 10) + ' registros');
-      poner('estadoFactorPotencia', guion !== null ? 'Sin lectura' : factor !== null ? 'Media móvil de lecturas' : 'Configure FP_est');
       poner('estadoEnergia', atrasada ? 'No disponible: datos atrasados' : guion !== null ? 'Sin lectura' : 'Ventana de 10 min');
-      poner('estadoConsumoEspecifico', guion !== null ? 'Sin lectura' : capacidadBTU > 0 ? 'Por capacidad ingresada' : 'Ingrese capacidad BTU');
+      poner('estadoConsumoEspecifico', guion !== null ? 'Sin lectura' : params.qNom > 0 ? 'Por capacidad nominal' : 'Sin capacidad nominal');
 
       const badge = document.getElementById('estadoCajaElectrica');
       if (badge) {
@@ -4793,6 +4755,30 @@
       return distancia <= 30000 ? mejor : null;
     }
 
+    function promedioCorrienteCercana(filas, marcaTiempo) {
+      let inicio = 0;
+      let fin = filas.length;
+      const limiteInferior = marcaTiempo - 30000;
+      const limiteSuperior = marcaTiempo + 30000;
+      while (inicio < fin) {
+        const medio = Math.floor((inicio + fin) / 2);
+        if (new Date(filas[medio].created_at).getTime() < limiteInferior) inicio = medio + 1;
+        else fin = medio;
+      }
+      let suma = 0;
+      let cantidad = 0;
+      for (let indice = inicio; indice < filas.length; indice++) {
+        const tiempo = new Date(filas[indice].created_at).getTime();
+        if (tiempo > limiteSuperior) break;
+        const corriente = numero(filas[indice].corriente);
+        if (corriente !== null) {
+          suma += corriente;
+          cantidad++;
+        }
+      }
+      return cantidad ? suma / cantidad : null;
+    }
+
     function presionesIgualadas(fila) {
       const alta = numero(fila && fila.presion_alta);
       const baja = numero(fila && fila.presion_baja);
@@ -4808,11 +4794,10 @@
       const alertas = [];
       const serieAlineada = ordenTermicas.map(fila => {
         const tiempo = new Date(fila.created_at).getTime();
-        const electrica = filaMasCercana(ordenElectricas, tiempo);
         return {
           tiempo,
           igualadas: presionesIgualadas(fila),
-          corriente: electrica ? numero(electrica.corriente) : null
+          corrientePromedio: promedioCorrienteCercana(ordenElectricas, tiempo)
         };
       });
 
@@ -4820,7 +4805,7 @@
       let tiempoParadaAnterior = null;
       let paradaDetectada = false;
       for (const punto of serieAlineada) {
-        const equipoParado = punto.igualadas && punto.corriente !== null && Math.abs(punto.corriente) <= 0.1;
+        const equipoParado = punto.igualadas && punto.corrientePromedio !== null && Math.abs(punto.corrientePromedio) <= 0.1;
         if (!equipoParado) {
           inicioParada = null;
           tiempoParadaAnterior = null;
@@ -4833,55 +4818,27 @@
         }
         tiempoParadaAnterior = punto.tiempo;
         if (!paradaDetectada && punto.tiempo - inicioParada > 45 * 60 * 1000) {
-          alertas.push('Equipo detenido por más de 45 min. Si la temperatura del recinto no ha llegado al setpoint, hay falla de termostato o protección térmica');
+          alertas.push('Equipo detenido por más de 45 min sin arranques. Verifique termostato, setpoint o protección térmica.');
           paradaDetectada = true;
         }
       }
 
-      const eventosLRA = [];
-      let picoActivo = null;
-      const cerrarPico = () => {
-        if (!picoActivo) return;
-        const duracion = picoActivo.fin - picoActivo.inicio;
-        if (duracion >= 1000 && duracion <= 3000 && picoActivo.fin >= ahora - 15 * 60 * 1000) {
-          eventosLRA.push(picoActivo);
-        }
-        picoActivo = null;
-      };
-      for (const fila of ordenElectricas) {
-        const tiempo = new Date(fila.created_at).getTime();
-        const amperaje = numero(fila.corriente);
-        if (amperaje !== null && amperaje > 15) {
-          if (picoActivo && tiempo - picoActivo.fin <= 3000) picoActivo.fin = tiempo;
-          else {
-            cerrarPico();
-            picoActivo = { inicio: tiempo, fin: tiempo };
-          }
-        } else cerrarPico();
-      }
-      cerrarPico();
-      if (eventosLRA.length > 2) {
-        alertas.push('Disparo por intentos fallidos de arranque (LRA). Revise capacitor/relé');
-      }
-
-      let caidaEnArranque = false;
+      const arranques = [];
       for (let indice = 1; indice < ordenElectricas.length; indice++) {
         const anterior = ordenElectricas[indice - 1];
         const actual = ordenElectricas[indice];
         const amperajeAnterior = numero(anterior.corriente);
         const amperajeActual = numero(actual.corriente);
-        const voltajeActual = numero(actual.voltaje);
         const tiempoAnterior = new Date(anterior.created_at).getTime();
         const tiempoActual = new Date(actual.created_at).getTime();
-        if (amperajeAnterior !== null && amperajeActual !== null && voltajeActual !== null &&
-          tiempoActual >= tiempoAnterior && Math.floor(tiempoAnterior / 1000) === Math.floor(tiempoActual / 1000) &&
-          amperajeAnterior <= 15 && amperajeActual > 15 && voltajeActual < 105) {
-          caidaEnArranque = true;
-          break;
+        if (amperajeAnterior !== null && amperajeActual !== null &&
+            amperajeAnterior <= 0.1 && amperajeActual > 15 && tiempoActual >= tiempoAnterior &&
+            tiempoActual >= ahora - 15 * 60 * 1000) {
+          arranques.push(tiempoActual);
         }
       }
-      if (caidaEnArranque) {
-        alertas.push('Caída de tensión severa en arranque. Revise acometida o calibre de cable');
+      if (arranques.length > 3) {
+        alertas.push('Falla por ciclaje corto: múltiples arranques en menos de 15 min. Posible pérdida de carga, termostato defectuoso o sobrecarga.');
       }
 
       let consumoConCompresorParado = false;
@@ -4905,7 +4862,7 @@
         }
       }
       if (consumoConCompresorParado) {
-        alertas.push('Consumo eléctrico con compresor detenido. Resistencia de deshielo activa o consumo parásito');
+        alertas.push('Consumo eléctrico con compresor detenido. Resistencia de deshielo activa o consumo parásito.');
       }
       return alertas;
     }
@@ -4914,7 +4871,6 @@
       const filas = [];
       if (errorLectura) {
         filas.push('<tr class="diag-electrico diag-monitor-alarma"><td class="diag-status">⚠️</td><td class="diag-title">Monitor eléctrico</td><td class="diag-text">' + escaparHtml(errorLectura) + '</td></tr>');
-        return filas;
       }
       if (errorHistorico) {
         filas.push('<tr class="diag-electrico diag-monitor-alarma"><td class="diag-status">⚠️</td><td class="diag-title">Análisis de patrones</td><td class="diag-text">' + escaparHtml(errorHistorico) + '</td></tr>');
@@ -4922,19 +4878,6 @@
       alertasPatron.forEach(alerta => {
         filas.push('<tr class="diag-electrico diag-monitor-alarma"><td class="diag-status">🔴</td><td class="diag-title">Patrón eléctrico</td><td class="diag-text">' + escaparHtml(alerta) + '</td></tr>');
       });
-      if (!ultimaElectrica) return filas;
-
-      const voltaje = numero(ultimaElectrica.voltaje);
-      const corriente = numero(ultimaElectrica.corriente);
-      const vNominal = numero(document.getElementById('V_nom')?.value);
-      const iNominal = numero(document.getElementById('I_nom')?.value);
-      if (voltaje !== null && vNominal > 0 && Math.abs(voltaje - vNominal) > vNominal * 0.1) {
-        const desviacion = (voltaje - vNominal) / vNominal * 100;
-        filas.push('<tr class="diag-electrico diag-monitor-alarma"><td class="diag-status">🔴</td><td class="diag-title">Voltaje eléctrico</td><td class="diag-text">' + voltaje.toFixed(1) + ' V; desviación ' + (desviacion > 0 ? '+' : '') + desviacion.toFixed(1) + '% respecto a ' + vNominal.toFixed(1) + ' V nominal (límite ±10%).</td></tr>');
-      }
-      if (corriente !== null && iNominal > 0 && corriente > iNominal * 1.1) {
-        filas.push('<tr class="diag-electrico diag-monitor-alarma"><td class="diag-status">🔴</td><td class="diag-title">Corriente eléctrica</td><td class="diag-text">' + corriente.toFixed(2) + ' A; supera el 110% de la corriente nominal (' + iNominal.toFixed(2) + ' A).</td></tr>');
-      }
       return filas;
     }
 
@@ -4966,10 +4909,6 @@
       }
       return filas;
     };
-
-    ['V_nom', 'I_nom', 'FP_est', 'capacidadBTU'].forEach(id => {
-      document.getElementById(id)?.addEventListener('input', actualizarInterfaz);
-    });
 
     window.__electricoEstado = function () {
       const instante = ultimaElectrica ? new Date(ultimaElectrica.created_at).getTime() : NaN;
