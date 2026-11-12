@@ -4537,11 +4537,11 @@
       return { vNom: 120, iNom: null, fpEst: 0.90, qNom: null };
     }
 
-    function potencia(fila) {
+    function potencia(fila, params) {
       const voltaje = numero(fila && fila.voltaje);
       const corriente = numero(fila && fila.corriente);
       return voltaje !== null && corriente !== null
-        ? voltaje * corriente * leerParams().fpEst : null;
+        ? voltaje * corriente * (params || leerParams()).fpEst : null;
     }
 
     async function consultar(parametros, urlTabla = URL_TABLA) {
@@ -4612,7 +4612,7 @@
       const ambosEnCero = voltaje === 0 && corriente === 0;
       const vNominal = params.vNom;
       const iNominal = params.iNom;
-      const watts = promedioUltimosDiez(lecturasUltimas, fila => potencia(fila)) ?? (ultimaElectrica ? potencia(ultimaElectrica) : null);
+      const watts = promedioUltimosDiez(lecturasUltimas, fila => potencia(fila, params)) ?? (ultimaElectrica ? potencia(ultimaElectrica, params) : null);
       const inicioVentanaEnergia = Date.now() - 10 * 60 * 1000;
       const lecturasVentanaEnergia = lecturasHistoricas.filter(fila => {
         const instante = tiempoFila(fila);
@@ -4674,9 +4674,13 @@
     function pintarAlertasPatron() {
       const contenedor = document.getElementById('alertasPatronesElectricos');
       if (contenedor) {
-        contenedor.innerHTML = alertasPatron.map(alerta =>
+        const htmlAlertas = alertasPatron.map(alerta =>
           '<div class="alerta-electrica">' + escaparHtml(alerta) + '</div>'
         ).join('');
+        const htmlHistorico = errorHistorico
+          ? '<div class="alerta-electrica alerta-electrica-aviso">' + escaparHtml(errorHistorico) + '</div>'
+          : '';
+        contenedor.innerHTML = htmlHistorico + htmlAlertas;
       }
       const caja = document.getElementById('cajaElectrica');
       if (caja) caja.classList.toggle('con-alarma', alertasPatron.length > 0);
@@ -4684,6 +4688,7 @@
 
     function calcularEnergiaKWh(filas) {
       if (filas.length < 2) return null;
+      const params = leerParams();
       let wattHoras = 0;
       let intervalos = 0;
       for (let indice = 1; indice < filas.length; indice++) {
@@ -4692,8 +4697,8 @@
         const inicio = tiempoFila(anterior);
         const fin = tiempoFila(actual);
         const deltaHoras = (fin - inicio) / 3600000;
-        const wattsAnterior = potencia(anterior);
-        const wattsActual = potencia(actual);
+        const wattsAnterior = potencia(anterior, params);
+        const wattsActual = potencia(actual, params);
         if (deltaHoras > 0 && Number.isFinite(deltaHoras) && wattsAnterior !== null && wattsActual !== null) {
           wattHoras += (wattsAnterior + wattsActual) / 2 * deltaHoras;
           intervalos++;
@@ -4707,7 +4712,11 @@
       consultandoUltima = true;
       if (!ultimaElectrica) actualizarInterfaz();
       try {
-        const parametros = new URLSearchParams({ select: '*', order: 'created_at.desc', limit: '10' });
+        const parametros = new URLSearchParams({
+          select: 'created_at,voltaje,corriente',
+          order: 'created_at.desc,id.desc',
+          limit: '10'
+        });
         const filas = await consultar(parametros);
         if (filas.length) {
           lecturasUltimas = filas.reverse();
@@ -4728,23 +4737,36 @@
       try {
         const desde = new Date(Date.now() - VENTANA_HISTORICO_MS).toISOString();
         const parametrosElectricos = new URLSearchParams({
-          select: '*',
+          select: 'created_at,voltaje,corriente',
           created_at: 'gte.' + desde,
-          order: 'created_at.asc'
+          order: 'created_at.asc,id.asc'
         });
         const parametrosTermicos = new URLSearchParams({
           select: 'created_at,presion_alta,presion_baja,temp1,temp2,temp3,temp4,temp5',
           created_at: 'gte.' + desde,
-          order: 'created_at.asc'
+          order: 'created_at.asc,id.asc'
         });
-        const [filasElectricas, filasTermicas] = await Promise.all([
+        const resultados = await Promise.allSettled([
           consultarHistorico(URL_TABLA, parametrosElectricos),
           consultarHistorico(URL_HVAC, parametrosTermicos)
         ]);
-        lecturasHistoricas = filasElectricas;
-        lecturasTermicas = filasTermicas;
-        alertasPatron = analizarPatrones(lecturasHistoricas, lecturasTermicas);
-        errorHistorico = '';
+        const resultadoElectrico = resultados[0];
+        const resultadoTermico = resultados[1];
+        if (resultadoElectrico.status === 'fulfilled') lecturasHistoricas = resultadoElectrico.value;
+        if (resultadoTermico.status === 'fulfilled') lecturasTermicas = resultadoTermico.value;
+        const tablasFallidas = [];
+        if (resultadoElectrico.status === 'rejected') tablasFallidas.push('lecturas_energia');
+        if (resultadoTermico.status === 'rejected') tablasFallidas.push('lecturas_hvac');
+        errorHistorico = tablasFallidas.length
+          ? 'Histórico incompleto: no se pudo consultar ' + tablasFallidas.join(' y ') + '.'
+          : '';
+        const alertasCalculadas = analizarPatrones(
+          resultadoElectrico.status === 'fulfilled' ? resultadoElectrico.value : [],
+          resultadoTermico.status === 'fulfilled' ? resultadoTermico.value : []
+        );
+        alertasPatron = tablasFallidas.length
+          ? Array.from(new Set(alertasPatron.concat(alertasCalculadas)))
+          : alertasCalculadas;
       } catch (error) {
         console.warn('No se pudo cargar el histórico eléctrico:', error);
         errorHistorico = error.message || 'No se pudieron cruzar los históricos eléctricos y HVAC';
@@ -4943,18 +4965,47 @@
       };
     };
 
-    sondearUltima();
-    cargarHistorico();
-    temporizadorUltima = setInterval(sondearUltima, INTERVALO_ULTIMA_MS);
-    temporizadorHistorico = setInterval(cargarHistorico, INTERVALO_ANALISIS_MS);
+    function iniciarTemporizadores() {
+      if (document.hidden) return;
+      if (temporizadorUltima === null) {
+        temporizadorUltima = setInterval(sondearUltima, INTERVALO_ULTIMA_MS);
+      }
+      if (temporizadorHistorico === null) {
+        temporizadorHistorico = setInterval(cargarHistorico, INTERVALO_ANALISIS_MS);
+      }
+    }
+
+    function detenerTemporizadores() {
+      if (temporizadorUltima !== null) clearInterval(temporizadorUltima);
+      if (temporizadorHistorico !== null) clearInterval(temporizadorHistorico);
+      temporizadorUltima = null;
+      temporizadorHistorico = null;
+    }
+
+    function manejarVisibilidad() {
+      if (document.hidden) {
+        detenerTemporizadores();
+        return;
+      }
+      sondearUltima();
+      cargarHistorico();
+      iniciarTemporizadores();
+    }
+
+    document.addEventListener('visibilitychange', manejarVisibilidad);
+    if (!document.hidden) {
+      sondearUltima();
+      cargarHistorico();
+      iniciarTemporizadores();
+    }
 
     return {
       sondearUltima,
       cargarHistorico,
       analizarPatrones,
       detener() {
-        clearInterval(temporizadorUltima);
-        clearInterval(temporizadorHistorico);
+        detenerTemporizadores();
+        document.removeEventListener('visibilitychange', manejarVisibilidad);
       }
     };
   })();
