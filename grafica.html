@@ -72,7 +72,29 @@
     #btn-ejes.on { background: #0284c7; border-color: #0ea5e9; color: #ffffff; }
     #btn-pcomun.on { background: #a21caf; border-color: #d946ef; color: #ffffff; }
     .history-badge { background: #7c3aed; color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-    #toggles-series { max-height: 34vh; overflow-y: auto; }
+    /* 11 selectores en 6 columnas = 2 filas exactas (horizontal y vertical). */
+    #toggles-series {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 3px;
+      align-items: center;
+      width: 100%;
+      max-height: 34vh;
+      overflow-y: auto;
+    }
+    #toggles-series .series-toggle {
+      min-width: 0;
+      min-height: 21px;
+      justify-content: center;
+      padding: 3px 2px;
+      font-size: 10px;
+      line-height: 1.1;
+      white-space: nowrap;
+      touch-action: manipulation;
+    }
+    #toggles-series .series-toggle .nombre-serie {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    }
 
     /* Valor de un máximo/mínimo al tocarlo */
     .valor-extremo-oculto { display: none !important; }
@@ -131,6 +153,8 @@
       <button id="btn-forward" class="range-btn flex items-center justify-center w-8 h-7 hidden" onclick="navigateHistory(-1)" title="Más reciente">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </button>
+      <button class="range-btn h-7" onclick="irAUltima('energia')" title="Ir a la última lectura eléctrica">⚡ Últ.</button>
+      <button class="range-btn h-7" onclick="irAUltima('hvac')" title="Ir a la última lectura HVAC">🌡 Últ.</button>
       <div class="w-px h-4 bg-slate-700 mx-1"></div>
       <button class="range-btn" data-min="10" onclick="setVentana(10)">10m</button>
       <button class="range-btn" data-min="30" onclick="setVentana(30)">30m</button>
@@ -158,7 +182,7 @@
       <span id="bat-val" class="font-mono text-slate-300">--% · --.--V</span>
     </div>
 
-    <div id="toggles-series" class="flex items-center gap-1 flex-wrap justify-center flex-1"></div>
+    <div id="toggles-series" class="flex-1 min-w-0"></div>
 
     <div class="flex items-center gap-1 text-slate-300 min-w-0">
       <svg class="w-4 h-4 text-sky-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -228,17 +252,17 @@
   /* Orden pedido: P1 · T1 · P2 · T4 · T2 · T3 · T5. Los nombres T1..T5 son
      los del firmware del ESP32; "Salida Evap" se conserva como referencia. */
   const SERIES = [
-    { id:'psuct', etiqueta:'P1 Succión',     color:'#818cf8', eje:'y2', varSlot:'psuct', presion:true, suavizar:true },
-    { id:'tsuct', etiqueta:'T1 Succión',     color:'#f87171', eje:'y',  varSlot:'tsuct' },
-    { id:'pdesc', etiqueta:'P2 Descarga',    color:'#f472b6', eje:'y3', varSlot:'pdesc', presion:true, suavizar:true },
-    { id:'tliq',  etiqueta:'T4 Líquido',     color:'#34d399', eje:'y6', varSlot:'tliq'  },
-    { id:'tevap', etiqueta:'T2 Salida Evap', color:'#38bdf8', eje:'y4', varSlot:'tevap' },
-    { id:'tdesc', etiqueta:'T3 Descarga',    color:'#fb923c', eje:'y5', varSlot:'tdesc' },
-    { id:'tamb',  etiqueta:'T5 Ambiente',    color:'#a78bfa', eje:'y7', varSlot:'tamb'  },
-    { id:'voltaje', etiqueta:'Voltaje (V)',   color:'#38bdf8', eje:'y8', esVoltaje:true },
-    { id:'corriente', etiqueta:'Amperaje (A)', color:'#f97316', eje:'y9', esCorriente:true },
-    { id:'phe',   etiqueta:'P.H. esperada',  color:'#22d3ee', eje:'y3', presion:true },
-    { id:'phm',   etiqueta:'P.H. medida',    color:'#a7f3d0', eje:'y3', presion:true, soloPuntos:true }
+    { id:'psuct', etiqueta:'P1 Succión',     corta:'P1',     color:'#818cf8', eje:'y2', varSlot:'psuct', presion:true, suavizar:true },
+    { id:'tsuct', etiqueta:'T1 Succión',     corta:'T1',     color:'#f87171', eje:'y',  varSlot:'tsuct' },
+    { id:'pdesc', etiqueta:'P2 Descarga',    corta:'P2',     color:'#f472b6', eje:'y3', varSlot:'pdesc', presion:true, suavizar:true },
+    { id:'tliq',  etiqueta:'T4 Líquido',     corta:'T4',     color:'#34d399', eje:'y6', varSlot:'tliq'  },
+    { id:'tevap', etiqueta:'T2 Salida Evap', corta:'T2',     color:'#38bdf8', eje:'y4', varSlot:'tevap' },
+    { id:'tdesc', etiqueta:'T3 Descarga',    corta:'T3',     color:'#fb923c', eje:'y5', varSlot:'tdesc' },
+    { id:'tamb',  etiqueta:'T5 Ambiente',    corta:'T5',     color:'#a78bfa', eje:'y7', varSlot:'tamb'  },
+    { id:'voltaje', etiqueta:'Voltaje (V)',   corta:'V',      color:'#38bdf8', eje:'y8', esVoltaje:true },
+    { id:'corriente', etiqueta:'Amperaje (A)', corta:'A',      color:'#f97316', eje:'y9', esCorriente:true },
+    { id:'phe',   etiqueta:'P.H. esperada',  corta:'PH esp', color:'#22d3ee', eje:'y3', presion:true },
+    { id:'phm',   etiqueta:'P.H. medida',    corta:'PH med', color:'#a7f3d0', eje:'y3', presion:true, soloPuntos:true }
   ];
 
   /* Cada temperatura tiene su propia escala. El eje "y" queda para T1 y los
@@ -262,12 +286,18 @@
   let allData = [];
   let latestRow = null;
   let lastSeenAt = null;
+  /* Última marca de tiempo conocida de cada tabla. Sirven para el botón
+     «ir a la última lectura» cuando las dos fuentes no se solapan. */
+  let ultimaHvacMs = 0;
+  let ultimaEnergiaMs = 0;
   let isRefreshing = false;
   let ventanaSeq = 0;
   let userZoomed = false;
   let asignacion = Object.assign({}, ASIGNACION_INICIAL);
   let seriesVisibles = {};
-  SERIES.forEach(s => { seriesVisibles[s.id] = ['tsuct','tdesc','tevap'].indexOf(s.id) >= 0; });
+  SERIES.forEach(s => {
+    seriesVisibles[s.id] = ['tsuct','tdesc','tevap','voltaje','corriente'].indexOf(s.id) >= 0;
+  });
 
   let ejesVisibles = true;
   let presionComun = false;
@@ -321,6 +351,10 @@
   }
   function limpiarTemp(v) { const n = aNumero(v); return (n !== null && n > -60 && n <= 200) ? n : null; }
   function limpiarPres(v) { const n = aNumero(v); return (n !== null && n > -15 && n < 1500) ? n : null; }
+  /* 318 V en una red de 120/220 V es una lectura inválida: se descarta para
+     que no estire el eje de voltaje. El 0 se conserva (equipo sin tensión). */
+  function limpiarVoltaje(v) { const n = aNumero(v); return (n !== null && n >= 0 && n <= 300) ? n : null; }
+  function limpiarCorriente(v) { const n = aNumero(v); return (n !== null && n >= 0 && n <= 100) ? n : null; }
   function parseTs(s) {
     if (!s) return null;
     let str = String(s).trim();
@@ -367,6 +401,19 @@
     return s.etiqueta + ' · ' + nombre;
   }
 
+  /* Versión abreviada para los botones: cabe en dos filas en el móvil y
+     conserva el canal reasignado («T4·T2»). La etiqueta completa queda en
+     title/aria-label, en el tooltip del gráfico y en el PDF. */
+  function etiquetaCorta(s) {
+    const base = s.corta || s.etiqueta;
+    if (!s.varSlot) return base;
+    const canal = asignacion[s.varSlot];
+    if (!canal || canal === CANAL_INICIAL_SERIE[s.varSlot]) return base;
+    const m = /^(temp|pres)(\d+)$/.exec(canal);
+    const nombre = m ? ((m[1] === 'temp' ? 'T' : 'P') + m[2]) : canal;
+    return base + '·' + nombre;
+  }
+
   /* Promedio móvil causal para las presiones. Se calcula solamente para
      dibujar: los valores crudos siguen intactos en Supabase, en el monitor y
      en el motor de alarmas. Si hay un hueco de datos se reinicia la ventana. */
@@ -399,8 +446,8 @@
     const vals = {};
     SERIES.forEach(s => {
       vals[s.id] = s.varSlot ? valorSlot(row, s.varSlot)
-        : s.esVoltaje ? aNumero(row.voltaje)
-        : s.esCorriente ? aNumero(row.corriente) : null;
+        : s.esVoltaje ? limpiarVoltaje(row.voltaje)
+        : s.esCorriente ? limpiarCorriente(row.corriente) : null;
     });
     vals.created_at = row.created_at;
     vals.bateriaVolt = aNumero(row.bateriaVolt);
@@ -498,6 +545,43 @@
         corriente: coincide ? aNumero(cercana.corriente) : null
       };
     });
+  }
+
+  /* Une las dos tablas en una sola línea de tiempo.
+     - Las filas HVAC llevan voltaje/corriente de la lectura eléctrica más
+       cercana (±30 s), como antes.
+     - Las filas de energía que NO tienen una HVAC cerca se conservan como
+       puntos propios. Así la energía se puede graficar aunque la tabla
+       lecturas_hvac esté vacía o en otro rango de fechas. */
+  function fusionarSeries(filasHvac, filasEnergia) {
+    const base = cruzarEnergia(filasHvac || [], filasEnergia || []);
+    const tHvac = base
+      .map(f => parseTs(f.created_at))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+
+    const hayHvacCerca = t => {
+      let bajo = 0, alto = tHvac.length;
+      while (bajo < alto) {
+        const medio = (bajo + alto) >> 1;
+        if (tHvac[medio] < t) bajo = medio + 1; else alto = medio;
+      }
+      const siguiente = bajo < tHvac.length ? Math.abs(tHvac[bajo] - t) : Infinity;
+      const anterior = bajo > 0 ? Math.abs(tHvac[bajo - 1] - t) : Infinity;
+      return Math.min(siguiente, anterior) <= 30000;
+    };
+
+    const soloEnergia = (filasEnergia || [])
+      .map(e => ({ fila: e, t: parseTs(e.created_at) }))
+      .filter(({ t }) => Number.isFinite(t) && !hayHvacCerca(t))
+      .map(({ fila }) => ({
+        created_at: fila.created_at,
+        voltaje: aNumero(fila.voltaje),
+        corriente: aNumero(fila.corriente)
+      }));
+
+    return base.concat(soloEnergia)
+      .sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
   }
 
   /* ============================================================
@@ -1149,18 +1233,24 @@
       return 'UTC' + (min >= 0 ? '+' : '-') + String(Math.floor(abs / 60)).padStart(2, '0') +
              (abs % 60 ? ':' + String(abs % 60).padStart(2, '0') : '');
     })();
-    if (offsetMin > 0) txt += ' · hace ' + (offsetMin < 60 ? (offsetMin + ' min') : ((offsetMin / 60) + ' h'));
+    if (offsetMin > 0) txt += ' · hace ' + fmtAge(offsetMin * 60000);
     if (!cantidad) txt += ' (sin datos)';
     el.textContent = txt;
   }
 
   function pintarToggles() {
     const cont = document.getElementById('toggles-series');
-    cont.innerHTML = SERIES.map(s =>
-      '<button onclick="toggleSeries(\'' + s.id + '\')" class="series-toggle ' + (seriesVisibles[s.id] ? 'active' : '') +
-      ' flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold transition active:scale-95 border">' +
-      '<span class="w-2 h-2 rounded-full" style="background:' + s.color + '"></span><span>' + etiquetaSerie(s) + '</span></button>'
-    ).join('');
+    cont.innerHTML = SERIES.map(s => {
+      const activa = !!seriesVisibles[s.id];
+      const completa = etiquetaSerie(s);
+      return '<button type="button" onclick="toggleSeries(\'' + s.id + '\')"'
+        + ' class="series-toggle ' + (activa ? 'active' : '')
+        + ' flex items-center justify-center gap-1 rounded-full font-bold transition active:scale-95 border"'
+        + ' title="' + completa + '" aria-label="' + completa + '"'
+        + ' aria-pressed="' + (activa ? 'true' : 'false') + '">'
+        + '<span class="w-2 h-2 rounded-full shrink-0" style="background:' + s.color + '"></span>'
+        + '<span class="nombre-serie">' + etiquetaCorta(s) + '</span></button>';
+    }).join('');
   }
   function toggleSeries(id) {
     const visibles = SERIES.filter(s => seriesVisibles[s.id]).length;
@@ -1420,15 +1510,35 @@
 
   async function refreshLatest() {
     try {
-      const [row, energia] = await Promise.all([fetchUltima(), fetchUltimaEnergia()]);
+      const [rHvac, rEnergia] = await Promise.allSettled([fetchUltima(), fetchUltimaEnergia()]);
+      const row = rHvac.status === 'fulfilled' ? rHvac.value : null;
+      const energia = rEnergia.status === 'fulfilled' ? rEnergia.value : null;
+
+      const tHvac = parseTs(row && row.created_at);
+      const tEnergia = parseTs(energia && energia.created_at);
+      if (tHvac) ultimaHvacMs = Math.max(ultimaHvacMs, tHvac);
+      if (tEnergia) ultimaEnergiaMs = Math.max(ultimaEnergiaMs, tEnergia);
+
+      /* La antigüedad se mide sobre la fuente más reciente, no solo HVAC. */
+      const tMax = Math.max(tHvac || 0, tEnergia || 0);
+      if (tMax && (!lastSeenAt || tMax > lastSeenAt.getTime())) lastSeenAt = new Date(tMax);
+
       if (row && row.created_at) {
-        const filaCruce = cruzarEnergia([row], energia ? [energia] : [])[0];
-        const t = parseTs(row.created_at);
-        if (t && (!lastSeenAt || t > lastSeenAt.getTime())) lastSeenAt = new Date(t);
-        latestRow = procesarFila(filaCruce);
-        const indiceExistente = allData.findIndex(r => r.created_at === row.created_at);
-        if (indiceExistente >= 0) allData[indiceExistente] = {...allData[indiceExistente], ...filaCruce};
-        else allData.push(filaCruce);
+        latestRow = procesarFila(cruzarEnergia([row], energia ? [energia] : [])[0]);
+      }
+
+      /* Se añaden a la ventana actual las últimas filas de AMBAS tablas,
+         aunque estén fuera del rango visible (getSlice las filtra). */
+      const nuevas = fusionarSeries(
+        row && row.created_at ? [row] : [],
+        energia && energia.created_at ? [energia] : []
+      );
+      nuevas.forEach(fila => {
+        const indiceExistente = allData.findIndex(r => r.created_at === fila.created_at);
+        if (indiceExistente >= 0) allData[indiceExistente] = { ...allData[indiceExistente], ...fila };
+        else allData.push(fila);
+      });
+      if (nuevas.length) {
         allData.sort((a, b) => (parseTs(a.created_at) || 0) - (parseTs(b.created_at) || 0));
         updateStatusBar();
         if (offsetMin === 0) renderChart();
@@ -1450,16 +1560,24 @@
       /* Si el usuario cambió de rango mientras llegaban las páginas,
          no dejar que una respuesta vieja pise la ventana nueva. */
       if (seq !== ventanaSeq) return;
-      if (resultadoHvac.status === 'fulfilled' && Array.isArray(resultadoHvac.value) && resultadoHvac.value.length) {
-        const filasEnergia = resultadoEnergia.status === 'fulfilled' && Array.isArray(resultadoEnergia.value)
-          ? resultadoEnergia.value : [];
-        allData = cruzarEnergia(resultadoHvac.value, filasEnergia);
-      } else if (resultadoHvac.status === 'rejected') {
+
+      const hvacOk = resultadoHvac.status === 'fulfilled' && Array.isArray(resultadoHvac.value);
+      const energiaOk = resultadoEnergia.status === 'fulfilled' && Array.isArray(resultadoEnergia.value);
+
+      if (resultadoHvac.status === 'rejected') {
         console.warn('No se pudieron leer las térmicas:', resultadoHvac.reason);
       }
       if (resultadoEnergia.status === 'rejected') {
         console.warn('No se pudo leer la ventana de energía:', resultadoEnergia.reason);
-        allData = allData.map(fila => ({ ...fila, voltaje: null, corriente: null }));
+      }
+
+      /* Se reconstruye con lo que haya llegado. Si ambas fuentes responden
+         vacías, allData queda vacío (sin arrastrar la ventana anterior). */
+      if (hvacOk || energiaOk) {
+        allData = fusionarSeries(
+          hvacOk ? resultadoHvac.value : [],
+          energiaOk ? resultadoEnergia.value : []
+        );
       }
       renderChart();
     } catch (e) {
@@ -1478,6 +1596,26 @@
   function navigateHistory(dir, reset) {
     if (reset) offsetMin = 0;
     else { offsetMin += dir * rangoMin; if (offsetMin < 0) offsetMin = 0; }
+    userZoomed = false;
+    if (tempChart.resetZoom) tempChart.resetZoom();
+    const hist = offsetMin > 0;
+    document.getElementById('btn-actual').classList.toggle('hidden', !hist);
+    document.getElementById('btn-forward').classList.toggle('hidden', !hist);
+    recargarVentana();
+    updateBadge();
+  }
+  /* Coloca la ventana centrada en la última lectura de una fuente.
+     Necesario porque lecturas_hvac y lecturas_energia pueden estar a días
+     de distancia: con «Anterior/Siguiente» habría que pulsar cientos de veces. */
+  function irAUltima(fuente) {
+    const t = fuente === 'hvac' ? ultimaHvacMs
+      : fuente === 'energia' ? ultimaEnergiaMs
+      : Math.max(ultimaHvacMs, ultimaEnergiaMs);
+    if (!t) return;
+    /* Centrar la lectura deja margen a ambos lados; si aún es reciente,
+       la ventana se queda en «live» (offset 0). */
+    const centro = Math.floor(rangoMin / 2);
+    offsetMin = Math.max(0, Math.floor((Date.now() - t) / 60000) - centro);
     userZoomed = false;
     if (tempChart.resetZoom) tempChart.resetZoom();
     const hist = offsetMin > 0;
@@ -1570,7 +1708,14 @@
 
     await loadAllHistory();
     await refreshLatest();
-    renderChart();
+    /* Si la ventana «en vivo» está vacía (el equipo lleva tiempo sin publicar
+       o las tablas están en fechas distintas), saltar a la lectura más
+       reciente para que la gráfica no arranque en blanco. */
+    if (!getSlice().length && Math.max(ultimaHvacMs, ultimaEnergiaMs)) {
+      irAUltima();
+    } else {
+      renderChart();
+    }
     updateBadge();
 
     setInterval(() => { if (offsetMin === 0) refreshLatest(); }, POLL_MS);
