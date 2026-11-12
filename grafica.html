@@ -774,13 +774,13 @@
       /* Sin 'mouseout': al salir del canvas el tooltip no se cierra de golpe.
          Lo oculta el temporizador propio después de TOOLTIP_HOLD_MS. */
       events: ['mousemove', 'click', 'touchstart', 'touchmove'],
-      layout: { padding: { top: 34, right: 42, bottom: 8, left: 12 } },
+      layout: { padding: { top: 34, right: 42, bottom: 0, left: 12 } },
       scales: {
         x: {
           type: 'time',
           time: { tooltipFormat: 'dd/MM/yyyy, HH:mm:ss',
                   displayFormats: { second: 'HH:mm:ss', minute: 'HH:mm', hour: 'HH:mm', day: 'dd/MM' } },
-          ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, padding: 3 },
+          ticks: { display: false, color: '#64748b', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, padding: 3 },
           grid: { display: false, color: 'rgba(51, 65, 85, 0.15)', drawBorder: false },
           border: { display: false }
         },
@@ -913,14 +913,13 @@
     tempChart.canvas.addEventListener(ev, programarOcultarTooltip, { passive: true });
   });
 
-  /* Reserva el alto real de las barras para que los números del eje X no queden
-     debajo de la barra inferior. */
+    /* Reserva la barra superior y deja solo un margen mínimo bajo el gráfico. */
   function ajustarPadding() {
     const barraArriba = document.getElementById('topbar');
     const barraAbajo = document.getElementById('bottombar');
     if (!barraArriba || !barraAbajo) return;
     tempChart.options.layout.padding.top = barraArriba.offsetHeight + 6;
-    tempChart.options.layout.padding.bottom = barraAbajo.offsetHeight + 6;
+    tempChart.options.layout.padding.bottom = Math.min(10, barraAbajo.offsetHeight + 6);
     tempChart.update('none');
   }
 
