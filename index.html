@@ -440,6 +440,30 @@
     body.generating-pdf .diag-table td, body.generating-pdf .diag-table th { color: #000 !important; }
     body.generating-pdf .diag-table .diag-text span[style] { color: #000 !important; }
     body.generating-pdf .contenido-colapsable { display: block !important; }
+    body.generating-pdf #cardIdentificacion,
+    body.generating-pdf #cardMonitor,
+    body.generating-pdf #cardIndicadores,
+    body.generating-pdf #cardHermeticidad { display: block !important; }
+    body.generating-pdf details:not([open]) > :not(summary) { display: block !important; }
+    body.generating-pdf #cardIdentificacion > .prof-grid,
+    body.generating-pdf #cardHermeticidad > .ph-grid { display: grid !important; }
+    body.generating-pdf details.card > summary::after { content: none !important; }
+    body.generating-pdf .btn-mini,
+    body.generating-pdf .action-bar,
+    body.generating-pdf #accionesMonitor,
+    body.generating-pdf button[onclick="descargarPDFReporte()"],
+    body.generating-pdf button[onclick="abrirGraficaAmpliada()"],
+    body.generating-pdf #cajaElectrica input,
+    body.generating-pdf #cajaElectrica select { display: none !important; }
+    body.generating-pdf #cajaElectrica {
+      background: #fff !important; border-color: #ccc !important; color: #222 !important;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    body.generating-pdf #cajaElectrica .slot { background: #fff !important; border-color: #ccc !important; color: #222 !important; }
+    body.generating-pdf #cajaElectrica .slot-nombre,
+    body.generating-pdf #cajaElectrica .slot-estado,
+    body.generating-pdf #cajaElectrica .slot-valor,
+    body.generating-pdf #cajaElectrica .slot-valor .unidad { color: #333 !important; }
 
     /* En tema claro los avisos del motor (que traen color en línea pensado
        para fondo oscuro) se neutralizan para que sigan siendo legibles. */
@@ -542,7 +566,11 @@
       html, body { background: #fff !important; color: #000 !important; }
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .app-container { max-width: none !important; width: 100% !important; padding: 0 !important; margin: 0 !important; }
-      .modo-switch, .action-bar, .h2-acciones, #btnTema, #notaVentana { display: none !important; }
+      .modo-switch, .action-bar, #accionesMonitor, .h2-acciones, .btn-mini,
+      #btnTema, #notaVentana, button[onclick="descargarPDFReporte()"],
+      button[onclick="abrirGraficaAmpliada()"], #cajaElectrica input, #cajaElectrica select {
+        display: none !important;
+      }
       .top-info-bar { background: #fff !important; border-color: #ccc !important; color: #000 !important; }
       .card, .probe-card, .kpi-box, .diag-container, .caja-doble, .ph-medida {
         background: #fff !important; color: #000 !important; border-color: #ccc !important;
@@ -555,6 +583,19 @@
       .diag-table td, .diag-table th { color: #000 !important; }
       .diag-table .diag-text span[style] { color: #000 !important; }
       .contenido-colapsable { display: block !important; }
+      details:not([open]) > :not(summary) { display: block !important; }
+      #cardIdentificacion > .prof-grid,
+      #cardHermeticidad > .ph-grid { display: grid !important; }
+      details.card > summary::after { content: none !important; }
+      #cajaElectrica {
+        background: #fff !important; border-color: #ccc !important; color: #222 !important;
+        break-inside: avoid; page-break-inside: avoid;
+      }
+      #cajaElectrica .slot { background: #fff !important; border-color: #ccc !important; color: #222 !important; }
+      #cajaElectrica .slot-nombre,
+      #cajaElectrica .slot-estado,
+      #cajaElectrica .slot-valor,
+      #cajaElectrica .slot-valor .unidad { color: #333 !important; }
       * { animation: none !important; transition: none !important; }
       /* El reporte siempre lleva las dos pantallas, aunque se imprima con Ctrl+P */
       #cardIdentificacion, #cardMonitor, #cardIndicadores, #cardHermeticidad { display: block !important; }
@@ -849,24 +890,10 @@
             </div>
             <div class="slot" id="slotPotencia">
               <div class="slot-fila">
-                <span class="slot-nombre">Potencia</span>
-                <span class="slot-valor"><b id="valPotencia">---.-</b> <span class="unidad">W</span></span>
+                <span class="slot-nombre">Potencia (kW)</span>
+                <span class="slot-valor"><b id="valPotencia">---.---</b> <span class="unidad">kW</span></span>
               </div>
               <div class="slot-estado" id="estadoPotencia">Esperando…</div>
-            </div>
-            <div class="slot" id="slotEnergia">
-              <div class="slot-fila">
-                <span class="slot-nombre">Energía</span>
-                <span class="slot-valor"><b id="valEnergia">---.-</b> <span class="unidad">kWh</span></span>
-              </div>
-              <div class="slot-estado" id="estadoEnergia">Esperando…</div>
-            </div>
-            <div class="slot" id="slotConsumoEspecifico">
-              <div class="slot-fila">
-                <span class="slot-nombre">Consumo Específico</span>
-                <span class="slot-valor"><b id="valConsumoEsp">---.-</b> <span class="unidad">W/kBTU</span></span>
-              </div>
-              <div class="slot-estado" id="estadoConsumoEspecifico">Esperando…</div>
             </div>
             <div class="slot" id="slotConsumoAnual">
               <div class="slot-fila">
@@ -4687,9 +4714,7 @@
 
       poner('valVoltaje', formatear(guion === null ? voltaje : null, 1));
       poner('valCorriente', formatear(guion === null ? corriente : null, 2));
-      poner('valPotencia', formatear(guion === null ? watts : null, 1));
-      poner('valEnergia', formatear(guion === null ? energia : null, 4));
-      poner('valConsumoEsp', formatear(guion === null ? consumoEspecifico : null, 2));
+      poner('valPotencia', formatear(guion === null && watts !== null ? watts / 1000 : null, 3));
       poner('valConsumoAnual', formatearConsumoAnual(guion === null ? consumoAnual : null));
 
       const textoEstadoLectura = estadoLectura === 'atrasada' && ultimaElectrica
@@ -4698,8 +4723,6 @@
       poner('estadoVoltaje', textoEstadoLectura);
       poner('estadoCorriente', textoEstadoLectura);
       poner('estadoPotencia', guion !== null ? 'Sin lectura' : 'Media móvil: ' + Math.min(lecturasUltimas.length, 10) + ' registros');
-      poner('estadoEnergia', atrasada ? 'No disponible: datos atrasados' : guion !== null ? 'Sin lectura' : 'Ventana de 10 min');
-      poner('estadoConsumoEspecifico', guion !== null ? 'Sin lectura' : params.qNom > 0 ? 'Por capacidad nominal' : 'Sin capacidad nominal');
 
       const badge = document.getElementById('estadoCajaElectrica');
       if (badge) {
